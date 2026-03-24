@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
@@ -31,17 +31,17 @@ const Reports: React.FC = () => {
     async function fetchFilterData() {
         try {
             const [projRes, usersRes] = await Promise.all([
-                api.get<{ projects: ProjectSummary[] }>('/projects'),
-                api.get<{ users: UserSummary[] }>('/users').catch(() => ({ data: { users: [] } }))
+                api.get<ProjectSummary[]>('/projects'),
+                api.get<UserSummary[]>('/users').catch(() => ({ data: [] as UserSummary[] }))
             ]);
-            setProjects(projRes.data.projects || []);
-            setUsers(usersRes.data.users || []);
+            setProjects(projRes.data || []);
+            setUsers(usersRes.data || []);
         } catch (error) {
             console.error('Failed to fetch filter options:', error);
         }
     }
 
-    async function fetchAnalytics() {
+    const fetchAnalytics = useCallback(async () => {
         setIsLoading(true);
         try {
             const res = await api.get<AnalyticsDashboardResponse>('/reports/dashboard', {
@@ -53,7 +53,7 @@ const Reports: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }
+    }, [range, projectId, queryUserId]);
 
     useEffect(() => {
         const init = async () => {
@@ -67,7 +67,7 @@ const Reports: React.FC = () => {
 
     useEffect(() => {
         void fetchAnalytics();
-    }, [range, projectId, queryUserId]);
+    }, [fetchAnalytics]);
 
     const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
         try {

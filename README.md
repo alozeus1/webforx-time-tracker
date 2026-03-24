@@ -22,6 +22,7 @@ Create a `.env` file in the `backend/` directory:
 DATABASE_URL="postgresql://postgres:password@localhost:5432/webforx_tracker"
 JWT_SECRET="<YOUR_SECURE_SECRET>"
 INTEGRATION_SECRET="<A_SECOND_SECURE_SECRET>"
+CRON_SECRET="<A_LONG_RANDOM_SECRET_FOR_CRON_ENDPOINTS>"
 PORT=5005
 CORS_ORIGIN="http://localhost:5173"
 FRONTEND_URL="http://localhost:5173"
@@ -36,6 +37,8 @@ Create a `.env` in `frontend/`:
 ```env
 VITE_API_URL="http://localhost:5005/api/v1"
 ```
+
+`INTEGRATION_SECRET` may fall back to `JWT_SECRET` in non-production for local onboarding, but it is required in production.
 
 ## Running the Application Locally
 
@@ -66,16 +69,22 @@ npm start
 ## Seeded Users
 
 By default, `npx prisma db seed` creates these users:
-- **Admin**: admin@webforxtech.com / webforxtechng@
-- **Manager**: manager@webforxtech.com / password123
-- **Employee**: employee@webforxtech.com / password123
+- **Admin**: `admin@webforxtech.com`
+- **Manager**: `manager@webforxtech.com`
+- **Employee**: `employee@webforxtech.com`
+
+Password behavior is explicit:
+- Set `SEED_ADMIN_PASSWORD`, `SEED_MANAGER_PASSWORD`, and `SEED_EMPLOYEE_PASSWORD` to control credentials.
+- Or set `ALLOW_DEFAULT_SEED_CREDENTIALS=true` (non-production only) to use the legacy demo passwords.
+- Otherwise, secure random passwords are generated and printed during seeding.
 
 ## Tests
 
 To run the automated test suite across the project:
 ```bash
 cd backend && npm test
-cd frontend && npm test
+cd frontend && npm run test:unit
+cd frontend && npm run test:e2e
 ```
 
 Please refer to `DEPLOYMENT.md` for production deployment instructions.

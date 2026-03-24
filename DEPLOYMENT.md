@@ -10,6 +10,7 @@ Create a `.env` file in the `backend/` directory referencing your PostgreSQL dat
 DATABASE_URL="postgresql://postgres:password@localhost:5432/webforx_tracker"
 JWT_SECRET="<YOUR_SECURE_SECRET>"
 INTEGRATION_SECRET="<A_SECOND_SECURE_SECRET>"
+CRON_SECRET="<A_LONG_RANDOM_SECRET_FOR_CRON_ENDPOINTS>"
 PORT=5005
 CORS_ORIGIN="http://localhost:5173"
 FRONTEND_URL="http://localhost:5173"
@@ -22,7 +23,8 @@ Update `frontend/.env` if your backend isn't running on localhost:5005:
 ```
 VITE_API_URL="http://localhost:5005/api/v1"
 ```
-If `INTEGRATION_SECRET` is omitted, the backend will temporarily reuse `JWT_SECRET`, but a dedicated value is recommended before wider rollout.
+If `INTEGRATION_SECRET` is omitted, the backend temporarily reuses `JWT_SECRET` only in non-production.
+In production, `INTEGRATION_SECRET` is required.
 For Google Calendar, add `http://localhost:5005/api/v1/calendar/callback` as an authorized redirect URI in Google Cloud Console.
 
 ## 3. Launching the Backend API
@@ -47,11 +49,14 @@ npm run dev
 The Vite React application will be available at `http://localhost:5173`.
 Login using the Administrator credentials generated during seeding:
 - **Email:** `admin@webforxtech.com`
-- **Password:** `webforxtechng@`
+- **Password:** set `SEED_ADMIN_PASSWORD` before seeding, or use the generated password printed during seed output.
 
 Optional live-test users:
-- **Manager:** `manager@webforxtech.com` / `password123`
-- **Employee:** `employee@webforxtech.com` / `password123`
+- **Manager:** `manager@webforxtech.com`
+- **Employee:** `employee@webforxtech.com`
+
+Legacy static demo passwords are only enabled when:
+`ALLOW_DEFAULT_SEED_CREDENTIALS=true` and `NODE_ENV` is not `production`.
 
 ## 5. Launching the Native Desktop Tracker Wrapper
 For users operating inside Desktop-specific environments, they can boot the Native wrapper to access system hardware Idle state integrations and window title matching.

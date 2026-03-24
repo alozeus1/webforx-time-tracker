@@ -12,8 +12,8 @@ vi.mock('react-router-dom', () => ({
 describe('Login Component', () => {
   it('renders login form properly', () => {
     render(<Login />);
-    expect(screen.getByPlaceholderText(/Email address/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Password/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Sign in/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Work Email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Password/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sign In/i })).toBeInTheDocument();
   });
 });

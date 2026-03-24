@@ -31,7 +31,7 @@ describe('Auth Routes', () => {
       email: 'invalid@example.com',
       password: 'wrongpassword'
     });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toBe('Invalid email or password');
+    expect(res.status).toBe(401);
+    expect(res.body.message).toBe('Invalid credentials');
   });
 });
