@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Engineer Dashboard - Time Tracking</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#354ac0",
+                "background-light": "#f6f6f8",
+                "background-dark": "#13151f",
+              },
+              fontFamily: {
+                "display": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="flex min-h-screen">
+<!-- Sidebar Navigation -->
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hidden lg:flex flex-col">
+<div class="p-6 flex items-center gap-3">
+<div class="bg-primary rounded-lg p-2 text-white">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<div>
+<h1 class="font-bold text-lg tracking-tight">DevFlow</h1>
+<p class="text-xs text-slate-500">Engineer Portal v2.4</p>
+</div>
+</div>
+<nav class="flex-1 px-4 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary font-medium" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                    Dashboard
+                </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">folder</span>
+                    Projects
+                </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">task_alt</span>
+                    Tasks
+                </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+                    Analytics
+                </a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+                    Settings
+                </a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+<div class="size-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden" data-alt="Professional headshot of a software engineer" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDhq7xeqwMnonJJhBizltKOUBvF5dPhnxhaawmuFHTKAqzdEFEj5I_kwt0DHWqfwKmKKA89YJYMvGCuiUw4hBjdT3flcI8g45MY2IeNjRRtxLrW6MQB34XE13DSX-Mb-YUZtKyh944umT5Su5jW_lgHAHkNbIV0Abk9ilAt4YjBOSAZRDht--qMM1khUTS6BF2iiclV8w6N4cO5pZZUt7jcrki1i-rGN-yzzNMaLz5WeVlsrUtdPZUSanxefRd1RAc-HYLPpq848GoO')"></div>
+<div class="flex-1 overflow-hidden">
+<p class="text-sm font-semibold truncate">Alex Rivera</p>
+<p class="text-xs text-slate-500 truncate">Senior Frontend Eng</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col min-w-0">
+<!-- Header -->
+<header class="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10">
+<div class="flex items-center gap-4 flex-1">
+<div class="relative w-full max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+<input class="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20" placeholder="Search tasks, code reviews, or projects..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</button>
+<button class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span>
+                        New Entry
+                    </button>
+</div>
+</header>
+<div class="p-8 overflow-y-auto">
+<div class="max-w-6xl mx-auto space-y-8">
+<!-- Timer & Quick Input Section -->
+<section class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
+<div class="flex flex-col lg:flex-row gap-6 items-center">
+<!-- Timer -->
+<div class="flex items-center gap-4 lg:pr-8 lg:border-r border-slate-200 dark:border-slate-800 w-full lg:w-auto justify-center">
+<div class="text-center">
+<div class="flex gap-2">
+<div class="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
+<span class="text-3xl font-bold tracking-tighter font-mono">02</span>
+<p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">HR</p>
+</div>
+<div class="text-2xl font-bold self-center text-slate-300">:</div>
+<div class="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
+<span class="text-3xl font-bold tracking-tighter font-mono">45</span>
+<p class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">MIN</p>
+</div>
+<div class="text-2xl font-bold self-center text-slate-300">:</div>
+<div class="bg-primary/10 text-primary px-4 py-3 rounded-xl border border-primary/20">
+<span class="text-3xl font-bold tracking-tighter font-mono">12</span>
+<p class="text-[10px] uppercase tracking-wider text-primary/60 font-semibold mt-1">SEC</p>
+</div>
+</div>
+</div>
+<button class="size-14 rounded-full bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/30 hover:scale-105 transition-transform">
+<span class="material-symbols-outlined text-3xl">pause</span>
+</button>
+</div>
+<!-- Task Input Fields -->
+<div class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+<div class="flex flex-col gap-1">
+<label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Project</label>
+<select class="form-select w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm">
+<option>Cloud Infrastructure Migr...</option>
+<option>Mobile App UI Redesign</option>
+<option>Internal Admin Tools</option>
+</select>
+</div>
+<div class="flex flex-col gap-1 md:col-span-2">
+<label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">What are you working on?</label>
+<div class="relative">
+<input class="w-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-lg text-sm" placeholder="Refactoring AWS Lambda functions for data pipeline..." type="text"/>
+<div class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+<span class="material-symbols-outlined text-slate-400 text-lg cursor-pointer hover:text-primary">sell</span>
+<span class="material-symbols-outlined text-slate-400 text-lg cursor-pointer hover:text-primary">monetization_on</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="text-slate-500 text-sm font-medium">Daily Goal</span>
+<span class="material-symbols-outlined text-primary text-xl">target</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-bold">6.5</span>
+<span class="text-slate-400 pb-1 text-sm">/ 8h</span>
+</div>
+<div class="mt-4 h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 81%"></div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="text-slate-500 text-sm font-medium">Weekly Total</span>
+<span class="material-symbols-outlined text-emerald-500 text-xl">event_available</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-bold">34.2</span>
+<span class="text-slate-400 pb-1 text-sm">hours</span>
+</div>
+<p class="text-xs text-emerald-600 font-medium mt-4 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span> 12% from last week
+                            </p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="text-slate-500 text-sm font-medium">Focus Score</span>
+<span class="material-symbols-outlined text-orange-500 text-xl">bolt</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-bold">92%</span>
+<span class="text-slate-400 pb-1 text-sm">avg</span>
+</div>
+<p class="text-xs text-slate-500 mt-4">Based on deep work sessions</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center justify-between mb-3">
+<span class="text-slate-500 text-sm font-medium">Tasks Completed</span>
+<span class="material-symbols-outlined text-purple-500 text-xl">check_circle</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-2xl font-bold">18</span>
+<span class="text-slate-400 pb-1 text-sm">this week</span>
+</div>
+<p class="text-xs text-slate-500 mt-4">4 tasks pending for today</p>
+</div>
+</div>
+<!-- Visual Timeline & Entries -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-8">
+<!-- Timeline Section -->
+<div class="xl:col-span-2 space-y-6">
+<div class="flex items-center justify-between">
+<h2 class="text-lg font-bold">Visual Timeline</h2>
+<div class="flex gap-2">
+<button class="p-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<span class="text-sm font-semibold flex items-center">Today, Oct 24</span>
+<button class="p-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden relative min-h-[400px]">
+<!-- Time Labels -->
+<div class="grid grid-cols-1 divide-y divide-slate-100 dark:divide-slate-800">
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">09:00 AM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">10:00 AM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">11:00 AM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">12:00 PM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">01:00 PM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">02:00 PM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">03:00 PM</div>
+<div class="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">04:00 PM</div>
+</div>
+<!-- Timeline Blocks -->
+<div class="absolute top-0 left-20 right-4 h-full">
+<div class="absolute top-[12px] h-[72px] left-0 right-0 bg-primary/10 border-l-4 border-primary rounded px-3 py-2">
+<p class="text-xs font-bold text-primary">Standup &amp; Daily Sync</p>
+<p class="text-[10px] text-primary/60">09:15 - 10:30 AM</p>
+</div>
+<div class="absolute top-[108px] h-[120px] left-0 right-0 bg-emerald-100 dark:bg-emerald-900/30 border-l-4 border-emerald-500 rounded px-3 py-2">
+<p class="text-xs font-bold text-emerald-700 dark:text-emerald-400">Deep Work: Code Refactor</p>
+<p class="text-[10px] text-emerald-600/60 dark:text-emerald-400/60">11:00 AM - 01:30 PM</p>
+</div>
+<div class="absolute top-[252px] h-[48px] left-0 right-0 bg-slate-100 dark:bg-slate-800 border-l-4 border-slate-400 rounded px-3 py-2">
+<p class="text-xs font-bold text-slate-600 dark:text-slate-300">Lunch Break</p>
+<p class="text-[10px] text-slate-500">02:00 PM - 03:00 PM</p>
+</div>
+<div class="absolute top-[312px] h-[60px] left-0 right-0 bg-primary/10 border-l-4 border-primary rounded px-3 py-2">
+<p class="text-xs font-bold text-primary">Active: Lambda Optimization</p>
+<p class="text-[10px] text-primary/60">03:30 PM - Currently Running</p>
+</div>
+<!-- Current Time Line -->
+<div class="absolute top-[340px] left-[-20px] right-[-10px] border-t-2 border-dashed border-red-500 flex items-center z-10">
+<span class="bg-red-500 text-white text-[9px] font-bold px-1 rounded absolute -left-1">NOW</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Recent Entries -->
+<div class="space-y-6">
+<div class="flex items-center justify-between">
+<h2 class="text-lg font-bold">Recent Entries</h2>
+<button class="text-xs text-primary font-semibold hover:underline">View All</button>
+</div>
+<div class="space-y-3">
+<!-- Entry Card 1 -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-colors cursor-pointer">
+<div class="flex gap-4 items-center">
+<div class="size-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center">
+<span class="material-symbols-outlined">code</span>
+</div>
+<div>
+<p class="text-sm font-bold">Refactoring Auth Flow</p>
+<p class="text-xs text-slate-500">Cloud Migrations</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold">2h 15m</p>
+<p class="text-[10px] text-slate-400 uppercase font-bold">Finished 1h ago</p>
+</div>
+</div>
+<!-- Entry Card 2 -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-colors cursor-pointer">
+<div class="flex gap-4 items-center">
+<div class="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<div>
+<p class="text-sm font-bold">Daily Standup</p>
+<p class="text-xs text-slate-500">Team Sync</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold">0h 45m</p>
+<p class="text-[10px] text-slate-400 uppercase font-bold">Finished 3h ago</p>
+</div>
+</div>
+<!-- Entry Card 3 -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-colors cursor-pointer">
+<div class="flex gap-4 items-center">
+<div class="size-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 text-orange-600 flex items-center justify-center">
+<span class="material-symbols-outlined">bug_report</span>
+</div>
+<div>
+<p class="text-sm font-bold">Bugfixing: CSS Grid Issue</p>
+<p class="text-xs text-slate-500">Internal Admin</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold">1h 10m</p>
+<p class="text-[10px] text-slate-400 uppercase font-bold">Yesterday</p>
+</div>
+</div>
+<!-- Entry Card 4 -->
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-colors cursor-pointer">
+<div class="flex gap-4 items-center">
+<div class="size-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center">
+<span class="material-symbols-outlined">draw</span>
+</div>
+<div>
+<p class="text-sm font-bold">Prototyping New UI</p>
+<p class="text-xs text-slate-500">Mobile App</p>
+</div>
+</div>
+<div class="text-right">
+<p class="text-sm font-bold">3h 20m</p>
+<p class="text-[10px] text-slate-400 uppercase font-bold">Yesterday</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

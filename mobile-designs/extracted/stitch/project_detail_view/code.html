@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Web Forx - Project Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen flex-col overflow-x-hidden">
+<!-- Header -->
+<header class="sticky top-0 z-10 flex items-center bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md px-4 py-4 justify-between border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="text-primary flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-lg font-bold leading-tight tracking-tight">EDUSUC Project</h1>
+<div class="flex items-center gap-2">
+<span class="h-2 w-2 rounded-full bg-green-500"></span>
+<span class="text-xs font-medium text-slate-500 dark:text-slate-400">In Progress</span>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<button class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</header>
+<main class="flex-1 pb-24">
+<!-- Key Metrics -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-xl">schedule</span>
+<p class="text-sm font-medium">Total Hours</p>
+</div>
+<p class="text-2xl font-bold">142.5h</p>
+<p class="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">trending_up</span> +12% vs last week
+                    </p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-xl">payments</span>
+<p class="text-sm font-medium">Budget Spent</p>
+</div>
+<p class="text-2xl font-bold">65%</p>
+<div class="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
+<div class="bg-primary h-full w-[65%]"></div>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-5 bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-xl">group</span>
+<p class="text-sm font-medium">Contributors</p>
+</div>
+<p class="text-2xl font-bold">8</p>
+<div class="flex -space-x-2 overflow-hidden mt-1">
+<img alt="Avatar" class="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-slate-900" data-alt="User avatar 1 profile picture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDwYQr4DirRfz_b54Q10dftIq7rKdC_kalusDfpdYHFWDxtCsg_dTB-a3Qae6IkpVj8v9KSyB2ygGpQNLzE4U5m3ObUt2TzLd3CHAFzDZwRaAp1qMRt8iZAiDgEU5sNnq0W7_ZafGsdNGkQCoGJ-UZ8kqfiHY-FMA07ygyJ0R-IWFebhfAiSVXJqPGoAVp7PbaDPoinHHPhSXsdI1O-KNkAQ4-hDduL8jMkxuggnCoDJ_yad6xYV80aOEs5eRpTVVrKQTR-cHL8y2tL"/>
+<img alt="Avatar" class="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-slate-900" data-alt="User avatar 2 profile picture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAE590gNYRyjK1GPuGNtaerUNOEmqURya6SJCRKDCuhUnd1z2IC-RgnU_j0OfcSq6RWPq97ERxGCq-vW2ypSKKd4Xa2ElERcWQmZmc0wJ8ywSw3Oe1Vd9Mqn2ZHDBs_UUiwomOBBTe9vj4uqncbmht8NJWgR153xMJd0sJucV37JFVe_nctlavhqZ_bQrKPxj_Aduezq2HmDfxvcyWsydTvoDv6l4xq5cm91oPAq-rPuLUNMZF583KfIltCwdqaDyrhhrYmtAGYrf22"/>
+<img alt="Avatar" class="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-slate-900" data-alt="User avatar 3 profile picture" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmSwcukIaJiOOX6k-S50diRES9O_lSrjV6eVEdWK4DoBx0YU9fFhBBj_fd5oIWYVvERFSYTb5m2QMLVsgkJSG-AWbatUMTBbujn1fU9gl0yEvatYhcEvGyStrj1csXfyit4ineuApFCT7W7PjIogqfxI_fzXGKk5sP6m1s7WDRf90IcCsIY-ja_AomnmuU49S4akEYZKSVMEyHThB5Bw0glyYn8HBsHr00q9YKqIliEGQs2mLPfeKMs6McRN3waSp24tthml1P_vJy"/>
+<div class="flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] font-bold ring-2 ring-white dark:ring-slate-900">+5</div>
+</div>
+</div>
+</div>
+<!-- Task Breakdown -->
+<div class="px-4 py-2">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-lg font-bold">Task Breakdown</h2>
+<button class="text-primary text-sm font-semibold">View All</button>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">draw</span>
+</div>
+<div>
+<p class="font-semibold text-sm">UI/UX Wireframes</p>
+<p class="text-xs text-slate-500">Design System Phase</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold text-sm">42.5h</p>
+<p class="text-[10px] text-green-500 font-medium">Completed</p>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+<span class="material-symbols-outlined">code</span>
+</div>
+<div>
+<p class="font-semibold text-sm">Backend API Setup</p>
+<p class="text-xs text-slate-500">Infrastructure</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold text-sm">38.0h</p>
+<p class="text-[10px] text-amber-500 font-medium">In Progress</p>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-4">
+<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<div>
+<p class="font-semibold text-sm">Competitor Research</p>
+<p class="text-xs text-slate-500">Discovery</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-bold text-sm">12.2h</p>
+<p class="text-[10px] text-slate-400 font-medium">Pending</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Team Members -->
+<div class="px-4 py-6">
+<h2 class="text-lg font-bold mb-4">Team Members</h2>
+<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+<div class="flex min-w-[120px] flex-col items-center gap-2 rounded-xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+<img alt="Sarah" class="h-12 w-12 rounded-full" data-alt="Portrait of Sarah team member" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBR9vOHouMtJKlXkaHhTo6b41XSGVA1LXmaoEDvjp_Da-l2cyxyroGZtjTIfpEd8C-nYljvWp5NylHL3GOl6lxP1V_lDa4N7ttHrfBmWvJ14zNsz80Xr7-LrPtMdKIqCpjDW-KLTTlr2aTteipaNBlGZbaFWJgcEULdK86CJ8jHmLO2mN_6ClPN-O3JD7dayWF8TdKHxNZN611oC5AcbOiuEU1LZ7gKrZCI1iLLZ0ufbC29bjzzvP-jOFFGfP1W7VekWnHwIGLXHWbG"/>
+<div class="text-center">
+<p class="text-sm font-bold">Sarah K.</p>
+<p class="text-[10px] text-slate-500">Lead Designer</p>
+</div>
+<div class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold">54.5h</div>
+</div>
+<div class="flex min-w-[120px] flex-col items-center gap-2 rounded-xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+<img alt="Marcus" class="h-12 w-12 rounded-full" data-alt="Portrait of Marcus team member" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEBiSTAp4IbR4XNAlOMlnVzyXJYtzVoxppCaRFDqxaV8Kp5nch7OwQI5kf6fcRgYBpeBmzybq0iN9jsFg3Gjh13_SU4Q9KfwsQU_WfSyjFJFh7opAfdPqbQ4F10-3hilvltn01vo3RuZxDbc4m7M0wgrEYq_pabIQ7oG2KriOfFZKJ0Jg44jnJgkrzJywiIUixDWYTB_CeY8F2PkoDVhw9tvQfQoBgeiUmUsW67FhK-PjYjFg6O9zG4MkOff-ykoQbaYj6AsVsyetd"/>
+<div class="text-center">
+<p class="text-sm font-bold">Marcus V.</p>
+<p class="text-[10px] text-slate-500">Developer</p>
+</div>
+<div class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold">42.0h</div>
+</div>
+<div class="flex min-w-[120px] flex-col items-center gap-2 rounded-xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+<img alt="Elena" class="h-12 w-12 rounded-full" data-alt="Portrait of Elena team member" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCe2VmxtpBm5iOe_vPrBnttSJnyycg80Zpk1BJodXVTz3kzvD9MBmgpptXt_z2SNomypHGVKT2b7t2LL-rZJpw5EwvXCwr_MMY6VRtOYqlvzrDMCcVO-rlhb_VTf9awRWhwVarbjIvIYcSHcKPeU_IXS7H1OMumPflTWCLSbXCe_Hsq11YQKCBe0lIgGTRDEQKt4Ld0QyE412Ob1G92FEKiaTchCQYcl6A8sPoxosho2CiMEDGCA-4wn55ul2hq62ZA8UBDUm7yj2MJ"/>
+<div class="text-center">
+<p class="text-sm font-bold">Elena R.</p>
+<p class="text-[10px] text-slate-500">Project Manager</p>
+</div>
+<div class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold">28.5h</div>
+</div>
+</div>
+</div>
+<!-- Recent Activity -->
+<div class="px-4 py-2">
+<h2 class="text-lg font-bold mb-4">Recent Activity</h2>
+<div class="relative space-y-6 before:absolute before:left-[19px] before:top-2 before:h-[calc(100%-16px)] before:w-0.5 before:bg-slate-200 dark:before:bg-slate-800">
+<div class="relative pl-12">
+<div class="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-lg ring-4 ring-white dark:ring-slate-950">
+<span class="material-symbols-outlined text-sm">check</span>
+</div>
+<div>
+<p class="text-sm font-bold">Task Completed: Homepage Layout</p>
+<p class="text-xs text-slate-500">Sarah K. tracked 4.5 hours • 2 hours ago</p>
+</div>
+</div>
+<div class="relative pl-12">
+<div class="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 ring-4 ring-white dark:ring-slate-950">
+<span class="material-symbols-outlined text-sm">comment</span>
+</div>
+<div>
+<p class="text-sm font-bold">New Comment on Backend API</p>
+<p class="text-xs text-slate-500">Marcus V. added a note about schema • 5 hours ago</p>
+</div>
+</div>
+<div class="relative pl-12">
+<div class="absolute left-0 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 ring-4 ring-white dark:ring-slate-950">
+<span class="material-symbols-outlined text-sm">update</span>
+</div>
+<div>
+<p class="text-sm font-bold">Project Deadline Updated</p>
+<p class="text-xs text-slate-500">Elena R. shifted final delivery to Nov 15 • Yesterday</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation -->
+<nav class="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 dark:border-slate-800 bg-background-light dark:bg-background-dark px-4 pb-4 pt-2 shadow-xl">
+<div class="flex items-center justify-around max-w-lg mx-auto">
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<p class="text-[10px] font-medium">Dashboard</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-[1]">work</span>
+<p class="text-[10px] font-bold">Projects</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">task_alt</span>
+<p class="text-[10px] font-medium">Tasks</p>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">person</span>
+<p class="text-[10px] font-medium">Profile</p>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

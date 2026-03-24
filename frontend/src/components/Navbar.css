@@ -1,0 +1,99 @@
+.navbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    flex: 1;
+}
+
+.menu-trigger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+.search-bar {
+    display: flex;
+    align-items: center;
+    background-color: var(--bg-subtle);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-full);
+    padding: var(--space-2) var(--space-4);
+    width: 100%;
+    max-width: 400px;
+    transition: all var(--transition-fast);
+}
+
+.search-bar:focus-within {
+    border-color: var(--color-primary);
+    background-color: var(--bg-main);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.search-icon {
+    color: var(--text-muted);
+    margin-right: var(--space-2);
+}
+
+.search-input {
+    border: none;
+    background: transparent;
+    width: 100%;
+    font-family: var(--font-family);
+    font-size: 0.875rem;
+    color: var(--text-main);
+}
+
+.search-input:focus {
+    outline: none;
+}
+
+.navbar-right {
+    display: flex;
+    align-items: center;
+}
+
+.notification-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    position: relative;
+    padding: var(--space-2);
+    border-radius: var(--radius-full);
+    transition: background-color var(--transition-fast);
+}
+
+.notification-btn:hover {
+    background-color: var(--bg-subtle);
+    color: var(--text-main);
+}
+
+.badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background-color: var(--color-danger);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--bg-main);
+}
+
+@media (max-width: 768px) {
+    .menu-trigger {
+        display: block;
+    }
+
+    .search-bar {
+        display: none;
+        /* Hide search on small mobile for cleaner layout */
+    }
+}

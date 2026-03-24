@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<title>Integrations Console</title>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-screen w-full flex-col overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3 text-primary">
+<div class="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">hub</span>
+</div>
+<h2 class="text-slate-900 dark:text-white text-lg font-bold leading-tight tracking-tight">Integrations</h2>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-primary text-sm font-semibold leading-normal" href="#">Discover</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Installed</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">API</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex flex-1 justify-end gap-4 items-center">
+<label class="hidden sm:flex flex-col min-w-40 h-10 max-w-xs relative">
+<div class="flex w-full flex-1 items-center rounded-lg bg-slate-100 dark:bg-slate-800 px-3">
+<span class="material-symbols-outlined text-slate-500 text-xl">search</span>
+<input class="form-input w-full border-none bg-transparent focus:ring-0 text-sm placeholder:text-slate-500" placeholder="Search apps..." value=""/>
+</div>
+</label>
+<div class="size-10 rounded-full bg-primary/10 flex items-center justify-center text-primary border border-primary/20 cursor-pointer overflow-hidden">
+<img alt="User Profile" class="size-full object-cover" data-alt="User profile avatar photo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBS2QiDt9xsoZFMx8QaPkg9HLuB9bjCyQifNLXDZeIIhZDndEBfSYyaMWEOLe_0meek74RnveW78AVxR7qteROFzvaiyFWG82bWOo-qO5XYlXUKk48kB5KWEjnE-J2qj1pZiUscJ_gmSrAm7q3j4ocAvA52ajG4qxfuN618vKNFE9wfCbyGFN_7xRj3MY2V4NcEJcorqKgizI_f8JYgrUpOwL2XGeHhw7xuwMXH3ogXNzSjvlp5QNbkaVHXu3JfKJghdtuU-5v5GX0o"/>
+</div>
+</div>
+</header>
+<main class="flex flex-1 flex-col lg:flex-row">
+<!-- Sidebar -->
+<aside class="w-full lg:w-64 border-r border-slate-200 dark:border-slate-800 p-6 flex flex-col gap-6 bg-white dark:bg-slate-900">
+<div class="flex flex-col gap-1">
+<h1 class="text-slate-900 dark:text-white text-base font-bold">Console</h1>
+<p class="text-slate-500 text-xs font-medium uppercase tracking-wider">Manage Connections</p>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary text-white shadow-md shadow-primary/20" href="#">
+<span class="material-symbols-outlined text-[20px]">grid_view</span>
+<span class="text-sm font-semibold">All Integrations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">category</span>
+<span class="text-sm font-medium">Categories</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">bolt</span>
+<span class="text-sm font-medium">Connected</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all" href="#">
+<span class="material-symbols-outlined text-[20px]">folder_open</span>
+<span class="text-sm font-medium">Directory</span>
+</a>
+</div>
+<div class="mt-auto p-4 rounded-xl bg-primary/5 border border-primary/10">
+<p class="text-xs font-bold text-primary uppercase mb-2">Pro Tip</p>
+<p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">Connect GitHub to enable automatic issue synchronization.</p>
+</div>
+</aside>
+<!-- Content Area -->
+<div class="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
+<!-- Hero Section -->
+<div class="mb-10">
+<h2 class="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight mb-2">Integrations</h2>
+<p class="text-slate-600 dark:text-slate-400 text-lg">Connect your favorite tools to streamline your workflow and boost productivity.</p>
+</div>
+<!-- Main Search -->
+<div class="mb-12">
+<label class="flex flex-col w-full h-14 relative group">
+<div class="flex w-full flex-1 items-center rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-5 shadow-sm focus-within:ring-2 focus-within:ring-primary/50 focus-within:border-primary transition-all">
+<span class="material-symbols-outlined text-slate-400 text-2xl mr-3 group-focus-within:text-primary transition-colors">search</span>
+<input class="form-input w-full border-none bg-transparent focus:ring-0 text-lg placeholder:text-slate-400" placeholder="Search for more integrations (e.g. Jira, Trello, Discord)..." value=""/>
+</div>
+</label>
+</div>
+<!-- Featured Integrations -->
+<section class="mb-12">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-amber-500">star</span>
+                                Featured Integrations
+                            </h3>
+<a class="text-primary font-semibold text-sm hover:underline" href="#">View all</a>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<!-- Slack -->
+<div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="size-14 rounded-xl bg-[#4A154B] flex items-center justify-center">
+<img alt="Slack logo" class="size-8" data-alt="Slack messaging app logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUpBnANt0sN0MG9XQYZ7Xonhc2d02TRlQQ4wTIdcHdDHmzAXfoLhVc1UmCsjViBfUMJddL4rw8gGCowTzoSoKVDpv4pcGYrNGpvtoOLPH4n6NHfOadFHZoCt7VrpcM2wY5UntpuJs5IhFMDUlmF5g5pdpvhwijC_YSKng0T9LvNZs2suueUyffDWWjwkBbpBte0kMmzjyLSuwu-f34iFQeBu2SwB3iyHpp-6A__0SuW39VCuVFsbfBpdxNG-ht48VRB4-3ilyXM0Hg"/>
+</div>
+<span class="px-3 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold rounded-full">CONNECTED</span>
+</div>
+<h4 class="text-lg font-bold mb-2">Slack</h4>
+<p class="text-slate-600 dark:text-slate-400 text-sm mb-6">Sync your channel messages and receive real-time updates directly in your workspace.</p>
+<button class="w-full py-2.5 rounded-lg border-2 border-slate-200 dark:border-slate-700 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Configure</button>
+</div>
+<!-- GitHub -->
+<div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-shadow">
+<div class="flex justify-between items-start mb-4">
+<div class="size-14 rounded-xl bg-slate-900 dark:bg-white flex items-center justify-center">
+<img alt="GitHub logo" class="size-8 dark:hidden" data-alt="GitHub version control logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyTeWk-_mGX36SiV1mDN3IFm8eWSziSG7r3GHR-ddXQ3JvxVfE7WH_uXnqvRTe2GWulQp_FHapHwnRc5oGFLsV9ToTnZiMkhsrnhEPZ1b-eZh40LQl8ZFGW98yBTercsJkws-OTYAFcspRIm1L3hj_7GJw-rxR2SLKUDKpFg7zbmsNtW_Pvh79S51i3efHANMiNozfpU81jWqlkM3NWAOp_x5aw20YMJw13x4XIuprF_U2mJ4uk7VSTgkQ3dXtWmyzcmSI3zhMy6TV"/>
+<img alt="GitHub logo" class="size-8 hidden dark:block" data-alt="GitHub version control logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAH83QHXQ0JfZx5WA-d1V1rcm6EjmKT6Nb-6PlIJqNZWEfFJ2Q81wzaATl4t_PDcsE5Cfgpnje3OX1EILwDsH--7kozZvr1rqn4BB3NddPlRjWU_sOjY84U7RBeLslVzhB6kKIVXSS47dIaTu4Oq0NRj3_yCTo0bDoOLmc_rpB9jgL_kZGbkasfuDBU27xTCmqq_8zncLSaeW7oLx51wIfMWd2FvN8FHwJ2Q6FsArfWP4Iu3wk4mG2LX6sfCspahAyiYzkAyccp7Sat"/>
+</div>
+<span class="px-3 py-1 bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-300 text-xs font-bold rounded-full">NOT INSTALLED</span>
+</div>
+<h4 class="text-lg font-bold mb-2">GitHub</h4>
+<p class="text-slate-600 dark:text-slate-400 text-sm mb-6">Link your repositories to track pull requests, issues, and commit history across projects.</p>
+<button class="w-full py-2.5 rounded-lg bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors">Install Integration</button>
+</div>
+</div>
+</section>
+<!-- Dedicated Category Sections -->
+<div class="grid grid-cols-1 gap-12">
+<!-- Taiga - Task Management -->
+<section>
+<div class="flex items-center gap-3 mb-6">
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">task_alt</span>
+</div>
+<h3 class="text-xl font-bold text-slate-900 dark:text-white">Task Management (Taiga)</h3>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+<div class="p-8 flex flex-col md:flex-row gap-8 items-center">
+<div class="size-24 md:size-32 flex-shrink-0 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center p-4">
+<img alt="Taiga logo" class="w-full" data-alt="Taiga project management tool logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4pb06vYdEOGUhq_MPu7CGWtPOi2PgVY60ZTobc9mQVg3dciK0Udhb_Cb6fRO9EtP5c9-9lWLNsEniuOJeJyLqYXZWSG4frsVHBOOdGpbWLVXtleWIIJtdHFD-5JUVdloJUUPCROsctzsm9IKNECkyoF9gqdUJhK_tWpcdWcJ_3hsPrd8aK1YeeNQJ0XKmr2j88tFjGagwFTaVSB-naXbbY_vIOtyntgGf7VNGYdpS_eENMgHUQQu1Agtsl-qOGBiVBJcPb9irA4KF"/>
+</div>
+<div class="flex-1 text-center md:text-left">
+<h4 class="text-2xl font-bold mb-3">Pull tasks from Taiga</h4>
+<p class="text-slate-600 dark:text-slate-400 mb-6 max-w-xl">Automate your project tracking by importing user stories and tasks directly into your central dashboard. Supports real-time status syncing.</p>
+<div class="flex flex-wrap justify-center md:justify-start gap-4">
+<button class="px-6 py-2.5 bg-primary text-white rounded-lg font-bold text-sm shadow-lg shadow-primary/25 hover:scale-[1.02] transition-transform">Connect Project</button>
+<button class="px-6 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-700">Documentation</button>
+</div>
+</div>
+</div>
+<div class="bg-slate-50 dark:bg-slate-900/50 px-8 py-4 border-t border-slate-200 dark:border-slate-700 flex flex-wrap gap-8">
+<div class="flex items-center gap-2 text-sm text-slate-500">
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+                                        User Story Sync
+                                    </div>
+<div class="flex items-center gap-2 text-sm text-slate-500">
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+                                        Kanban Integration
+                                    </div>
+<div class="flex items-center gap-2 text-sm text-slate-500">
+<span class="material-symbols-outlined text-green-500 text-sm">check_circle</span>
+                                        Custom Field Support
+                                    </div>
+</div>
+</div>
+</section>
+<!-- Mattermost - Notifications -->
+<section>
+<div class="flex items-center gap-3 mb-6">
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined">notifications_active</span>
+</div>
+<h3 class="text-xl font-bold text-slate-900 dark:text-white">Notification Services (Mattermost)</h3>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+<div class="p-8 flex flex-col md:flex-row-reverse gap-8 items-center">
+<div class="size-24 md:size-32 flex-shrink-0 bg-slate-50 dark:bg-slate-900 rounded-2xl flex items-center justify-center p-4">
+<img alt="Mattermost logo" class="w-full" data-alt="Mattermost collaboration platform logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCZxccAJhuzAM0SPFVaxOWbca1vBqycoPZ8le7RFA_efrzWEzhCW0PWggEU5uM4G6pkfjbEqXLb8Ei7H0fWOGxEuaFKNubRa3A_JjxwUlhOHswlHe7bBOvVidmWtO-AZand9RG2ywKkQZxY563Cg9s0W8f-ov8Tx9aWl5EyejDQezOx1wDwH6aY457YjNCX3whYKVy8xIjLqCZzvlS7MzVVb7DOerngeh_lF3R88pLht2HC0fWpRIyXp9Er2KyerhG3Q8NeDEFH1ntk"/>
+</div>
+<div class="flex-1 text-center md:text-left">
+<h4 class="text-2xl font-bold mb-3">Instant Notifications with Mattermost</h4>
+<p class="text-slate-600 dark:text-slate-400 mb-6 max-w-xl">Broadcast critical system alerts and project milestones to your private cloud messaging server. Fully customizable webhooks.</p>
+<div class="flex flex-wrap justify-center md:justify-start gap-4">
+<button class="px-6 py-2.5 bg-primary text-white rounded-lg font-bold text-sm shadow-lg shadow-primary/25 hover:scale-[1.02] transition-transform">Enable Webhooks</button>
+<button class="px-6 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-700">Setup Guide</button>
+</div>
+</div>
+</div>
+<div class="bg-slate-50 dark:bg-slate-900/50 px-8 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+<span class="text-sm font-medium text-slate-500 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">info</span>
+                                        Available on Self-Hosted &amp; Cloud versions
+                                    </span>
+<div class="flex -space-x-2">
+<div class="size-8 rounded-full border-2 border-white dark:border-slate-800 bg-slate-300 overflow-hidden">
+<img alt="Member" data-alt="Team member small avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCtrOHKTOdEw5tAbNA24jFleJtfpdVzGPEGZeV8dgIYTji-_g6oPapYCwTgKmyovuPdUtycBXmfhvF5nvFp3EA8-OrpxwtMhJUtkPSPjse1-tBbvL3w1gBaQmSW2AbQDttbFS90NGp-YIkaG-T2Lj5A19g-hDBlLNC81g1_RWGiPWEapJMcWm39smxetAf9lKE1pDmjdXTy15aIIf9RFYynSQyWZ6DuhA6YdWCoElpTrbPj8ZSg_VMFNNiKsdVyRk1FSv8wFLgCuy3h"/>
+</div>
+<div class="size-8 rounded-full border-2 border-white dark:border-slate-800 bg-slate-300 overflow-hidden">
+<img alt="Member" data-alt="Team member small avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAZqTr2A4qhvAfsFjxGWEjrB5uFmAI3go3tvOym-q4e_mGY7hb3en8rNIpzb2BUqSVTITSf8lNTOHeMG1aECXo7iplwNEhl67kndw3Pd5nD-TBSIHcqFnbTx69pMCmdRzEiRmzAiJOvQfLE2ocFw0o8G45HN2c_V8rNN3iPjlWD-AArm9IHLCEC96gcUYyc3zYygFh1eyonv6GDHoLmH2AOlkgJ5z9R60eQJELCketyE6-hnpiMtkg3g0SPVW3cA6jCTN4e5JAlYWcB"/>
+</div>
+<div class="size-8 rounded-full border-2 border-white dark:border-slate-800 bg-slate-300 overflow-hidden">
+<img alt="Member" data-alt="Team member small avatar" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDg43z5EzBy6k4vFI9tyEbm3JSGR6OrGucbyX14AzJwkiA-FdpQGjZDS1uYIa1RtUjiPz8_4MlrJ9uJmS_JboFnamOAsAgFl7VEukiYN5uBePLTScS-i7ead9qtIGuNyHedeyvLJL9Z_q20azP-2L9QnmAyQdx6hkCp12hpQ8nEv5cuqRluxgKxgsrM40m-dwq8J5WL1Mq0ksuHTbWn9zAEhy9dw_wQUKv0-5pkvstRdhHa30uQ4wH88zFQpUYahpXlmGTaaarlf6mh"/>
+</div>
+<div class="size-8 rounded-full border-2 border-white dark:border-slate-800 bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">+12</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Footer / Helper -->
+<footer class="mt-20 py-10 border-t border-slate-200 dark:border-slate-800 text-center">
+<p class="text-slate-500 text-sm mb-4">Don't see your tool? Request a custom integration.</p>
+<button class="text-primary font-bold text-sm border border-primary/20 bg-primary/5 px-6 py-2 rounded-full hover:bg-primary/10 transition-colors">Request Integration</button>
+</footer>
+</div>
+</main>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,146 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  password_hash String
+  first_name    String
+  last_name     String
+  role          Role            @relation(fields: [role_id], references: [id])
+  role_id       String
+  is_active     Boolean         @default(true)
+  hourly_rate   Decimal?        @default(0.00) @db.Decimal(10, 2)
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+
+  project_members ProjectMember[]
+  time_entries    TimeEntry[]
+  active_timers   ActiveTimer[]
+  notifications   Notification[]
+  audit_logs      AuditLog[]
+  calendar_connection CalendarConnection?
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique // Intern, Employee, Manager, Admin
+  permissions Json     @default("[]")
+  users       User[]
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description   String?
+  is_active     Boolean  @default(true)
+  budget_hours  Int?
+  budget_amount Decimal? @db.Decimal(10, 2)
+  created_at    DateTime @default(now())
+
+  members       ProjectMember[]
+  time_entries  TimeEntry[]
+  active_timers ActiveTimer[]
+}
+
+model ProjectMember {
+  project_id      String
+  user_id         String
+  role_in_project String
+
+  project Project @relation(fields: [project_id], references: [id])
+  user    User    @relation(fields: [user_id], references: [id])
+
+  @@id([project_id, user_id])
+}
+
+model TimeEntry {
+  id               String   @id @default(uuid())
+  user_id          String
+  project_id       String?
+  task_description String
+  start_time       DateTime
+  end_time         DateTime
+  duration         Int
+  entry_type       String   // "timer", "manual", "ai_suggested", "calendar_sync"
+  notes            String?
+  status           String   @default("pending") // "pending", "approved", "rejected"
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  user    User    @relation(fields: [user_id], references: [id])
+  project Project? @relation(fields: [project_id], references: [id])
+}
+
+model ActiveTimer {
+  id               String   @id @default(uuid())
+  user_id          String   @unique
+  project_id       String?
+  task_description String
+  start_time       DateTime
+  persisted_state  Json     @default("{}")
+  last_active_ping DateTime? @default(now())
+
+  user    User    @relation(fields: [user_id], references: [id])
+  project Project? @relation(fields: [project_id], references: [id])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  user_id    String
+  message    String
+  type       String   // "reminder" or "alert"
+  is_read    Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  user_id    String
+  action     String
+  resource   String
+  metadata   Json     @default("{}")
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+}
+
+model Integration {
+  id        String  @id @default(uuid())
+  type      String  @unique // "taiga" or "mattermost"
+  config    String  // Encrypted JSON
+  is_active Boolean @default(true)
+}
+
+model CalendarConnection {
+  id            String   @id @default(uuid())
+  user_id       String   @unique
+  provider      String   @default("google")
+  google_email  String?
+  refresh_token String
+  scope         String?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model ReportCache {
+  id           String   @id @default(uuid())
+  report_type  String
+  parameters   Json
+  data         Json
+  generated_at DateTime @default(now())
+  expires_at   DateTime
+}

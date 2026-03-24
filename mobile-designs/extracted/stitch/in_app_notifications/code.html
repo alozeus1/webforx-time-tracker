@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#354ac0",
+              "background-light": "#f6f6f8",
+              "background-dark": "#13151f",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<title>Web Forx Technology - Notifications</title>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex h-screen w-full max-w-md mx-auto flex-col bg-background-light dark:bg-background-dark overflow-hidden border-x border-primary/10 shadow-2xl">
+<!-- Header Section -->
+<header class="flex items-center bg-white dark:bg-slate-900/50 p-4 border-b border-primary/10 justify-between sticky top-0 z-10 backdrop-blur-md">
+<div class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-primary/5">
+<img alt="Web Forx Technology Logo" class="h-8 w-auto" data-alt="Web Forx Technology abstract company logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGar4wm8Tv2fDq6IiP_9dQQhZ11nFG1Hy0_VKqTGS2woitVgMfxHJN4k8NNQQR_kUhTyzgZWsIbTFDsuA2boCAnZYDXvVr7C42IIlhG9lnrIuGgk74aCF-Ndi9twu56npE_KYYM4pbOwNW49UTLo22nEsg6BHEvJw6jvPu4pNofScxv96iW_nRkTjhXGecP1DA31ptQiWSZ4otu1cEbgB8rgHhlWXsC8sX5HEfEjW3f2CWC5Mwr0kD4eCxzweHvr6xm7iJIUHuW4hO"/>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 ml-3">Notifications</h2>
+<div class="flex items-center justify-end">
+<button class="flex size-10 cursor-pointer items-center justify-center rounded-full hover:bg-primary/10 text-slate-600 dark:text-slate-400 transition-colors">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+</button>
+</div>
+</header>
+<!-- Quick Actions -->
+<div class="px-4 py-4 bg-white dark:bg-slate-900/30 border-b border-primary/5">
+<div class="flex gap-4">
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-sm font-semibold">
+<span class="material-symbols-outlined text-[18px]">done_all</span>
+                Mark all as read
+            </button>
+<button class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors text-sm font-medium">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                Filter
+            </button>
+</div>
+</div>
+<!-- Scrollable Content -->
+<main class="flex-1 overflow-y-auto pb-20">
+<!-- Today Section -->
+<section>
+<h3 class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider px-4 pb-2 pt-6">Today</h3>
+<!-- Alert 1: Unlogged Time -->
+<div class="flex items-start gap-4 bg-white dark:bg-slate-900/40 px-4 py-4 border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer relative group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"></div>
+<div class="flex size-12 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-900/30 text-amber-600 shrink-0">
+<span class="material-symbols-outlined text-[24px]">warning</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Missing logs</p>
+<span class="text-slate-400 text-[11px] font-medium uppercase tracking-tight">2h ago</span>
+</div>
+<p class="text-slate-600 dark:text-slate-400 text-sm mt-1">You have not logged time today. Don't forget to record your hours for today's tasks.</p>
+</div>
+</div>
+<!-- Alert 2: Timer Running -->
+<div class="flex items-start gap-4 bg-white dark:bg-slate-900/40 px-4 py-4 border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer relative">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"></div>
+<div class="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary shrink-0 relative">
+<span class="material-symbols-outlined text-[24px] animate-pulse">timer</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Active Timer</p>
+<span class="text-slate-400 text-[11px] font-medium uppercase tracking-tight">Now</span>
+</div>
+<p class="text-slate-600 dark:text-slate-400 text-sm mt-1">Your timer is still running for the <span class="text-primary font-medium">EDUSUC project</span> (02:45:12).</p>
+<div class="flex gap-2 mt-3">
+<button class="px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg shadow-sm shadow-primary/30">Stop Timer</button>
+<button class="px-4 py-1.5 border border-primary/20 text-primary text-xs font-bold rounded-lg">View Task</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Yesterday Section -->
+<section>
+<h3 class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider px-4 pb-2 pt-6">Yesterday</h3>
+<!-- Summary Card -->
+<div class="flex items-start gap-4 bg-white dark:bg-slate-900/40 px-4 py-4 border-b border-primary/5 hover:bg-primary/5 transition-colors cursor-pointer">
+<div class="flex size-12 items-center justify-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 shrink-0">
+<span class="material-symbols-outlined text-[24px]">monitoring</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Daily summary</p>
+<span class="text-slate-400 text-[11px] font-medium uppercase tracking-tight">24h ago</span>
+</div>
+<p class="text-slate-600 dark:text-slate-400 text-sm mt-1">Yesterday you logged <span class="font-bold text-slate-800 dark:text-slate-200">7.5 hours</span> across 3 projects. Your productivity was up by 12% compared to last Monday.</p>
+</div>
+</div>
+</section>
+<!-- Earlier Section -->
+<section>
+<h3 class="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider px-4 pb-2 pt-6">Earlier</h3>
+<div class="flex items-start gap-4 bg-white dark:bg-slate-900/40 px-4 py-4 border-b border-primary/5 opacity-70 grayscale-[0.5]">
+<div class="flex size-12 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0">
+<span class="material-symbols-outlined text-[24px]">task_alt</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Project Completed</p>
+<span class="text-slate-400 text-[11px] font-medium uppercase tracking-tight">3d ago</span>
+</div>
+<p class="text-slate-600 dark:text-slate-400 text-sm mt-1">The 'Nexus-UI' milestone for Web Forx internal project has been marked as complete.</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Navigation Bar -->
+<nav class="absolute bottom-0 left-0 right-0 border-t border-primary/10 bg-white dark:bg-slate-900 px-4 pb-6 pt-3 flex justify-between items-center shadow-[0_-4px_10px_rgba(0,0,0,0.05)]">
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">home</span>
+<span class="text-[10px] font-semibold uppercase tracking-widest">Home</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">timer</span>
+<span class="text-[10px] font-semibold uppercase tracking-widest">Timer</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined text-[24px]">bar_chart</span>
+<span class="text-[10px] font-semibold uppercase tracking-widest">Reports</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary relative" href="#">
+<span class="material-symbols-outlined text-[24px] fill-1">notifications</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Alerts</span>
+<span class="absolute -top-1 right-2 size-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+</a>
+</nav>
+</div>
+</body></html>

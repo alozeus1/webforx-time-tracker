@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#354ac0",
+              "background-light": "#f6f6f8",
+              "background-dark": "#13151f",
+            },
+            fontFamily: {
+              "display": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<title>User Profile &amp; Settings</title>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<header class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-2 text-primary">
+<div class="size-8 bg-primary rounded-lg flex items-center justify-center text-white">
+<span class="material-symbols-outlined">task_alt</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight">TaskMaster</h2>
+</div>
+<label class="hidden md:flex flex-col min-w-40 h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full overflow-hidden">
+<div class="text-slate-500 flex border-none bg-slate-100 dark:bg-slate-800 items-center justify-center pl-4">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full border-none bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-0 h-full placeholder:text-slate-500 px-4 pl-2 text-sm" placeholder="Search settings..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex flex-1 justify-end gap-4 items-center">
+<nav class="hidden lg:flex items-center gap-6 mr-4">
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">Projects</a>
+<a class="text-slate-900 dark:text-slate-100 border-b-2 border-primary py-4 text-sm font-medium" href="#">Settings</a>
+</nav>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined text-[20px]">help</span>
+</button>
+</div>
+<div class="size-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden" data-alt="User profile avatar of Alex Johnson">
+<img alt="Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCNXcU1rw4zPgue_zkRb3fauZicS-tX9nblvvFKSW0idx254W0IWlx4Lqzpujdsqpdxoxt9ui_uuBWjgPGcGbi4icHAbKGcSUgTFfiBMMQLTtolF6UoE6SZKdRnD_XslsU3TP0GqFG2LRj56VzNGNKU7zZ26gGN_JIkr8Qe-GIg6sGRrIywuj53lRUtbYF2O5ja-FNuHgdLDqTGpjtP4-kQ6YAG4ArwHAnQp4z00Ti0W_VWJh2b5SgvZwMhjGCF9rC0bkOsWSiKRwDD"/>
+</div>
+</div>
+</header>
+<main class="flex-1 flex flex-col items-center">
+<div class="w-full max-w-[1200px] flex flex-col md:flex-row gap-8 px-6 py-8">
+<aside class="w-full md:w-64 flex flex-col gap-1">
+<div class="flex items-center gap-3 px-4 py-3 mb-4">
+<div class="size-12 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden" data-alt="Small profile avatar thumbnail">
+<img alt="Alex" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAecvPDZ8ZVo0labWjjL5Mfnr_Q3BB_4DAy3yDeecJ0Uc_hjq449BvsvrijuYZgvMu1oCtmHwOy9G3g0eNTvbPeZz0j-fLOUmcccQEz6AWsEunUYAj_IeTDOFz0sOi6ymLbiLtEDyUKr_ySHpEEBRBQcpx53eD9hZ_BmBbKeGaf3zz77ddIyRAII03_fb7Yd-UOAck1Wi1mFUAMptAbzi0peHYBznc5A8639Sr5UUe-JyZ3R2k0ETPrfXWsyU7T9SNXPBeYuAVgrqMW"/>
+</div>
+<div class="flex flex-col">
+<h3 class="text-slate-900 dark:text-slate-100 font-bold text-sm">Alex Johnson</h3>
+<span class="text-slate-500 text-xs">Premium Member</span>
+</div>
+</div>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-primary/10 text-primary font-semibold text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] fill-1">person</span>
+<span>Personal Info</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">lock</span>
+<span>Security</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span>Notifications</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">palette</span>
+<span>Appearance</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+<span>Billing</span>
+</a>
+<hr class="my-4 border-slate-200 dark:border-slate-800"/>
+<div class="px-4 py-2">
+<p class="text-[11px] uppercase tracking-wider text-slate-400 font-bold mb-2">Support</p>
+<a class="flex items-center gap-3 py-2 text-slate-600 dark:text-slate-400 hover:text-primary text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">article</span>
+<span>Documentation</span>
+</a>
+<a class="flex items-center gap-3 py-2 text-slate-600 dark:text-slate-400 hover:text-primary text-sm transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">chat_bubble</span>
+<span>Contact Us</span>
+</a>
+</div>
+</aside>
+<div class="flex-1 flex flex-col gap-8">
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+<div>
+<h2 class="text-xl font-bold text-slate-900 dark:text-slate-100">Personal Information</h2>
+<p class="text-sm text-slate-500">Manage your public profile and account details</p>
+</div>
+<button class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary/90 transition-colors shadow-sm">
+                                Save Changes
+                            </button>
+</div>
+<div class="p-6">
+<div class="flex flex-col md:flex-row gap-8 items-start">
+<div class="flex flex-col items-center gap-3">
+<div class="size-32 rounded-full border-4 border-slate-100 dark:border-slate-800 overflow-hidden shadow-inner relative group" data-alt="Large user profile picture for editing">
+<img alt="Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDf8TVqY5QYMomFHrtlMfCzdvtyLfpKRu_-c3v-CI_Oe2oiX4FIEurCAQRmxgUJWrQmOtcZArb_hpAujj7CGQrJ1LgITPo80TyQh1XqH7oUnzeWbtHzw-ojPXkg2-l5XqdICCqqVMYmtSlKNqyXeSsjTSSowvVB1NdVXvc7duHgeqlL0_-lWcqlMePedufd9mJzQhRCulDTmevrTT3z4VLAIN410yKuEJ6RC_KPMXoZMCPsRg3Oh-KjvHnpbnFhjfwL7ezOTwyU4ZD7"/>
+<div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+<span class="material-symbols-outlined text-white">photo_camera</span>
+</div>
+</div>
+<button class="text-primary text-xs font-bold hover:underline">Change Photo</button>
+</div>
+<div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Full Name</label>
+<input class="rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-primary focus:ring-primary/20 transition-all" type="text" value="Alex Johnson"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Email Address</label>
+<input class="rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-primary focus:ring-primary/20 transition-all" type="email" value="alex.j@techcorp.com"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Job Title</label>
+<input class="rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-primary focus:ring-primary/20 transition-all" type="text" value="Product Designer"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Location</label>
+<input class="rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-primary focus:ring-primary/20 transition-all" type="text" value="San Francisco, CA"/>
+</div>
+<div class="flex flex-col gap-1.5 md:col-span-2">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Bio</label>
+<textarea class="rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 focus:border-primary focus:ring-primary/20 transition-all" rows="3">Product Designer at TechCorp focusing on user productivity and seamless workflow experiences.</textarea>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="p-6 border-b border-slate-200 dark:border-slate-800">
+<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">Display Settings</h2>
+</div>
+<div class="p-6 space-y-6">
+<div class="flex items-center justify-between">
+<div class="flex flex-col">
+<span class="text-sm font-semibold text-slate-900 dark:text-slate-100">Dark Mode</span>
+<p class="text-xs text-slate-500">Adjust the appearance of TaskMaster</p>
+</div>
+<div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+<button class="flex items-center justify-center px-4 py-1.5 rounded-md bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-slate-100 transition-all">
+<span class="material-symbols-outlined text-[18px] mr-2">light_mode</span>
+<span class="text-xs font-bold">Light</span>
+</button>
+<button class="flex items-center justify-center px-4 py-1.5 rounded-md text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-all">
+<span class="material-symbols-outlined text-[18px] mr-2">dark_mode</span>
+<span class="text-xs font-bold">Dark</span>
+</button>
+</div>
+</div>
+<div class="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+<div class="flex flex-col">
+<span class="text-sm font-semibold text-slate-900 dark:text-slate-100">Compact View</span>
+<p class="text-xs text-slate-500">Show more information with less spacing</p>
+</div>
+<button class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 bg-slate-200 dark:bg-slate-700">
+<span class="translate-x-0 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+</div>
+</section>
+<section class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">Smart Suggestions</h2>
+</div>
+<button class="text-sm text-primary font-bold hover:underline">View All Suggestions</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="flex flex-col gap-4 rounded-xl border border-primary/20 bg-primary/5 p-5 hover:bg-primary/[0.08] transition-colors cursor-pointer group">
+<div class="flex items-center justify-between">
+<div class="size-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined">analytics</span>
+</div>
+<span class="px-2 py-1 rounded bg-primary text-white text-[10px] font-bold uppercase tracking-wider">Weekly Report</span>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-slate-900 dark:text-slate-100 font-bold text-base group-hover:text-primary transition-colors">Automate Friday Report</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm">We've noticed you manually compile a report every Friday at 4 PM. Want to automate this?</p>
+</div>
+<div class="flex gap-3 pt-2">
+<button class="flex-1 bg-primary text-white text-xs font-bold py-2 rounded-lg hover:bg-primary/90 transition-colors">Setup Automation</button>
+<button class="px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors">Ignore</button>
+</div>
+</div>
+<div class="flex flex-col gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 hover:border-primary/40 transition-all cursor-pointer group shadow-sm">
+<div class="flex items-center justify-between">
+<div class="size-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 text-[10px] font-bold uppercase tracking-wider">Standup</span>
+</div>
+<div class="flex flex-col gap-1">
+<h3 class="text-slate-900 dark:text-slate-100 font-bold text-base group-hover:text-primary transition-colors">Schedule Daily Sync</h3>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Consistent activity detected with the Design Team around 9:00 AM. Schedule recurring sync?</p>
+</div>
+<div class="flex gap-3 pt-2">
+<button class="flex-1 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs font-bold py-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Add to Calendar</button>
+<button class="px-3 border border-slate-200 dark:border-slate-700 text-slate-500 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Maybe later</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</main>
+<footer class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-8 mt-12">
+<div class="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+<div class="flex items-center gap-2 opacity-50">
+<span class="material-symbols-outlined text-sm">task_alt</span>
+<p class="text-xs">© 2024 TaskMaster. All rights reserved.</p>
+</div>
+<div class="flex gap-8">
+<a class="text-xs text-slate-500 hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="text-xs text-slate-500 hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="text-xs text-slate-500 hover:text-primary transition-colors" href="#">System Status</a>
+</div>
+</div>
+</footer>
+</div>
+</div>
+</body></html>

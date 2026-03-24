@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Web Forx - User Profile</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "primary": "#354ac0",
+                "background-light": "#f6f6f8",
+                "background-dark": "#13151f",
+              },
+              fontFamily: {
+                "display": ["Inter"]
+              },
+              borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="flex items-center justify-between p-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-lg bg-primary flex items-center justify-center overflow-hidden">
+<img alt="Web Forx Logo" data-alt="Web Forx company logo minimalist design" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDuZN3v_7iuAkjcySsaoV92800DInl5jyAzNeEWLwYFzAQj_lSUSAUgB1j8ptIG2lam51NJt67U5_xLh9wy4v4ZxSPoRAdE546ndbMeXAhy8zJgfxRVK0CwjOZ0Jh2lJNHHBw7mRTS7in3aIzCqtjX0iZutpSb5gb4EcP7LuyD6Z4oDv-1449dvxCbwWC6FFbp3cTyYsuhzy1k24PhuNYzNHIhlqJFugXEtbH4xBa3ydxg-uFdq8rRrb0dJj78gT5oy40EcpneYGxLu"/>
+</div>
+<h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Web Forx</h1>
+</div>
+<button class="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</header>
+<!-- Profile Section -->
+<div class="flex flex-col items-center px-4 py-8 bg-white dark:bg-slate-900">
+<div class="relative group">
+<div class="size-32 rounded-full ring-4 ring-primary/10 dark:ring-primary/20 bg-cover bg-center overflow-hidden shadow-lg" data-alt="Professional portrait of a male engineer smiling" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDeNqzIGOE8fDy3v2arbMAT7BK5STd3NcPPf4f9ENma3pbhOHIQ21J0osmBt8hKvv-XeZKYS6A0f_xP7JpR1DJB0QLrCyBCNm2f8cXE6unSwqhqN4kPZ5cXWpXW29iQGBRFv3WTtAah_DJMOZweiGq7dIlKCraeTC2V7AkttFWmnhaX_vFYIU7J5XVTC6Mmbzeru2Z8ygdsDUqwR4s9rx21gh-FzFrfgd-OLe-2WloTqjiQLVv5sgLgkaoAfL63sNzBV6kK0MojYEUW');">
+</div>
+<button class="absolute bottom-0 right-0 bg-primary text-white p-2 rounded-full shadow-md border-2 border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+</div>
+<div class="mt-4 text-center">
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white leading-tight">Alex Sterling</h2>
+<div class="flex items-center justify-center gap-2 mt-1">
+<span class="text-primary font-medium text-sm px-2 py-0.5 bg-primary/10 dark:bg-primary/20 rounded-full">Engineer</span>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm mt-2 font-normal">alex.sterling@webforx.com</p>
+</div>
+</div>
+<!-- Settings Content -->
+<main class="flex-1 p-4 space-y-4">
+<!-- Dark Mode Toggle -->
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center gap-3">
+<div class="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300">
+<span class="material-symbols-outlined">dark_mode</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-slate-900 dark:text-white">Dark Mode</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Switch between light and dark themes</p>
+</div>
+</div>
+<label class="relative flex h-[31px] w-[51px] cursor-pointer items-center rounded-full border-none bg-slate-200 dark:bg-slate-700 p-0.5 transition-colors has-[:checked]:bg-primary">
+<div class="h-6 w-6 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out"></div>
+<input class="invisible absolute peer" type="checkbox"/>
+<style>
+                        input:checked + div { transform: translateX(20px); }
+                    </style>
+</label>
+</div>
+<!-- Smart Suggestions -->
+<div>
+<div class="flex items-center justify-between mb-3 px-1">
+<h3 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Smart Suggestions</h3>
+<span class="text-[10px] bg-primary/10 dark:bg-primary/20 text-primary font-bold px-2 py-0.5 rounded-full">AI DRIVEN</span>
+</div>
+<div class="space-y-3">
+<!-- Suggestion Item 1 -->
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center gap-3">
+<div class="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
+<span class="material-symbols-outlined">groups</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-slate-900 dark:text-white">Daily Standup</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Scheduled: 10:00 AM</p>
+</div>
+</div>
+<button class="flex items-center gap-1 bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+                            START
+                        </button>
+</div>
+<!-- Suggestion Item 2 -->
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center gap-3">
+<div class="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg">
+<span class="material-symbols-outlined">code</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-slate-900 dark:text-white">Code Review</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">3 pending PRs</p>
+</div>
+</div>
+<button class="flex items-center gap-1 bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+                            START
+                        </button>
+</div>
+<!-- Suggestion Item 3 -->
+<div class="flex items-center justify-between p-4 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex items-center gap-3">
+<div class="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
+<span class="material-symbols-outlined">terminal</span>
+</div>
+<div>
+<p class="text-sm font-semibold text-slate-900 dark:text-white">Feature Dev</p>
+<p class="text-xs text-slate-500 dark:text-slate-400">Last worked 2h ago</p>
+</div>
+</div>
+<button class="flex items-center gap-1 bg-primary text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+                            START
+                        </button>
+</div>
+</div>
+</div>
+<!-- Stats Mini Card -->
+<div class="p-4 rounded-xl bg-primary text-white shadow-lg overflow-hidden relative">
+<div class="relative z-10">
+<p class="text-xs font-medium opacity-80">This Week's Activity</p>
+<div class="flex items-end justify-between mt-2">
+<h4 class="text-2xl font-bold">38h 24m</h4>
+<span class="text-xs bg-white/20 px-2 py-1 rounded-full">+12% vs last week</span>
+</div>
+</div>
+<div class="absolute -right-4 -bottom-4 opacity-10">
+<span class="material-symbols-outlined text-8xl">trending_up</span>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="sticky bottom-0 w-full flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 pb-4 pt-2 shadow-inner">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">timer</span>
+<p class="text-[10px] font-semibold uppercase tracking-wider">Timer</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<p class="text-[10px] font-semibold uppercase tracking-wider">Stats</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">folder</span>
+<p class="text-[10px] font-semibold uppercase tracking-wider">Projects</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined fill-1">person</span>
+<p class="text-[10px] font-bold uppercase tracking-wider">Profile</p>
+</a>
+</nav>
+</div>
+</body></html>

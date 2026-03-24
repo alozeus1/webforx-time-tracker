@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Web Forx - Weekly Summary</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                        "emerald-custom": "#10b981",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative flex min-h-screen w-full flex-col max-w-md mx-auto bg-background-light dark:bg-background-dark shadow-xl overflow-x-hidden">
+<!-- Header -->
+<header class="flex items-center bg-background-light dark:bg-background-dark p-4 pb-2 justify-between sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+<div class="text-slate-900 dark:text-slate-100 flex size-10 items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-tight flex-1 text-center">Weekly Summary</h2>
+<div class="flex w-10 items-center justify-end">
+<button class="text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined">calendar_today</span>
+</button>
+</div>
+</header>
+<!-- Tabs Navigation -->
+<div class="bg-background-light dark:bg-background-dark px-4">
+<div class="flex border-b border-slate-200 dark:border-slate-800 gap-8">
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4" href="#">
+<p class="text-sm font-bold">Daily</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3 pt-4" href="#">
+<p class="text-sm font-bold">Weekly</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-4" href="#">
+<p class="text-sm font-bold">Monthly</p>
+</a>
+</div>
+</div>
+<main class="flex-1 overflow-y-auto pb-24">
+<!-- 1. Total Hours Widget (Progress Ring) -->
+<section class="p-4">
+<div class="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+<div>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Hours</p>
+<h3 class="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-1">32h 45m</h3>
+<p class="text-emerald-custom text-sm font-medium mt-1 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">trending_up</span> +12% vs last week
+                        </p>
+</div>
+<div class="relative flex items-center justify-center size-24">
+<svg class="size-full" viewbox="0 0 36 36">
+<circle class="stroke-slate-100 dark:stroke-slate-800" cx="18" cy="18" fill="none" r="16" stroke-width="3"></circle>
+<circle class="stroke-emerald-custom" cx="18" cy="18" fill="none" r="16" stroke-dasharray="82, 100" stroke-linecap="round" stroke-width="3"></circle>
+</svg>
+<div class="absolute inset-0 flex flex-col items-center justify-center">
+<span class="text-xs font-bold text-slate-900 dark:text-slate-100">82%</span>
+<span class="text-[10px] text-slate-500">Goal</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 2. Hours per Day Bar Chart -->
+<section class="px-4 py-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-center mb-6">
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold">Daily Activity</p>
+<span class="text-xs text-slate-500 font-medium">Aug 14 - Aug 20</span>
+</div>
+<div class="flex items-end justify-between h-32 gap-2 mb-2">
+<!-- M -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[50%]">
+<div class="absolute bottom-0 w-full bg-primary/40 h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-400">M</span>
+</div>
+<!-- T -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[80%]">
+<div class="absolute bottom-0 w-full bg-primary/40 h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-400">T</span>
+</div>
+<!-- W -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[60%]">
+<div class="absolute bottom-0 w-full bg-primary/40 h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-400">W</span>
+</div>
+<!-- T -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[90%]">
+<div class="absolute bottom-0 w-full bg-emerald-custom h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-900 dark:text-slate-100">T</span>
+</div>
+<!-- F -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[100%]">
+<div class="absolute bottom-0 w-full bg-primary/40 h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-400">F</span>
+</div>
+<!-- S -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[30%]">
+<div class="absolute bottom-0 w-full bg-primary/40 h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-400">S</span>
+</div>
+<!-- S -->
+<div class="flex-1 flex flex-col items-center gap-2">
+<div class="w-full bg-slate-100 dark:bg-slate-800 rounded-t-sm relative overflow-hidden h-[40%]">
+<div class="absolute bottom-0 w-full bg-primary/40 h-full"></div>
+</div>
+<span class="text-[10px] font-bold text-slate-400">S</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 3. Top Projects Breakdown -->
+<section class="px-4 py-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold mb-4">Top Projects</p>
+<div class="space-y-5">
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">Design System</span>
+<span class="text-slate-500">12h 20m</span>
+</div>
+<div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 45%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">Web Dashboard</span>
+<span class="text-slate-500">8h 15m</span>
+</div>
+<div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-custom rounded-full" style="width: 32%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">Client Meetings</span>
+<span class="text-slate-500">6h 10m</span>
+</div>
+<div class="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+<div class="h-full bg-slate-400 rounded-full" style="width: 23%;"></div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 4. Productivity Trend Line Graph -->
+<section class="px-4 py-2">
+<div class="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-center mb-4">
+<p class="text-slate-900 dark:text-slate-100 text-base font-bold">Productivity Trend</p>
+<div class="flex items-center text-emerald-custom text-sm font-bold">
+                            High <span class="material-symbols-outlined text-sm ml-1">bolt</span>
+</div>
+</div>
+<div class="relative h-24 w-full flex items-center">
+<!-- Simplified Line Graph representation using SVG -->
+<svg class="w-full h-full overflow-visible" preserveaspectratio="none" viewbox="0 0 100 40">
+<path class="stroke-emerald-custom" d="M 0 35 Q 15 32, 25 20 T 50 15 T 75 10 T 100 5" fill="none" stroke-width="2" vector-effect="non-scaling-stroke"></path>
+<path d="M 0 35 Q 15 32, 25 20 T 50 15 T 75 10 T 100 5 V 40 H 0 Z" fill="url(#emeraldGradient)" opacity="0.1"></path>
+<defs>
+<lineargradient id="emeraldGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color: #10b981; stop-opacity: 1"></stop>
+<stop offset="100%" style="stop-color: #10b981; stop-opacity: 0"></stop>
+</lineargradient>
+</defs>
+<circle class="fill-emerald-custom" cx="100" cy="5" r="3"></circle>
+</svg>
+</div>
+<div class="flex justify-between mt-2">
+<span class="text-[10px] text-slate-400">Mon</span>
+<span class="text-[10px] text-slate-400">Wed</span>
+<span class="text-[10px] text-slate-400">Fri</span>
+<span class="text-[10px] text-slate-400">Sun</span>
+</div>
+<p class="text-slate-500 text-xs mt-4">Your productivity peaked on Friday with focus scores averaging 92/100.</p>
+</div>
+</section>
+</main>
+<!-- Bottom NavBar -->
+<nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 pb-safe">
+<div class="flex gap-2 px-4 pb-3 pt-2">
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">dashboard</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Dashboard</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">folder</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Projects</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-slate-400" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined">timer</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Timer</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-end gap-1 text-primary" href="#">
+<div class="flex h-8 items-center justify-center">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">bar_chart</span>
+</div>
+<p class="text-[10px] font-medium leading-normal tracking-wide">Reports</p>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

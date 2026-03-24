@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Notifications - TaskTrack Pro</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-primary">
+<div class="size-6 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl font-bold">layers</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em]">TaskTrack Pro</h2>
+</div>
+<label class="flex flex-col min-w-40 !h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full overflow-hidden">
+<div class="text-slate-500 flex border-none bg-slate-100 dark:bg-slate-800 items-center justify-center pl-4">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 border-none bg-slate-100 dark:bg-slate-800 focus:ring-0 text-slate-900 dark:text-slate-100 placeholder:text-slate-500 px-4 pl-2 text-base font-normal" placeholder="Search notifications..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium transition-colors" href="#">Logs</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium transition-colors" href="#">Reports</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary text-sm font-medium transition-colors" href="#">Settings</a>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-primary/10 text-primary transition-colors hover:bg-primary/20">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-xl">account_circle</span>
+</button>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700" data-alt="User profile picture showing a professional woman smiling" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAx6X_GQZICjVsKx904MSG6ZUHeRGffHqFpaEYM2jfQFstS9LSmWnOpaUjxfocNb4AATW7pKW8AnG3k2ZhhnndUwMjS9uUt_t80n6Xf1VGVBE0lV_2DSV55DOGBomvNeU0tJ56twqcTi3gaqc0MwL5p6xBabHMWTHSTHZ65ht_zK6QtDklGH8M6N9BqD-MdWNrYSKS09UVEovQojTkc91PjfVyC1s0iZ29iRihRjvecVS6SFZV3Ug_O720Hv2OU6kAtp7jkSqYWhlAT");'></div>
+</div>
+</header>
+<main class="flex flex-1 justify-center py-8">
+<div class="layout-content-container flex flex-col w-full max-w-[960px] px-4">
+<!-- Page Title and Actions -->
+<div class="flex flex-wrap justify-between items-end gap-3 pb-6 border-b border-slate-200 dark:border-slate-800">
+<div class="flex flex-col gap-2">
+<h1 class="text-slate-900 dark:text-slate-100 text-4xl font-black leading-tight tracking-[-0.033em]">Notifications</h1>
+<p class="text-slate-500 dark:text-slate-400 text-base font-normal">Stay updated with your latest logs, timers, and summaries.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center justify-center rounded-lg h-10 px-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm font-bold transition-colors hover:bg-slate-200 dark:hover:bg-slate-700">
+<span class="material-symbols-outlined text-lg mr-2">done_all</span>
+                                Mark all as read
+                            </button>
+<button class="flex items-center justify-center rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold shadow-md shadow-primary/20 hover:bg-primary/90 transition-all">
+<span class="material-symbols-outlined text-lg mr-2">settings</span>
+                                Preferences
+                            </button>
+</div>
+</div>
+<!-- Notification Tabs -->
+<div class="pt-4">
+<div class="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto no-scrollbar">
+<a class="flex items-center justify-center border-b-2 border-primary text-primary pb-3 pt-2 whitespace-nowrap transition-colors" href="#">
+<span class="text-sm font-bold">All Notifications</span>
+<span class="ml-2 bg-primary/10 px-2 py-0.5 rounded-full text-[10px]">12</span>
+</a>
+<a class="flex items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-2 whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200" href="#">
+<span class="text-sm font-bold">Missing Logs</span>
+<span class="ml-2 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-[10px]">3</span>
+</a>
+<a class="flex items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-2 whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200" href="#">
+<span class="text-sm font-bold">Active Timers</span>
+<span class="ml-2 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-[10px]">1</span>
+</a>
+<a class="flex items-center justify-center border-b-2 border-transparent text-slate-500 dark:text-slate-400 pb-3 pt-2 whitespace-nowrap hover:text-slate-700 dark:hover:text-slate-200" href="#">
+<span class="text-sm font-bold">Summaries</span>
+</a>
+</div>
+</div>
+<!-- Section: Today -->
+<div class="mt-8">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] pb-4">Today</h3>
+<div class="flex flex-col gap-3">
+<!-- Urgent Action: Missing Log -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group">
+<div class="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center rounded-lg shrink-0 size-12">
+<span class="material-symbols-outlined text-2xl">warning</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Missing Log: UI Design Review</p>
+<span class="text-xs text-slate-400">10m ago</span>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal mt-1">You participated in a 45-minute calendar event but haven't logged the time yet.</p>
+</div>
+<div class="shrink-0 pl-4">
+<button class="flex items-center justify-center rounded-lg h-9 px-4 bg-primary text-white text-sm font-semibold hover:bg-primary/90">
+                                        Fix Now
+                                    </button>
+</div>
+</div>
+<!-- Active Timer -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm group">
+<div class="bg-primary/10 text-primary flex items-center justify-center rounded-lg shrink-0 size-12 relative overflow-hidden">
+<span class="material-symbols-outlined text-2xl">timer</span>
+<div class="absolute inset-0 bg-primary/5 animate-pulse"></div>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Active Timer: Project Apollo</p>
+<span class="text-xs text-slate-400">Running for 2h 15m</span>
+</div>
+<div class="flex items-center gap-2 mt-1">
+<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal">Currently tracking: Wireframing phase</p>
+</div>
+</div>
+<div class="shrink-0 flex gap-2 pl-4">
+<button class="flex items-center justify-center rounded-lg h-9 w-9 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200">
+<span class="material-symbols-outlined text-lg">pause</span>
+</button>
+<button class="flex items-center justify-center rounded-lg h-9 px-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm font-semibold hover:bg-slate-200">
+                                        Stop
+                                    </button>
+</div>
+</div>
+<!-- Daily Summary -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm group">
+<div class="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center rounded-lg shrink-0 size-12">
+<span class="material-symbols-outlined text-2xl">analytics</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Weekly Performance Snapshot</p>
+<span class="text-xs text-slate-400">1h ago</span>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal mt-1">You've logged 32 hours this week. You are 8 hours away from your weekly goal.</p>
+</div>
+<div class="shrink-0 pl-4">
+<button class="flex items-center justify-center rounded-lg h-9 px-4 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800">
+                                        View Stats
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Section: Yesterday -->
+<div class="mt-10">
+<h3 class="text-slate-500 dark:text-slate-400 text-sm font-bold uppercase tracking-wider pb-4">Yesterday</h3>
+<div class="flex flex-col gap-3">
+<!-- Completed Summary -->
+<div class="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 border border-transparent rounded-xl p-4 transition-all opacity-80 hover:opacity-100">
+<div class="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 flex items-center justify-center rounded-lg shrink-0 size-12">
+<span class="material-symbols-outlined text-2xl">check_circle</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-700 dark:text-slate-300 text-base font-medium leading-tight">Daily Log Submitted</p>
+<span class="text-xs text-slate-400">22h ago</span>
+</div>
+<p class="text-slate-500 dark:text-slate-500 text-sm font-normal mt-1">Your daily summary for Tuesday, Oct 24 was automatically approved.</p>
+</div>
+<div class="shrink-0 pl-4">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Missing Log (Old) -->
+<div class="flex items-center gap-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm group">
+<div class="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center rounded-lg shrink-0 size-12">
+<span class="material-symbols-outlined text-2xl">priority_high</span>
+</div>
+<div class="flex flex-col flex-1">
+<div class="flex justify-between items-start">
+<p class="text-slate-900 dark:text-slate-100 text-base font-semibold leading-tight">Missing Log: Team Standup</p>
+<span class="text-xs text-slate-400">1d ago</span>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal mt-1">This log is still missing from yesterday's schedule. Please resolve it soon.</p>
+</div>
+<div class="shrink-0 pl-4">
+<button class="flex items-center justify-center rounded-lg h-9 px-4 bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm font-semibold hover:bg-slate-200">
+                                        Dismiss
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Load More / Empty State Footer -->
+<div class="mt-12 mb-20 flex flex-col items-center">
+<button class="flex items-center justify-center gap-2 text-slate-500 dark:text-slate-400 hover:text-primary transition-colors font-medium">
+<span class="material-symbols-outlined">keyboard_arrow_down</span>
+                            Show older notifications
+                        </button>
+<p class="mt-8 text-slate-400 text-xs text-center border-t border-slate-200 dark:border-slate-800 pt-8 w-full">
+                            You're all caught up! Looking for something older? <a class="text-primary hover:underline" href="#">Check notification archives</a>.
+                        </p>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

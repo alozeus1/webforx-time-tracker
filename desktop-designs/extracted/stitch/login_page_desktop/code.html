@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Login | Web Forx Technology</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex flex-col font-display text-slate-900 dark:text-slate-100">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-10 py-4 bg-white dark:bg-slate-900">
+<div class="flex items-center gap-3">
+<div class="size-8 overflow-hidden rounded">
+<img alt="Web Forx Technology Corporate Logo" class="w-full h-full object-contain" data-alt="Web Forx Technology minimalist blue corporate logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqTRBA-6yxfSZVbeIY0nyhugC_WceehB8GQHkxZMKMHk_NLU_gaPEbwiv06l3FsfmoFiX5LumObHpxJ13iHJltIDN8eIa3XpdhrTC7C7CtRyqZpn4bdeyx5YP2O-An-ymbsfrvW6z4wJfO-eaCUiXGHmajNbCeThlU8rtd_2DwwDFR5BeRIpc2iwdvgQgKZQPcOQuvS-uazSB0n7QaqZO7SDZ0yjqD8iBJC_oDOInnKJJ-uEzBicqH2pdQj-mY4FMBweDqQw2hsEQU"/>
+</div>
+<h1 class="text-slate-900 dark:text-white text-xl font-bold leading-tight tracking-tight">Web Forx Technology</h1>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Product</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Solutions</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium hover:text-primary transition-colors" href="#">Support</a>
+</nav>
+<div class="h-6 w-px bg-slate-200 dark:bg-slate-700 hidden md:block"></div>
+<button class="text-slate-900 dark:text-white text-sm font-semibold">New here? <span class="text-primary hover:underline cursor-pointer ml-1">Create account</span></button>
+</div>
+</header>
+<main class="flex-1 flex items-center justify-center p-6">
+<div class="w-full max-w-[1100px] flex bg-white dark:bg-slate-900 rounded-xl shadow-xl overflow-hidden min-h-[600px] border border-slate-200 dark:border-slate-800">
+<div class="flex-1 p-12 md:p-16 flex flex-col justify-center">
+<div class="max-w-[400px] mx-auto w-full">
+<div class="mb-10">
+<h2 class="text-3xl font-bold text-slate-900 dark:text-white mb-2">Welcome back</h2>
+<p class="text-slate-500 dark:text-slate-400">Enter your enterprise credentials to access your dashboard.</p>
+</div>
+<form class="space-y-5">
+<div class="flex flex-col gap-2">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Work Email</label>
+<input class="w-full h-12 px-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" placeholder="name@company.com" required="" type="email"/>
+</div>
+<div class="flex flex-col gap-2">
+<div class="flex justify-between items-center">
+<label class="text-sm font-semibold text-slate-700 dark:text-slate-300">Password</label>
+<a class="text-xs font-medium text-primary hover:underline" href="#">Forgot password?</a>
+</div>
+<div class="relative group">
+<input class="w-full h-12 px-4 pr-12 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all" placeholder="••••••••" required="" type="password"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" type="button">
+<span class="material-symbols-outlined text-[20px]">visibility</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-2 py-1">
+<input class="rounded border-slate-300 text-primary focus:ring-primary" id="remember" type="checkbox"/>
+<label class="text-sm text-slate-600 dark:text-slate-400" for="remember">Remember this device for 30 days</label>
+</div>
+<button class="w-full h-12 bg-primary hover:bg-primary/90 text-white font-bold rounded-lg transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2" type="submit">
+<span>Sign In</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</form>
+<div class="relative my-8">
+<div class="absolute inset-0 flex items-center">
+<div class="w-full border-t border-slate-200 dark:border-slate-700"></div>
+</div>
+<div class="relative flex justify-center text-xs uppercase">
+<span class="bg-white dark:bg-slate-900 px-4 text-slate-500 dark:text-slate-400 font-medium">Or continue with SSO</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors font-medium text-slate-700 dark:text-slate-300">
+<img alt="Google Logo" class="w-5 h-5" data-alt="Google colorful G logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDFQBCCy1CS82c5Ey5FZlMqib2PdyjRFw2cHSKikwal5ZaCgTX-EYXGkrbH91PYbST1Qyn-DOcwZLb3_fpgeQk1fmTcOk_kJ18rN63s1g_N3YjGLl7MKooWXBO-TmDvob1ldUEYrrukw9KbPHcXBwtzcp3Mu1D1ooxMDYpO5J2eC_QpIJn6Mue153fGsxhhS80qtCIOkALGSD9Xgzqp3S4URw2HaM4Swy-78ePrbfo_lh7DcyufjPdS0DJ14x4qqd8GByzl-3fxb9yK"/>
+<span>Google</span>
+</button>
+<button class="flex items-center justify-center gap-3 h-12 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors font-medium text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-primary">corporate_fare</span>
+<span>Okta</span>
+</button>
+</div>
+</div>
+</div>
+<div class="hidden lg:flex flex-1 relative bg-primary overflow-hidden">
+<div class="absolute inset-0 opacity-20" style="background-image: radial-gradient(circle at 2px 2px, white 1px, transparent 0); background-size: 24px 24px;"></div>
+<div class="absolute inset-0 bg-gradient-to-br from-primary via-primary to-[#2a3a9a]"></div>
+<div class="relative z-10 p-16 flex flex-col justify-between h-full text-white">
+<div>
+<div class="size-12 bg-white/20 rounded-xl flex items-center justify-center mb-8 backdrop-blur-md">
+<span class="material-symbols-outlined text-[32px]">hub</span>
+</div>
+<h3 class="text-4xl font-bold leading-tight mb-6">Built for the next generation of digital infrastructure.</h3>
+<p class="text-primary-20 text-lg leading-relaxed opacity-90 max-w-md">
+                            Seamlessly integrate your enterprise workflows with our secure, scalable, and high-performance cloud solutions.
+                        </p>
+</div>
+<div class="space-y-8">
+<div class="flex items-center gap-4">
+<div class="flex -space-x-3">
+<div class="size-10 rounded-full border-2 border-primary bg-slate-200 overflow-hidden" data-alt="User avatar thumbnail">
+<img alt="User 1" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBBdyc2QhChmVu1jvli15jHypdMIMXzx--_A3CUprzbnGeUaRayqwWmYu4x4iR5ZyTF5beIsK_hX58g4fp7-WsuzVmo1jdfg7mt4V30ofxtEdEux2K3-LKP3KyVKFLcY3iBryOmq4vqn_62_Dz7MnABWSb4qm7wsZBkU1dJ4P1ahgDkWxgoFRq5VqNw1YZPY3Ku5Lh8QBi0VetKVBcfawlhMhJE6j2QKeR64B-QFTB9wp7szX_meEhtt6MzTwgfP9rPDAsRwYGf1vHL"/>
+</div>
+<div class="size-10 rounded-full border-2 border-primary bg-slate-200 overflow-hidden" data-alt="User avatar thumbnail">
+<img alt="User 2" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4yeTv8Toxv8t4GbG9xrTorq_sU33fieTV_zPwS8cFPkZoaYNJUXc8P9RKyHAP4iwBGU0KrXtypyLXMiBM4zNbgcg77GAy2p9bTMZmDQvFb4o186crg5x4CvRvmAHejVSGPiYXBF8vARmq_qcGk987Ie9LwvzDx5b9kOpuUAfzc8Hvt9GLf5cyWPE7nSPvEQyClMuPeRDVcb92QfMPgGE4LgUk6C9WZuRmTqDwdLEbHKcLtJuv-nw7qu_CvWBKEBS8r3DgfVpHE6lz"/>
+</div>
+<div class="size-10 rounded-full border-2 border-primary bg-slate-200 overflow-hidden" data-alt="User avatar thumbnail">
+<img alt="User 3" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnQTI1nLjVjzasgxOeHnIdgr8ZRMRCCX96KWseSYMMEnZUd5W5UCpU1u2VOFTwJJ06RycznkZReil12NNjmFfbITYFkpRyvB22RW-XLYjLEcrN7A8ziBhhl8K_cl_zFE8TueUEvLFc07rv-UwaW2hZlLpv_bmpnqkFM2ot-AT58ewO4MneuLT130BzXoRZFxjB0OgkUjRgTORUaAd-sD34RlqxcC0TptjVu68FtBxZT2YtO5-oarpxVbVlOWBv1ZrSn1VaHk6OQ3Gt"/>
+</div>
+<div class="size-10 rounded-full border-2 border-primary bg-slate-700 flex items-center justify-center text-xs font-bold">+2k</div>
+</div>
+<p class="text-sm font-medium">Joined by 10,000+ teams worldwide</p>
+</div>
+<div class="bg-white/10 backdrop-blur-lg border border-white/20 p-6 rounded-xl">
+<p class="italic mb-4 text-slate-100">"Web Forx has completely transformed our deployment cycle. The enterprise SSO support was up and running in minutes."</p>
+<div class="flex items-center gap-3">
+<div class="font-bold">Sarah Jenkins</div>
+<div class="w-1 h-1 rounded-full bg-white/50"></div>
+<div class="text-sm opacity-80">CTO, CloudScale AI</div>
+</div>
+</div>
+</div>
+</div>
+<div class="absolute -bottom-20 -right-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
+<div class="absolute top-1/4 -right-10 w-40 h-40 bg-white/5 rounded-full blur-2xl"></div>
+</div>
+</div>
+</main>
+<footer class="p-8 text-center text-slate-500 dark:text-slate-500 text-sm">
+<div class="flex justify-center gap-6 mb-4">
+<a class="hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="hover:text-primary transition-colors" href="#">Security</a>
+<a class="hover:text-primary transition-colors" href="#">Contact Support</a>
+</div>
+<p>© 2024 Web Forx Technology Inc. All rights reserved.</p>
+</footer>
+</body></html>

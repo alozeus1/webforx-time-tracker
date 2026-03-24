@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Enterprise Admin Console</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-full w-full flex-col overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<header class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3 sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-primary">
+<div class="size-8 flex items-center justify-center rounded-lg bg-primary/10">
+<span class="material-symbols-outlined">shield_person</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em]">Admin Console</h2>
+</div>
+<label class="flex flex-col min-w-40 h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full">
+<div class="text-slate-500 flex border-none bg-slate-100 dark:bg-slate-800 items-center justify-center pl-4 rounded-l-lg" data-icon="MagnifyingGlass">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-2 focus:ring-primary border-none bg-slate-100 dark:bg-slate-800 h-full placeholder:text-slate-500 px-4 rounded-l-none pl-2 text-sm font-normal" placeholder="Search resources..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="h-8 w-[1px] bg-slate-200 dark:bg-slate-700 mx-2"></div>
+<div class="flex items-center gap-3">
+<div class="text-right">
+<p class="text-sm font-bold leading-none">Alex Johnson</p>
+<p class="text-xs text-slate-500">Super Admin</p>
+</div>
+<div class="bg-primary/20 bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary/10" data-alt="Professional user profile avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCmoqMoX7Qwyv6EJ0ZNXmoVV0Oo3_3gpG812VPipFRtqiaEgDuJ1FRt4AM_FFNGxoSMEA7kfyU_eiicsAkyOkkr5OgfviGFdmgxvY1f8K7TzaNDYG4pYzHC5cLoRxxUekddLSRcH8SLBc-kuf97ddVNPAzfem8tW0mFUx0Zze9w8A7YDECA2W20gew-M32NWgQJhhbUTuYkDZ5kLHXLfwbA3bs8U1kA05LE558rLkupeIIZ2-pe52s-g95rlveurXCvB0u2SpxvnWjk");'></div>
+</div>
+</div>
+</header>
+<div class="flex flex-1">
+<aside class="w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 flex flex-col justify-between hidden lg:flex">
+<div class="flex flex-col gap-6">
+<div class="flex flex-col">
+<h1 class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-4">Management</h1>
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<p class="text-sm font-medium">Dashboard</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-primary/10 text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<p class="text-sm font-bold">Projects</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<p class="text-sm font-medium">Users</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">extension</span>
+<p class="text-sm font-medium">Integrations</p>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<p class="text-sm font-medium">Settings</p>
+</a>
+</nav>
+</div>
+<div class="bg-primary/5 rounded-xl p-4">
+<p class="text-xs font-bold text-primary uppercase mb-2">System Health</p>
+<div class="flex items-center justify-between mb-1">
+<span class="text-[10px] text-slate-500">Server Load</span>
+<span class="text-[10px] font-bold text-slate-700">24%</span>
+</div>
+<div class="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[24%]"></div>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col bg-background-light dark:bg-background-dark overflow-y-auto">
+<div class="p-8">
+<div class="flex flex-wrap justify-between items-end gap-4 mb-8">
+<div class="flex flex-col gap-1">
+<h1 class="text-slate-900 dark:text-slate-100 text-3xl font-black leading-tight tracking-[-0.033em]">Organization Management</h1>
+<p class="text-slate-500 text-base font-normal">Configure and monitor your organization's infrastructure and team.</p>
+</div>
+<button class="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
+<span class="material-symbols-outlined text-sm">add</span>
+                                Create New
+                            </button>
+</div>
+<div class="mb-6">
+<div class="flex border-b border-slate-200 dark:border-slate-800 gap-8">
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 pb-3 hover:text-slate-700 transition-all" href="#">
+<p class="text-sm font-bold leading-normal">Projects</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-primary text-primary pb-3" href="#">
+<p class="text-sm font-bold leading-normal">Users</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 pb-3 hover:text-slate-700 transition-all" href="#">
+<p class="text-sm font-bold leading-normal">Integrations</p>
+</a>
+<a class="flex flex-col items-center justify-center border-b-2 border-transparent text-slate-500 pb-3 hover:text-slate-700 transition-all" href="#">
+<p class="text-sm font-bold leading-normal">Settings</p>
+</a>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-500 text-xs font-bold uppercase mb-1">Total Users</p>
+<p class="text-2xl font-black text-slate-900 dark:text-slate-100">1,284</p>
+<div class="flex items-center gap-1 text-emerald-500 text-[10px] font-bold mt-2">
+<span class="material-symbols-outlined text-xs">trending_up</span>
+<span>+12% from last month</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-500 text-xs font-bold uppercase mb-1">Active Projects</p>
+<p class="text-2xl font-black text-slate-900 dark:text-slate-100">42</p>
+<div class="flex items-center gap-1 text-slate-500 text-[10px] font-bold mt-2">
+<span class="material-symbols-outlined text-xs">horizontal_rule</span>
+<span>Stable performance</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-500 text-xs font-bold uppercase mb-1">Integrations</p>
+<p class="text-2xl font-black text-slate-900 dark:text-slate-100">8</p>
+<div class="flex items-center gap-1 text-primary text-[10px] font-bold mt-2">
+<span class="material-symbols-outlined text-xs">check_circle</span>
+<span>All systems operational</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800">
+<p class="text-slate-500 text-xs font-bold uppercase mb-1">Support Tickets</p>
+<p class="text-2xl font-black text-slate-900 dark:text-slate-100">14</p>
+<div class="flex items-center gap-1 text-amber-500 text-[10px] font-bold mt-2">
+<span class="material-symbols-outlined text-xs">priority_high</span>
+<span>3 urgent tickets</span>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+<div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+<h3 class="font-bold text-slate-900 dark:text-slate-100">User Directory</h3>
+<div class="flex gap-2">
+<button class="text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 transition-colors">Export CSV</button>
+<button class="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900">Bulk Actions</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-slate-50/50 dark:bg-slate-800/50">
+<th class="px-6 py-4 text-xs font-bold uppercase text-slate-400">Name</th>
+<th class="px-6 py-4 text-xs font-bold uppercase text-slate-400">Email</th>
+<th class="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Role</th>
+<th class="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+<th class="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">AJ</div>
+<span class="text-sm font-semibold">Alex Johnson</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">alex.j@company.com</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">Admin</span>
+</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                    Active
+                                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 font-bold text-xs">SC</div>
+<span class="text-sm font-semibold">Sarah Chen</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">sarah.c@company.com</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">Manager</span>
+</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                    Active
+                                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 font-bold text-xs">MR</div>
+<span class="text-sm font-semibold">Mike Ross</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">mike.r@company.com</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400">Intern</span>
+</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-500">
+<span class="size-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                                                    Pending
+                                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 font-bold text-xs">RZ</div>
+<span class="text-sm font-semibold">Rachel Zane</span>
+</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500">rachel.z@company.com</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-400">Employee</span>
+</td>
+<td class="px-6 py-4 text-center">
+<span class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-500">
+<span class="size-1.5 rounded-full bg-emerald-500"></span>
+                                                    Active
+                                                </span>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">edit</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/30 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+<p class="text-xs text-slate-500">Showing 4 of 1,284 users</p>
+<div class="flex gap-2">
+<button class="size-8 flex items-center justify-center rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="size-8 flex items-center justify-center rounded border border-primary bg-primary text-white text-xs font-bold">1</button>
+<button class="size-8 flex items-center justify-center rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 hover:bg-slate-50">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+<div class="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800">
+<h3 class="font-bold mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">extension</span>
+                                    Active Integrations
+                                </h3>
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between p-4 border border-slate-100 dark:border-slate-800 rounded-lg bg-slate-50/30 dark:bg-slate-800/30">
+<div class="flex items-center gap-4">
+<div class="size-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-emerald-600">tactic</span>
+</div>
+<div>
+<p class="font-bold text-sm">Taiga</p>
+<p class="text-xs text-slate-500">Project Management</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-bold text-emerald-500 bg-emerald-100 px-2 py-0.5 rounded uppercase">Connected</span>
+<button class="material-symbols-outlined text-slate-400">settings</button>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 border border-slate-100 dark:border-slate-800 rounded-lg bg-slate-50/30 dark:bg-slate-800/30">
+<div class="flex items-center gap-4">
+<div class="size-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-indigo-600">chat</span>
+</div>
+<div>
+<p class="font-bold text-sm">Mattermost</p>
+<p class="text-xs text-slate-500">Team Communication</p>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="text-[10px] font-bold text-emerald-500 bg-emerald-100 px-2 py-0.5 rounded uppercase">Connected</span>
+<button class="material-symbols-outlined text-slate-400">settings</button>
+</div>
+</div>
+<button class="mt-2 w-full py-2 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg text-slate-400 text-xs font-bold hover:border-primary hover:text-primary transition-all">
+                                        + Add New Integration
+                                    </button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800">
+<h3 class="font-bold mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">history</span>
+                                    Recent Activity
+                                </h3>
+<div class="space-y-6">
+<div class="flex gap-4 relative">
+<div class="absolute left-4 top-8 bottom-[-24px] w-[1px] bg-slate-100 dark:bg-slate-800"></div>
+<div class="size-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0 z-10">
+<span class="material-symbols-outlined text-sm">person_add</span>
+</div>
+<div>
+<p class="text-sm font-semibold">New user invited</p>
+<p class="text-xs text-slate-500">Alex Johnson invited <span class="font-bold text-slate-900 dark:text-slate-100">David Miller</span> to the Engineering team.</p>
+<p class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tight">10 minutes ago</p>
+</div>
+</div>
+<div class="flex gap-4 relative">
+<div class="absolute left-4 top-8 bottom-[-24px] w-[1px] bg-slate-100 dark:bg-slate-800"></div>
+<div class="size-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 shrink-0 z-10">
+<span class="material-symbols-outlined text-sm">security</span>
+</div>
+<div>
+<p class="text-sm font-semibold">System Update</p>
+<p class="text-xs text-slate-500">Auto-update: Security patches successfully applied to node-42.</p>
+<p class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tight">2 hours ago</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="size-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 shrink-0 z-10">
+<span class="material-symbols-outlined text-sm">folder_shared</span>
+</div>
+<div>
+<p class="text-sm font-semibold">Project Archived</p>
+<p class="text-xs text-slate-500">Legacy CRM project moved to archives by Sarah Chen.</p>
+<p class="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tight">Yesterday, 4:15 PM</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</div>
+</body></html>

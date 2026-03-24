@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Project Detail - ProManager</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-primary">
+<div class="size-6 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl font-bold">rocket_launch</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em]">ProManager</h2>
+</div>
+<label class="flex flex-col min-w-40 h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full">
+<div class="text-slate-500 flex border-none bg-slate-100 dark:bg-slate-800 items-center justify-center pl-4 rounded-l-lg" data-icon="search">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 border-none bg-slate-100 dark:bg-slate-800 focus:ring-0 h-full placeholder:text-slate-500 px-4 rounded-r-lg text-base font-normal" placeholder="Search projects..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex items-center gap-9">
+<a class="text-slate-700 dark:text-slate-300 text-sm font-medium hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-bold border-b-2 border-primary py-1" href="#">Projects</a>
+<a class="text-slate-700 dark:text-slate-300 text-sm font-medium hover:text-primary transition-colors" href="#">Tasks</a>
+<a class="text-slate-700 dark:text-slate-300 text-sm font-medium hover:text-primary transition-colors" href="#">Teams</a>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary/20" data-alt="Professional profile photo of project manager" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAAy-PEGPOHxu-0MTTICyzAeYgif8u88ChPUGIfScSMRN_zcpbCQlLroEtpFO9rCuUY0Lff9_tpbReqbbo0ZBzU2LMuuUg2ovOW8TcTKGxSG5af2m_TVWJaV0ramMPZiBdYVph4GXC3QvFuYAXiK3M3z_mQ6uHFyl_DKyUs8Y0dqQTiKFkir34GYt_UulufGJRHgSJnIhfKiMDidJ8nj8lNNzdRYRrgN5P1BMmb7Yd1VRa1i796NssgGMWdY0tf3MTqUvBJWDVVuDMQ");'></div>
+</div>
+</header>
+<main class="flex-1 px-10 py-8 max-w-[1440px] mx-auto w-full">
+<div class="flex items-center gap-2 text-sm text-slate-500 mb-4">
+<a class="hover:text-primary" href="#">Projects</a>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-slate-900 font-medium">Website Redesign 2024</span>
+</div>
+<div class="flex flex-wrap justify-between items-end gap-4 mb-8">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-3">
+<h1 class="text-4xl font-black text-slate-900 leading-tight tracking-tight">Website Redesign 2024</h1>
+<span class="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">In Progress</span>
+</div>
+<p class="text-slate-600 text-lg max-w-2xl">Modernizing the corporate identity and migrating the tech stack to Next.js and Tailwind CSS.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 rounded-lg h-10 px-4 bg-white border border-slate-200 text-slate-700 text-sm font-bold shadow-sm hover:bg-slate-50">
+<span class="material-symbols-outlined text-lg">share</span> Share
+                        </button>
+<button class="flex items-center gap-2 rounded-lg h-10 px-6 bg-primary text-white text-sm font-bold shadow-md hover:bg-primary/90">
+<span class="material-symbols-outlined text-lg">edit</span> Edit Project
+                        </button>
+</div>
+</div>
+<div class="flex border-b border-slate-200 mb-8 gap-8 overflow-x-auto no-scrollbar">
+<a class="border-b-2 border-primary text-primary pb-4 px-2 font-bold text-sm whitespace-nowrap" href="#">Overview</a>
+<a class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 pb-4 px-2 font-bold text-sm whitespace-nowrap" href="#">Tasks</a>
+<a class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 pb-4 px-2 font-bold text-sm whitespace-nowrap" href="#">Board</a>
+<a class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 pb-4 px-2 font-bold text-sm whitespace-nowrap" href="#">Team</a>
+<a class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 pb-4 px-2 font-bold text-sm whitespace-nowrap" href="#">Timeline</a>
+<a class="border-b-2 border-transparent text-slate-500 hover:text-slate-700 pb-4 px-2 font-bold text-sm whitespace-nowrap" href="#">Reports</a>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<div class="lg:col-span-2 space-y-8">
+<div class="grid grid-cols-3 gap-6">
+<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+<p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Total Hours</p>
+<h3 class="text-3xl font-black text-slate-900">482.5 <span class="text-sm font-medium text-slate-400">/ 600 hrs</span></h3>
+<div class="mt-4 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 80%"></div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+<p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Budget Usage</p>
+<h3 class="text-3xl font-black text-slate-900">$24,800 <span class="text-sm font-medium text-slate-400">/ $45k</span></h3>
+<div class="mt-4 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-emerald-500 h-full rounded-full" style="width: 55%"></div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+<p class="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">Task Completion</p>
+<h3 class="text-3xl font-black text-slate-900">74% <span class="text-sm font-medium text-slate-400">62/84</span></h3>
+<div class="mt-4 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+<div class="bg-amber-500 h-full rounded-full" style="width: 74%"></div>
+</div>
+</div>
+</div>
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="p-6 border-b border-slate-100 flex justify-between items-center">
+<h3 class="font-bold text-slate-900">Task Breakdown</h3>
+<button class="text-primary text-sm font-bold hover:underline">View All Tasks</button>
+</div>
+<div class="divide-y divide-slate-100">
+<div class="p-4 hover:bg-slate-50 flex items-center gap-4 transition-colors">
+<span class="material-symbols-outlined text-emerald-500">check_circle</span>
+<div class="flex-1">
+<p class="font-semibold text-slate-900">Design system implementation</p>
+<p class="text-xs text-slate-500">Completed by Sarah L. • Aug 14</p>
+</div>
+<div class="bg-slate-100 px-2 py-1 rounded text-[10px] font-bold text-slate-600">FRONTEND</div>
+</div>
+<div class="p-4 hover:bg-slate-50 flex items-center gap-4 transition-colors">
+<span class="material-symbols-outlined text-primary">radio_button_checked</span>
+<div class="flex-1">
+<p class="font-semibold text-slate-900">API Gateway setup for legacy systems</p>
+<p class="text-xs text-slate-500">In Progress • Assigned to Mark T.</p>
+</div>
+<div class="bg-slate-100 px-2 py-1 rounded text-[10px] font-bold text-slate-600">BACKEND</div>
+</div>
+<div class="p-4 hover:bg-slate-50 flex items-center gap-4 transition-colors">
+<span class="material-symbols-outlined text-slate-300">radio_button_unchecked</span>
+<div class="flex-1">
+<p class="font-semibold text-slate-900">Final QA and Cross-browser testing</p>
+<p class="text-xs text-slate-500">To Do • Due in 5 days</p>
+</div>
+<div class="bg-slate-100 px-2 py-1 rounded text-[10px] font-bold text-slate-600">QA</div>
+</div>
+<div class="p-4 hover:bg-slate-50 flex items-center gap-4 transition-colors">
+<span class="material-symbols-outlined text-amber-500">warning</span>
+<div class="flex-1">
+<p class="font-semibold text-slate-900">Content migration for blog archive</p>
+<p class="text-xs text-amber-600 font-medium">Overdue by 2 days • Needs Attention</p>
+</div>
+<div class="bg-slate-100 px-2 py-1 rounded text-[10px] font-bold text-slate-600">CONTENT</div>
+</div>
+</div>
+</div>
+</div>
+<div class="space-y-8">
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+<div class="p-6 border-b border-slate-100">
+<h3 class="font-bold text-slate-900">Team Contributions</h3>
+</div>
+<div class="p-6 space-y-6">
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover" data-alt="Portrait of Sarah Jenkins, UI Lead" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCB805MnHyEeLEE4D5cQF2Te43gV5C412pOKTxJhL3k5URz8d-PPeigzotTlZFQV4x0wVcPEN7H6gXsRMo8G_fPZJh9t_xHKOufA9BJ8GGNF50hTsEnKqejnkw2RRFbY-FMrrtWoBqFVh8_uWqWzoTZ4MSS3KbIDwJ3qyvi2gkAYp4UvLtDia2QRpqfkYC55Vj2sQa-qNFZZpA5nTuNpOoUf47n7eCLz1p8Wk2UUN2oqRlP8IZ5xe9KWflHrij579Vv97rqdFhNGEJT");'></div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-1">
+<p class="text-sm font-bold text-slate-900">Sarah Jenkins</p>
+<p class="text-xs text-slate-500 font-medium">156 hrs</p>
+</div>
+<div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 85%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover" data-alt="Portrait of Mark Thompson, Senior Dev" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAMvIF4bWSRPIV2VmKKK5UAxdvpDsu8tmQP6L1pO45wKP4dk--GctOyZLscmAvrVquFMFS2-vjmdEZXHjP5yZXo0RRx6F8uwJpj7nHiqEL4hheY3vr2Qg66oacnAJudroDX4LKrY-CMBpci70-CtB77VaO_oEhHFG2B9cSBxH9dEz-Kn7OPe6iLQz001toyVr6Zy_nKWcepiFM0J4aE3O4jZYtedq6adYQAR-aSfikB24vJ9DtmdttlYIjeaF40i8L6BxKOOLJXEfvE");'></div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-1">
+<p class="text-sm font-bold text-slate-900">Mark Thompson</p>
+<p class="text-xs text-slate-500 font-medium">132 hrs</p>
+</div>
+<div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 72%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover" data-alt="Portrait of David Chen, Backend Dev" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDscV9F2DnwWi0LKA2rKAbeZSkqqw9YPtQPiUslmDNn-EAHLtP4am14eGHNWIuRust6ebIJTgfQ3Ue_gV1jdA9jtC7IuoPbbNHcUang9DP_iLOKOFbKeyge8Jo6e-pG5g1M8WHDnjbzHD1L9EPqKk6f9WyNbKMAF5fGnQx5JSGL_CZRLGS1G1o4NnggXQimqJp4FjlSbZHU57KPpJ_nqlnka_W7A97qIiwasPJ0gNUAMdq-OB0v4OXXikzZLn_d2-mvYDKByoNXPUWY");'></div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-1">
+<p class="text-sm font-bold text-slate-900">David Chen</p>
+<p class="text-xs text-slate-500 font-medium">94 hrs</p>
+</div>
+<div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 50%"></div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="size-10 rounded-full bg-slate-200 bg-cover" data-alt="Portrait of Elena Rodriguez, Content Strategist" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAYTotQYs9sfxxiv1BneHvbCNKfPHAJhGEW65t7_mtoAWdSNkyBbQqun0S4vmn-zA6vkRkba1dv34Xq50R-H0mNNUmE-JIgwYtjwBvoy_ZFeNaN74SAv1GZGeoLSOBasYtP1KUCQGQISGCYxeiAO0UrXM5uaAHDfqVkyVtFySQlguMC05fOj6e_dda4-Hxh_Epo75bYqWKW6Vo7nl2YqeBV3vagy4I0fbG7DCh9qTmANIP1dVBdl7kSq4aiNMcctd6UazfgSj4sTrq2");'></div>
+<div class="flex-1">
+<div class="flex justify-between items-center mb-1">
+<p class="text-sm font-bold text-slate-900">Elena Rodriguez</p>
+<p class="text-xs text-slate-500 font-medium">100.5 hrs</p>
+</div>
+<div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 55%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="p-4 bg-slate-50 border-t border-slate-100 text-center">
+<button class="text-primary text-sm font-bold flex items-center justify-center gap-2 mx-auto">
+<span class="material-symbols-outlined text-lg">add</span> Add Team Member
+                                </button>
+</div>
+</div>
+<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+<h3 class="font-bold text-slate-900 mb-4">Upcoming Milestones</h3>
+<div class="space-y-4">
+<div class="flex gap-4 relative">
+<div class="w-0.5 bg-slate-100 absolute top-8 bottom-0 left-[15px]"></div>
+<div class="size-8 rounded-full bg-primary/10 text-primary flex items-center justify-center z-10 shrink-0">
+<span class="material-symbols-outlined text-lg">flag</span>
+</div>
+<div class="pb-6">
+<p class="text-sm font-bold text-slate-900">Beta Launch</p>
+<p class="text-xs text-slate-500">September 15, 2024</p>
+</div>
+</div>
+<div class="flex gap-4 relative">
+<div class="w-0.5 bg-slate-100 absolute top-8 bottom-0 left-[15px]"></div>
+<div class="size-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center z-10 shrink-0">
+<span class="material-symbols-outlined text-lg">flag</span>
+</div>
+<div class="pb-6">
+<p class="text-sm font-bold text-slate-400">Marketing Campaign Start</p>
+<p class="text-xs text-slate-400">October 01, 2024</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="size-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center z-10 shrink-0">
+<span class="material-symbols-outlined text-lg">verified</span>
+</div>
+<div>
+<p class="text-sm font-bold text-slate-400">Final Release</p>
+<p class="text-xs text-slate-400">October 15, 2024</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

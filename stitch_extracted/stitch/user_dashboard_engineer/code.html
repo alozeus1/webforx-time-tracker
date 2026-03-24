@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Web Forx Technology - Time Tracker</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                        "emerald-custom": "#10b981",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden pb-24">
+<header class="flex items-center justify-between px-6 py-4 bg-white dark:bg-background-dark/50 border-b border-primary/10 sticky top-0 z-50 backdrop-blur-md">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-contain" data-alt="Web Forx Technology Company Logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCv0bek2SY2rB6oOoRdOpyqWTkxhXJHw-WpiQJ4U62lVWpo1eihsYCRYtOZ_obTlIKXa1e_GtEeoI7stTT7r7-Iy5FUIWmQerG65nrNMCRv3rQfMRSRGzegFOsi-Qy8c3U0pWUlPUPIadSpd4XgS6n6fIN1MDCdKrNLceSpyODIyOoIzW95QmDbBEIRASipnD_PPqsQrZnn9IYW1JrgHrYoT5o6z2wz-nYjFJW7bZPdRWilXGR6MwKQi8U8ubW8H6MzqPmHnswFLXZC"/>
+</div>
+<h1 class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Web Forx</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="w-9 h-9 rounded-full bg-primary/20 border-2 border-white dark:border-slate-800 shadow-sm overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="User profile avatar close up portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCV3si3mAH0br7znEOXV7rm3-yVOyMK70D2Wgk858RmUi6mV72nsfMFwTbcJqKcUTkpOPCopoiNLnyWATdoI7siTCvSpuoy9Hc-S9RFatTwO3e-BMbqIbFJYSC1sLNHHKzg4DvzBFicj6rmfCqrfoMNhqi8tp2NCCqnOSo906ebjWljHcoOOukA5KXSGhqIH7ZD9UL6hR0YFiI3iw6QGR6-fehUmYf1hvB_1YvqrysnWPvCMJALo7Y-oCcgJQuI6wyjlgi6R89HXn5D"/>
+</div>
+</div>
+</header>
+<main class="flex-1 w-full max-w-md mx-auto px-4 pt-6 space-y-6">
+<section class="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-primary/5">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Active Timer</h2>
+<span class="flex h-2 w-2 rounded-full bg-emerald-custom animate-pulse"></span>
+</div>
+<div class="space-y-4">
+<div class="relative">
+<input class="w-full h-12 bg-background-light dark:bg-slate-800 border-none rounded-xl px-4 text-slate-900 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-primary/50" placeholder="What are you working on?" type="text"/>
+</div>
+<div class="grid grid-cols-1 gap-4">
+<div class="relative">
+<select class="w-full h-12 bg-background-light dark:bg-slate-800 border-none rounded-xl px-4 text-slate-700 dark:text-slate-300 appearance-none focus:ring-2 focus:ring-primary/50">
+<option disabled="" selected="" value="">Select Project</option>
+<option value="edusuc">EDUSUC</option>
+<option value="lafabah">LAFABAH</option>
+<option value="yemba">Yemba</option>
+<option value="platform">Platform Engineering</option>
+<option value="ba">BA</option>
+<option value="website">Webforx Website</option>
+<option value="tech">Web Forx Technology</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-3 text-slate-400 pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="text-3xl font-mono font-bold text-slate-900 dark:text-white tracking-tight">
+                            00:42:15
+                        </div>
+<button class="bg-emerald-custom hover:bg-emerald-600 text-white flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-500/20">
+<span class="material-symbols-outlined">stop_circle</span>
+                            Stop
+                        </button>
+</div>
+</div>
+</section>
+<section class="grid grid-cols-2 gap-4">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-primary/5">
+<p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Today</p>
+<p class="text-xl font-bold text-primary dark:text-primary">05h 42m</p>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-primary/5">
+<p class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">This Week</p>
+<p class="text-xl font-bold text-primary dark:text-primary">32h 15m</p>
+</div>
+</section>
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<h3 class="text-base font-bold text-slate-900 dark:text-white">Daily Timeline</h3>
+<button class="text-xs font-medium text-primary">View all</button>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-primary/5 overflow-hidden">
+<div class="relative space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100 dark:before:bg-slate-800">
+<div class="relative pl-8">
+<div class="absolute left-0 top-1 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center border-4 border-white dark:border-slate-900 z-10">
+<div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-primary">09:00 - 11:30</span>
+<span class="text-sm font-bold text-slate-900 dark:text-white">EDUSUC - Bug Fixing</span>
+<span class="text-xs text-slate-500">2h 30m</span>
+</div>
+</div>
+<div class="relative pl-8">
+<div class="absolute left-0 top-1 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center border-4 border-white dark:border-slate-900 z-10">
+<div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
+</div>
+<div class="flex flex-col">
+<span class="text-xs font-semibold text-primary">13:00 - 14:00</span>
+<span class="text-sm font-bold text-slate-900 dark:text-white">BA - Meeting</span>
+<span class="text-xs text-slate-500">1h 00m</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="space-y-3">
+<h3 class="text-base font-bold text-slate-900 dark:text-white">Recent Entries</h3>
+<div class="space-y-3">
+<div class="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-primary/5">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-slate-900 dark:text-white">Platform - Refactoring</span>
+<span class="text-xs text-slate-500">Yesterday • 1h 45m</span>
+</div>
+<button class="w-10 h-10 rounded-full bg-background-light dark:bg-slate-800 flex items-center justify-center text-primary hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">play_arrow</span>
+</button>
+</div>
+<div class="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-primary/5">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-slate-900 dark:text-white">Yemba - UI Design</span>
+<span class="text-xs text-slate-500">Yesterday • 3h 20m</span>
+</div>
+<button class="w-10 h-10 rounded-full bg-background-light dark:bg-slate-800 flex items-center justify-center text-primary hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">play_arrow</span>
+</button>
+</div>
+<div class="flex items-center justify-between bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-primary/5">
+<div class="flex flex-col">
+<span class="text-sm font-bold text-slate-900 dark:text-white">Webforx - Content Update</span>
+<span class="text-xs text-slate-500">2 days ago • 0h 55m</span>
+</div>
+<button class="w-10 h-10 rounded-full bg-background-light dark:bg-slate-800 flex items-center justify-center text-primary hover:bg-primary/10 transition-colors">
+<span class="material-symbols-outlined">play_arrow</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 z-50 bg-white/80 dark:bg-background-dark/80 backdrop-blur-lg border-t border-primary/10 pb-6 pt-2">
+<div class="flex max-w-md mx-auto items-center justify-around px-4">
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined">schedule</span>
+<span class="text-[10px] font-bold uppercase tracking-tight">Timer</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="text-[10px] font-medium uppercase tracking-tight">Reports</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">folder</span>
+<span class="text-[10px] font-medium uppercase tracking-tight">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-medium uppercase tracking-tight">Team</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium uppercase tracking-tight">Settings</span>
+</a>
+</div>
+</nav>
+</div>
+</body></html>

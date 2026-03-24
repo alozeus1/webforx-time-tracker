@@ -1,0 +1,296 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { BadgeCheck, Box, CalendarDays, Save, Unplug } from 'lucide-react';
+import api from '../services/api';
+import type { CalendarStatus, IntegrationSummary } from '../types/api';
+
+const Integrations: React.FC = () => {
+    const [integrations, setIntegrations] = useState<IntegrationSummary[]>([]);
+    const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
+    const [taigaUsername, setTaigaUsername] = useState('');
+    const [taigaPassword, setTaigaPassword] = useState('');
+    const [mattermostWebhookUrl, setMattermostWebhookUrl] = useState('');
+    const [feedback, setFeedback] = useState<string | null>(null);
+    const [savingType, setSavingType] = useState<string | null>(null);
+
+    const integrationMap = useMemo(
+        () => new Map(integrations.map((integration) => [integration.type, integration])),
+        [integrations]
+    );
+
+    const loadCalendarStatus = async () => {
+        try {
+            const response = await api.get<CalendarStatus>('/calendar/status');
+            setCalendarStatus(response.data);
+        } catch (error) {
+            console.error('Failed to load Google Calendar status:', error);
+        }
+    };
+
+    const fetchIntegrations = async () => {
+        try {
+            const response = await api.get<{ integrations: IntegrationSummary[] }>('/integrations');
+            setIntegrations(response.data.integrations || []);
+        } catch (error) {
+            console.error('Failed to load integrations:', error);
+        }
+    };
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const calendarState = params.get('calendar');
+
+        if (calendarState === 'connected') {
+            setFeedback('Google Calendar connected successfully');
+            params.delete('calendar');
+            params.delete('reason');
+            const nextQuery = params.toString();
+            const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
+            window.history.replaceState({}, '', nextUrl);
+        }
+
+        if (calendarState === 'error') {
+            setFeedback('Google Calendar connection failed. Please try again.');
+            params.delete('calendar');
+            params.delete('reason');
+            const nextQuery = params.toString();
+            const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`;
+            window.history.replaceState({}, '', nextUrl);
+        }
+
+        void fetchIntegrations();
+        void loadCalendarStatus();
+    }, []);
+
+    const handleSave = async (
+        type: 'taiga' | 'mattermost',
+        config: Record<string, string>
+    ) => {
+        setSavingType(type);
+        setFeedback(null);
+
+        try {
+            const response = await api.post<{ message: string }>('/integrations', { type, config });
+            setFeedback(response.data.message);
+            await fetchIntegrations();
+
+            if (type === 'taiga') {
+                setTaigaPassword('');
+            }
+        } catch (error) {
+            console.error(`Failed to save ${type} integration:`, error);
+            setFeedback(`Failed to save ${type} integration`);
+        } finally {
+            setSavingType(null);
+        }
+    };
+
+    const handleGoogleCalendarConnect = async () => {
+        try {
+            const response = await api.get<{ url: string }>('/calendar/connect', {
+                params: { returnTo: '/integrations' },
+            });
+
+            window.location.assign(response.data.url);
+        } catch (error) {
+            console.error('Failed to start Google Calendar connection:', error);
+            setFeedback('Failed to start Google Calendar connection');
+        }
+    };
+
+    const handleGoogleCalendarDisconnect = async () => {
+        try {
+            const response = await api.delete<{ message: string }>('/calendar/disconnect');
+            setFeedback(response.data.message);
+            await loadCalendarStatus();
+        } catch (error) {
+            console.error('Failed to disconnect Google Calendar:', error);
+            setFeedback('Failed to disconnect Google Calendar');
+        }
+    };
+
+    return (
+        <div className="flex-1 p-6 lg:p-10 w-full mx-auto bg-background-light dark:bg-background-dark min-h-full">
+            <div className="mb-10">
+                <h2 className="text-3xl lg:text-4xl font-black text-slate-900 dark:text-white tracking-tight mb-2">Integrations</h2>
+                <p className="text-slate-600 dark:text-slate-400 text-lg">Configure external systems for live testing without leaving the admin console.</p>
+            </div>
+
+            {feedback && (
+                <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                    {feedback}
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-12 max-w-5xl">
+                <section>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                            <CalendarDays size={24} />
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Google Calendar</h3>
+                            {calendarStatus?.connected && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                    <BadgeCheck size={14} />
+                                    Connected
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                        <div className="p-8 flex flex-col gap-6">
+                            <div className="space-y-2">
+                                <h4 className="text-2xl font-bold">Calendar-Based Work Suggestions</h4>
+                                <p className="text-slate-600 dark:text-slate-400 max-w-2xl">Connect a Google account to pull real meetings and focus blocks into the timer flow.</p>
+                                {!calendarStatus?.configured && (
+                                    <p className="text-sm font-medium text-amber-600">The backend still needs Google OAuth credentials before this can be connected.</p>
+                                )}
+                                {calendarStatus?.connected && (
+                                    <p className="text-sm text-slate-500">Connected account: {calendarStatus.email || 'Google account'}</p>
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-3">
+                                <button
+                                    onClick={() => void handleGoogleCalendarConnect()}
+                                    disabled={!calendarStatus?.configured}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <CalendarDays size={16} />
+                                    {calendarStatus?.connected ? 'Reconnect Google Calendar' : 'Connect Google Calendar'}
+                                </button>
+
+                                {calendarStatus?.connected && (
+                                    <button
+                                        onClick={() => void handleGoogleCalendarDisconnect()}
+                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                                    >
+                                        <Unplug size={16} />
+                                        Disconnect
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                            <Box size={24} />
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Task Management (Taiga)</h3>
+                            {integrationMap.get('taiga')?.is_active && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                    <BadgeCheck size={14} />
+                                    Configured
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                        <div className="p-8 flex flex-col gap-8">
+                            <div className="space-y-2">
+                                <h4 className="text-2xl font-bold">Pull tasks from Taiga</h4>
+                                <p className="text-slate-600 dark:text-slate-400 max-w-2xl">Store a workspace credential for live-test syncing. Credentials are encrypted before they are written to the backend database.</p>
+                                {integrationMap.get('taiga')?.summary?.username && (
+                                    <p className="text-sm text-slate-500">Configured user: {integrationMap.get('taiga')?.summary?.username}</p>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Taiga Username or Email</label>
+                                    <input
+                                        type="text"
+                                        value={taigaUsername}
+                                        onChange={(event) => setTaigaUsername(event.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        placeholder="name@company.com"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Taiga Password</label>
+                                    <input
+                                        type="password"
+                                        value={taigaPassword}
+                                        onChange={(event) => setTaigaPassword(event.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        placeholder="Enter Taiga password"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <button
+                                    onClick={() => void handleSave('taiga', { username: taigaUsername, password: taigaPassword })}
+                                    disabled={savingType === 'taiga' || !taigaUsername.trim() || !taigaPassword.trim()}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <Save size={16} />
+                                    {savingType === 'taiga' ? 'Saving...' : 'Save Taiga Config'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                            <Box size={24} />
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-white">Notification Services (Mattermost)</h3>
+                            {integrationMap.get('mattermost')?.is_active && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                    <BadgeCheck size={14} />
+                                    Configured
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                        <div className="p-8 flex flex-col gap-8">
+                            <div className="space-y-2">
+                                <h4 className="text-2xl font-bold">Instant Notifications with Mattermost</h4>
+                                <p className="text-slate-600 dark:text-slate-400 max-w-2xl">Save a Mattermost incoming webhook for test alerts and summary notifications.</p>
+                                {integrationMap.get('mattermost')?.summary?.webhookHost && (
+                                    <p className="text-sm text-slate-500">Configured host: {integrationMap.get('mattermost')?.summary?.webhookHost}</p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Webhook URL</label>
+                                <input
+                                    type="url"
+                                    value={mattermostWebhookUrl}
+                                    onChange={(event) => setMattermostWebhookUrl(event.target.value)}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                    placeholder="https://mattermost.example.com/hooks/..."
+                                />
+                            </div>
+
+                            <div>
+                                <button
+                                    onClick={() => void handleSave('mattermost', { webhookUrl: mattermostWebhookUrl })}
+                                    disabled={savingType === 'mattermost' || !mattermostWebhookUrl.trim()}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    <Save size={16} />
+                                    {savingType === 'mattermost' ? 'Saving...' : 'Save Mattermost Config'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    );
+};
+
+export default Integrations;

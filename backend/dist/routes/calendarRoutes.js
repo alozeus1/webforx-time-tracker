@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const calendarController_1 = require("../controllers/calendarController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.get('/callback', calendarController_1.handleGoogleCalendarCallback);
+router.use(auth_1.authenticateToken);
+router.get('/status', calendarController_1.getCalendarStatus);
+router.get('/connect', calendarController_1.getGoogleCalendarConnectUrl);
+router.get('/events', calendarController_1.getCalendarEvents);
+router.delete('/disconnect', calendarController_1.disconnectGoogleCalendar);
+exports.default = router;

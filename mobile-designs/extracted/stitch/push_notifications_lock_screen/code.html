@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased">
+<div class="relative mx-auto max-w-[430px] h-[932px] overflow-hidden shadow-2xl border-[8px] border-slate-900 rounded-[3rem] bg-slate-900">
+<!-- Wallpaper Background -->
+<div class="absolute inset-0 bg-cover bg-center z-0" data-alt="Abstract fluid blue and purple gradient wallpaper" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA_XyWcECyR085_Adsa_S3FXSccBbXurPB_VrUMeCooj_-kAWCsw6RjeBfKIAJcmzLbU21iiHEeVpZcAd9DaTZkhp_8PEM_qqM3RwsLbqJvnFTHZkyz3QBDB5QHqR0_sYfbXXevv6ZeXEdaNrGgvZQRKPMvZ14cHGowrUN917lqxbirHQYrMLDHiDFymXxImgqUvkpz5ZBZ7Z7qlvxa5wNotbgoXim91-bnrJn6yYJmhYHsYCLVtltbSerTD76vRMRE7HWM_XF2nGRV');"></div>
+<div class="absolute inset-0 bg-black/10 z-0"></div>
+<!-- Status Bar Area -->
+<div class="relative z-10 flex justify-between items-center px-8 pt-12 text-white">
+<div class="text-sm font-semibold">Carrier</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-lg">signal_cellular_4_bar</span>
+<span class="material-symbols-outlined text-lg">wifi</span>
+<span class="material-symbols-outlined text-xl">battery_full</span>
+</div>
+</div>
+<!-- Clock and Date -->
+<div class="relative z-10 flex flex-col items-center mt-12 text-white">
+<p class="text-lg font-medium opacity-90">Tuesday, October 24</p>
+<h1 class="text-8xl font-bold tracking-tighter mt-1">12:45</h1>
+</div>
+<!-- Notifications Container -->
+<div class="relative z-10 mt-12 px-4 flex flex-col gap-3">
+<!-- Timer Running Notification -->
+<div class="glass-effect rounded-2xl p-4 flex gap-4 items-start shadow-sm">
+<div class="shrink-0">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Web Forx app logo icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRD4c9YHQIr9i2AYqqGP07aJ3zBD56ZgZ9gBmKPm3aZ-Ax4kSOZTDZiAh8Y7zQoaBzCRgBoq7cbgB0RAdWP8c3CNbO51MDP59dQEGHc5jgjRonWmgSifk08MZPCccGDV0OFmSKHiJDpznDOa_J1kNiNplel5X477PtWHr-dKIyxqGVncdZgj7FnxGvCcCDfrbNP9dDaQLwiMf3tBeqa4lVdUXVxyIOHv8nFBJdVblcGVVz09Bn_51_ikJTeNvsaA8IyUo4r6flqhK6"/>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-0.5">
+<span class="text-xs font-bold uppercase tracking-wider text-primary">Web Forx</span>
+<span class="text-[10px] text-slate-500 font-medium">now</span>
+</div>
+<p class="text-sm font-bold text-slate-900 leading-tight">Timer still running</p>
+<p class="text-sm text-slate-600 leading-snug">You have been tracking EDUSUC for 4 hours.</p>
+</div>
+</div>
+<!-- Missing Logs Notification -->
+<div class="glass-effect rounded-2xl p-4 flex gap-4 items-start shadow-sm">
+<div class="shrink-0">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Web Forx app logo icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBKZ4EYyYdUqkraF9b3MmG3T1Wkl1XvhcWUHDo5e4Gp-e1Ku_T96dH152KzlD65pkRAwnYWZNx0VwhGKn27_jx8i4nRaQZ8CqMjwoIoVqMWiwzEQzV_FT62xN4Ytb8zbw56Pb7sHyA7TRRicD1zLV2G2Gq7zrc-GWBbPg-P14ldMlUd471mbx7TH0xOWHrlnAPx03epuBVsx3lLwlt0kuzTyFC5F70Tak-MP_Wq7zKdwfgbQ-wBE6vKHorEvNmu-zxzZCYoTEfNEePu"/>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-0.5">
+<span class="text-xs font-bold uppercase tracking-wider text-primary">Web Forx</span>
+<span class="text-[10px] text-slate-500 font-medium">10m ago</span>
+</div>
+<p class="text-sm font-bold text-slate-900 leading-tight">Missing logs</p>
+<p class="text-sm text-slate-600 leading-snug">Don't forget to log your time for today!</p>
+</div>
+</div>
+<!-- Daily Summary Notification -->
+<div class="glass-effect rounded-2xl p-4 flex gap-4 items-start shadow-sm">
+<div class="shrink-0">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="Web Forx app logo icon" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC1kz6FDB_0rM1t4nZtGUZ0_FXc6wY9ZQjM1oUXMnsXRCcqliZnSyEkTDeGoPxgdjnSrozDvwmXVOcQ416ALnBpSJqIuHd0E3HIG3veaUeT2BQMLCbnOE_z7yuxX9uOeVrzodngVdpMA9jb5MjC-qXdb4UirtSDRy1xKKKbd4PTIh6AP548GR_CiP4jRRrLe71PDvInbx_e4uMAIlnRksl6srrcdh5DyGfGqSyQY-OUY9BnBUVK0L3M73w0h6MyAOrz5efFh3POwg-I"/>
+</div>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex justify-between items-center mb-0.5">
+<span class="text-xs font-bold uppercase tracking-wider text-primary">Web Forx</span>
+<span class="text-[10px] text-slate-500 font-medium">8:00 AM</span>
+</div>
+<p class="text-sm font-bold text-slate-900 leading-tight">Daily Summary</p>
+<p class="text-sm text-slate-600 leading-snug">You tracked 7.5 hours yesterday.</p>
+</div>
+</div>
+</div>
+<!-- Bottom Controls -->
+<div class="absolute bottom-12 inset-x-0 px-12 flex justify-between items-center z-10">
+<div class="w-12 h-12 rounded-full glass-effect flex items-center justify-center text-slate-900 shadow-lg">
+<span class="material-symbols-outlined">flashlight_on</span>
+</div>
+<div class="w-12 h-12 rounded-full glass-effect flex items-center justify-center text-slate-900 shadow-lg">
+<span class="material-symbols-outlined">photo_camera</span>
+</div>
+</div>
+<!-- Home Indicator -->
+<div class="absolute bottom-2 left-1/2 -translate-x-1/2 w-32 h-1.5 bg-white/40 rounded-full z-10"></div>
+</div>
+</body></html>

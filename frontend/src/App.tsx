@@ -1,0 +1,62 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Layout from './components/Layout';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Timer from './pages/Timer';
+import Timeline from './pages/Timeline';
+import Admin from './pages/Admin';
+import Reports from './pages/Reports';
+import Team from './pages/Team';
+import Timesheet from './pages/Timesheet';
+import Integrations from './pages/Integrations';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
+import { getStoredRole, getStoredToken } from './utils/session';
+
+// Auth Guard
+const ProtectedRoute = ({
+  children,
+  allowedRoles,
+}: {
+  children: React.ReactNode;
+  allowedRoles?: string[];
+}) => {
+  const token = getStoredToken();
+  const role = getStoredRole();
+
+  if (!token) return <Navigate to="/login" replace />;
+  if (allowedRoles && (!role || !allowedRoles.includes(role))) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const App: React.FC = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+
+        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="timer" element={<Timer />} />
+          <Route path="timeline" element={<Timeline />} />
+          <Route path="timesheet" element={<Timesheet />} />
+          <Route path="reports" element={<Reports />} />
+          <Route path="team" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Team /></ProtectedRoute>} />
+          <Route path="admin" element={<ProtectedRoute allowedRoles={['Admin']}><Admin /></ProtectedRoute>} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="profile" element={<Profile />} />
+          <Route path="integrations" element={<Integrations />} />
+          <Route path="integrations/taiga" element={<Integrations />} />
+          <Route path="integrations/mattermost" element={<Integrations />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
+};
+
+export default App;

@@ -1,0 +1,81 @@
+# Web Forx Time Tracker
+
+An enterprise-grade time tracking application consisting of a React frontend, Node/Express backend, and a native Electron desktop wrapper.
+
+## Project Structure
+
+- `frontend/`: React Vite application (Manager, Admin, Employee dashboards, reports, and timeline)
+- `backend/`: Express + Prisma backend with Postgres integration. Includes cron workers for Burnout and Idle Time detection.
+- `desktop/`: Electron wrapper for deep OS integrations like idle states and window title tracking.
+- `docs/`: Product specification, application routes, and development statuses.
+
+## Quick Start Requirements
+
+- Node.js 20.19+ or 22.12+
+- PostgreSQL Database
+
+## Environment Configuration
+
+Create a `.env` file in the `backend/` directory:
+
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/webforx_tracker"
+JWT_SECRET="<YOUR_SECURE_SECRET>"
+INTEGRATION_SECRET="<A_SECOND_SECURE_SECRET>"
+PORT=5005
+CORS_ORIGIN="http://localhost:5173"
+FRONTEND_URL="http://localhost:5173"
+ENABLE_BACKGROUND_WORKERS=true
+GOOGLE_CLIENT_ID="<GOOGLE_OAUTH_CLIENT_ID>"
+GOOGLE_CLIENT_SECRET="<GOOGLE_OAUTH_CLIENT_SECRET>"
+GOOGLE_REDIRECT_URI="http://localhost:5005/api/v1/calendar/callback"
+```
+
+Create a `.env` in `frontend/`:
+
+```env
+VITE_API_URL="http://localhost:5005/api/v1"
+```
+
+## Running the Application Locally
+
+**1. Database and Backend:**
+```bash
+cd backend
+npm install
+npx prisma db push
+npx prisma db seed
+npm run dev
+```
+
+**2. Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+**3. Desktop Wrapper:**
+Ensure the frontend is running on `:5173` before starting the Electron app in development format:
+```bash
+cd desktop
+npm install
+npm start
+```
+
+## Seeded Users
+
+By default, `npx prisma db seed` creates these users:
+- **Admin**: admin@webforxtech.com / webforxtechng@
+- **Manager**: manager@webforxtech.com / password123
+- **Employee**: employee@webforxtech.com / password123
+
+## Tests
+
+To run the automated test suite across the project:
+```bash
+cd backend && npm test
+cd frontend && npm test
+```
+
+Please refer to `DEPLOYMENT.md` for production deployment instructions.

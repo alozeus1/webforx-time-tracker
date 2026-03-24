@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Reports Dashboard - Web Forx Technology</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#354ac0",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#13151f",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen pb-24">
+<!-- Header -->
+<header class="sticky top-0 z-10 bg-white/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+<div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<img alt="Web Forx Technology Logo" class="h-8 w-8 rounded" data-alt="Web Forx Technology professional company logo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3XVGv6EUg6ydxYAkaIgljbeuUBHs4vJ4BV9jPYrc8rTHdcl7Z-p43x6X4iFNLHx_s8uHE04hN80Tp_50GwiOmeterq2cB1NDmjNDQ3ooi4oN6HqtEONa0DmERhkUoqJ_1iYwGv-SZZ2K4IQ7qrm2JWGBNwTC2z7JHgcWqcHyufMwSIP295Pd0Lrl8rb2M5XRxQg0ZBeBHGaRRqnAH-iIrl1TGQIYetQxTgX8Zh0Y8xJGuhMl_Wf-_ZEkQCTVybfV7rGEkR4l0KWry"/>
+<h1 class="text-xl font-bold tracking-tight text-primary">Web Forx</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">notifications</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="h-full w-full object-cover" data-alt="Manager profile picture portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7Y2vL7uoOCYHS8Dz15yoLysTO9BOBUQbZVCH9ntQ93IJnFrnqGjQO-VuCsBpENiELP25XJsNwAIP2N5HoVJAWoiY6snXy26Wz-ToPBMgpuhM3GuM1TSAC3dfZRVdKeQBc5n2PQ-8wz1kTM9b2k73VYU8co0hSFSK2sce4FuKVB5EuZWwK-SVHrNWJh-Es82WBGXxPe-4uOReMio3cWVxjJAeA8ntudjA-5ZwFwOIZw6ndipNJ_OBkE3VkrwlHrfkyuld3ugBdobl9"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-4 py-6 space-y-8">
+<!-- Page Title & Filters -->
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h2 class="text-2xl font-bold">Reports Dashboard</h2>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Overview of team productivity and project status</p>
+</div>
+<div class="flex flex-wrap gap-2">
+<button class="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium shadow-sm">
+<span class="material-symbols-outlined text-sm">calendar_today</span>
+                    Last 7 Days
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium shadow-sm">
+<span class="material-symbols-outlined text-sm">folder</span>
+                    All Projects
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+<button class="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium shadow-sm">
+<span class="material-symbols-outlined text-sm">group</span>
+                    Team Members
+                    <span class="material-symbols-outlined text-sm">expand_more</span>
+</button>
+</div>
+</div>
+<!-- Key Metrics Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Total Hours Tracked</span>
+<span class="p-2 bg-primary/10 rounded-lg text-primary material-symbols-outlined">schedule</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-3xl font-bold">1,240h</span>
+<span class="text-emerald-500 text-sm font-medium mb-1 flex items-center">
+<span class="material-symbols-outlined text-xs">arrow_upward</span> 12%
+                    </span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Active Projects</span>
+<span class="p-2 bg-blue-500/10 rounded-lg text-blue-500 material-symbols-outlined">inventory_2</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-3xl font-bold">12</span>
+<span class="text-slate-400 text-sm font-medium mb-1">Stable</span>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="text-slate-500 dark:text-slate-400 text-sm font-medium">Team Productivity %</span>
+<span class="p-2 bg-purple-500/10 rounded-lg text-purple-500 material-symbols-outlined">trending_up</span>
+</div>
+<div class="flex items-end gap-2">
+<span class="text-3xl font-bold">88%</span>
+<span class="text-rose-500 text-sm font-medium mb-1 flex items-center">
+<span class="material-symbols-outlined text-xs">arrow_downward</span> 2%
+                    </span>
+</div>
+</div>
+</div>
+<!-- Charts Section -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Project Hours Bar Chart -->
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-bold text-lg">Hours per Project</h3>
+<button class="material-symbols-outlined text-slate-400">more_horiz</button>
+</div>
+<div class="space-y-4">
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">EDUSUC</span>
+<span class="text-slate-500">420h</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 85%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">LAFABAH</span>
+<span class="text-slate-500">310h</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-blue-400 rounded-full" style="width: 65%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">Yemba</span>
+<span class="text-slate-500">280h</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-indigo-300 rounded-full" style="width: 55%"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-sm">
+<span class="font-medium text-slate-700 dark:text-slate-300">Internal</span>
+<span class="text-slate-500">230h</span>
+</div>
+<div class="h-3 w-full bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-slate-300 dark:bg-slate-500 rounded-full" style="width: 45%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Daily Activity Line Chart Mockup -->
+<div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+<div class="flex items-center justify-between mb-6">
+<h3 class="font-bold text-lg">Daily Activity</h3>
+<div class="flex gap-2 text-xs">
+<span class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-primary"></div> This week</span>
+<span class="flex items-center gap-1"><div class="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-600"></div> Last week</span>
+</div>
+</div>
+<div class="h-48 flex items-end justify-between gap-2 px-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-primary/20 rounded-t-lg relative flex flex-col justify-end" style="height: 60%">
+<div class="absolute inset-x-0 bottom-0 bg-primary rounded-t-lg h-2/3"></div>
+</div>
+<span class="text-[10px] text-slate-400 uppercase">Mon</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-primary/20 rounded-t-lg relative flex flex-col justify-end" style="height: 80%">
+<div class="absolute inset-x-0 bottom-0 bg-primary rounded-t-lg h-3/4"></div>
+</div>
+<span class="text-[10px] text-slate-400 uppercase">Tue</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-primary/20 rounded-t-lg relative flex flex-col justify-end" style="height: 70%">
+<div class="absolute inset-x-0 bottom-0 bg-primary rounded-t-lg h-4/5"></div>
+</div>
+<span class="text-[10px] text-slate-400 uppercase">Wed</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-primary/20 rounded-t-lg relative flex flex-col justify-end" style="height: 95%">
+<div class="absolute inset-x-0 bottom-0 bg-primary rounded-t-lg h-5/6"></div>
+</div>
+<span class="text-[10px] text-slate-400 uppercase">Thu</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group">
+<div class="w-full bg-primary/20 rounded-t-lg relative flex flex-col justify-end" style="height: 85%">
+<div class="absolute inset-x-0 bottom-0 bg-primary rounded-t-lg h-3/5"></div>
+</div>
+<span class="text-[10px] text-slate-400 uppercase">Fri</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group opacity-50">
+<div class="w-full bg-primary/10 rounded-t-lg h-10"></div>
+<span class="text-[10px] text-slate-400 uppercase">Sat</span>
+</div>
+<div class="flex flex-col items-center gap-2 flex-1 group opacity-50">
+<div class="w-full bg-primary/10 rounded-t-lg h-8"></div>
+<span class="text-[10px] text-slate-400 uppercase">Sun</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Total Hours per User Table -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+<div class="p-6 border-b border-slate-200 dark:border-slate-700">
+<h3 class="font-bold text-lg">Total Hours per User</h3>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm uppercase font-semibold">
+<th class="px-6 py-4">Team Member</th>
+<th class="px-6 py-4">Logged Hours</th>
+<th class="px-6 py-4">Weekly Goal Progress</th>
+<th class="px-6 py-4 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-primary font-bold text-xs">JD</div>
+<span class="font-medium">Julien Dupont</span>
+</div>
+</td>
+<td class="px-6 py-4 font-medium">38.5h</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3 min-w-[200px]">
+<div class="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500" style="width: 96%"></div>
+</div>
+<span class="text-xs font-semibold text-slate-500">96%</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline text-sm font-medium">View details</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs">SB</div>
+<span class="font-medium">Sarah Bernard</span>
+</div>
+</td>
+<td class="px-6 py-4 font-medium">42.0h</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3 min-w-[200px]">
+<div class="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500" style="width: 100%"></div>
+</div>
+<span class="text-xs font-semibold text-slate-500">100%</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline text-sm font-medium">View details</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xs">MK</div>
+<span class="font-medium">Marc Kouame</span>
+</div>
+</td>
+<td class="px-6 py-4 font-medium">28.0h</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3 min-w-[200px]">
+<div class="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-amber-500" style="width: 70%"></div>
+</div>
+<span class="text-xs font-semibold text-slate-500">70%</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline text-sm font-medium">View details</button>
+</td>
+</tr>
+<tr>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-xs">EL</div>
+<span class="font-medium">Elena Lopez</span>
+</div>
+</td>
+<td class="px-6 py-4 font-medium">35.2h</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-3 min-w-[200px]">
+<div class="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500" style="width: 88%"></div>
+</div>
+<span class="text-xs font-semibold text-slate-500">88%</span>
+</div>
+</td>
+<td class="px-6 py-4 text-right">
+<button class="text-primary hover:underline text-sm font-medium">View details</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 inset-x-0 bg-white dark:bg-background-dark border-t border-slate-200 dark:border-slate-800 z-50">
+<div class="max-w-md mx-auto flex justify-between px-6 py-3">
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">timer</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Timer</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">bar_chart</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">Reports</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Schedule</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">work</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Projects</span>
+</a>
+<a class="flex flex-col items-center gap-1 text-slate-400 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-medium uppercase tracking-wider">Settings</span>
+</a>
+</div>
+</nav>
+</body></html>
