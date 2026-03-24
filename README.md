@@ -85,6 +85,7 @@ To run the automated test suite across the project:
 cd backend && npm test
 cd frontend && npm run test:unit
 cd frontend && npm run test:e2e
+cd frontend && npm run test:e2e:headed
 ```
 
 Please refer to `DEPLOYMENT.md` for production deployment instructions.

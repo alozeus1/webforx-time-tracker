@@ -70,6 +70,89 @@ This boots an Electron app bridging native OS interfaces down. Ensure the fronte
 
 ---
 
+## 6. Production Deployment (Vercel Frontend + Vercel Backend + Neon)
+
+### 6.1 Authenticate CLIs
+```bash
+vercel login
+npx -y neonctl auth
+```
+
+### 6.2 Create Neon Production Database
+```bash
+# Optional: select organization first if you have multiple orgs
+npx -y neonctl orgs list
+
+# Create project + database
+npx -y neonctl projects create \
+  --name webforx-time-tracker-prod \
+  --region-id aws-us-east-1 \
+  --database webforx_tracker \
+  --set-context
+
+# Generate Prisma-friendly pooled connection string
+npx -y neonctl connection-string --prisma --pooled
+```
+
+Use the returned connection string as `DATABASE_URL` in the backend Vercel project.
+
+### 6.3 Link and Deploy Backend Project (`vercel-backend`)
+```bash
+cd backend
+vercel link --yes --project vercel-backend
+```
+
+Set production backend environment variables:
+```bash
+vercel env add DATABASE_URL production
+vercel env add JWT_SECRET production
+vercel env add INTEGRATION_SECRET production
+vercel env add CRON_SECRET production
+vercel env add CORS_ORIGIN production
+vercel env add FRONTEND_URL production
+vercel env add ENABLE_BACKGROUND_WORKERS production
+vercel env add GOOGLE_CLIENT_ID production
+vercel env add GOOGLE_CLIENT_SECRET production
+vercel env add GOOGLE_REDIRECT_URI production
+```
+
+Deploy backend:
+```bash
+vercel deploy --prod
+```
+
+### 6.4 Run Production Migrations + Seed (One-Time)
+After `DATABASE_URL` points to Neon production:
+```bash
+cd backend
+npx prisma migrate deploy
+npx prisma db seed
+```
+
+For deterministic admin credentials in production seeding, set:
+`SEED_ADMIN_PASSWORD`, `SEED_MANAGER_PASSWORD`, `SEED_EMPLOYEE_PASSWORD`.
+Never rely on `ALLOW_DEFAULT_SEED_CREDENTIALS` for production.
+
+### 6.5 Link and Deploy Frontend Project (`vercel`)
+```bash
+cd frontend
+vercel link --yes --project vercel
+vercel env add VITE_API_URL production
+vercel deploy --prod
+```
+
+Set `VITE_API_URL` to your backend deployment URL, e.g.
+`https://<backend-domain>/api/v1`.
+
+### 6.6 Post-Deploy Checks
+- Open `https://<backend-domain>/api/v1/health` and confirm status is `ok`.
+- Log in through frontend production URL.
+- Create a timer entry and confirm it persists.
+- Verify reports page loads users and projects filters.
+- Verify cron endpoints reject unauthenticated calls in production.
+
+---
+
 ## Technical Summary of Sub-systems
 - **Timesheet Approvals**: Built-in endpoints at `/api/v1/timers/approvals` for managers.
 - **Background Cron Engines**: Runs independently on the Node backend identifying 50hr+ burnout risks and 15+ minute inactive sessions.
