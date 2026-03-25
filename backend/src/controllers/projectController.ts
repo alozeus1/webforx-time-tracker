@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
+import { AuthRequest } from '../types/auth';
 
 export const getAllProjects = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -39,7 +40,7 @@ export const getAllProjects = async (req: Request, res: Response): Promise<void>
     }
 };
 
-export const createProject = async (req: Request, res: Response): Promise<void> => {
+export const createProject = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { name, description, budget_hours, budget_amount } = req.body;
 
@@ -57,6 +58,24 @@ export const createProject = async (req: Request, res: Response): Promise<void> 
                 budget_amount: budget_amount ? parseFloat(budget_amount) : null,
             },
         });
+
+        if (req.user?.userId) {
+            try {
+                await prisma.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'project_created',
+                        resource: 'project',
+                        metadata: {
+                            project_id: newProject.id,
+                            project_name: newProject.name,
+                        },
+                    },
+                });
+            } catch (error) {
+                console.error('Failed to write project creation audit log:', error);
+            }
+        }
 
         res.status(201).json(newProject);
     } catch (error) {

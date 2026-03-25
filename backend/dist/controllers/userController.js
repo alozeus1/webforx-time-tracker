@@ -130,6 +130,22 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 role: { select: { name: true } },
             },
         });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_created',
+                    resource: 'user',
+                    metadata: {
+                        target_user_id: newUser.id,
+                        target_email: newUser.email,
+                    },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write user creation audit log:', error);
+        }
         res.status(201).json(newUser);
     }
     catch (error) {
@@ -188,6 +204,22 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 role: { select: { name: true } },
             },
         });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_updated',
+                    resource: 'user',
+                    metadata: {
+                        target_user_id: updatedUser.id,
+                        updated_fields: Object.keys(updateData),
+                    },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write user update audit log:', error);
+        }
         res.status(200).json(updatedUser);
     }
     catch (error) {
@@ -219,6 +251,21 @@ const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             data: updateData,
             include: { role: true },
         });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id: userId,
+                    action: 'profile_updated',
+                    resource: 'user',
+                    metadata: {
+                        updated_fields: Object.keys(updateData),
+                    },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write profile update audit log:', error);
+        }
         res.status(200).json({
             id: updatedUser.id,
             email: updatedUser.email,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
@@ -16,6 +16,7 @@ const Reports: React.FC = () => {
     // Dropdown Data
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
+    const [productivityFilter, setProductivityFilter] = useState<'all' | 'top' | 'needs_attention'>('all');
 
     const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
 
@@ -95,6 +96,16 @@ const Reports: React.FC = () => {
     };
 
     const maxHours = Math.max(...(analytics?.hoursTrend || []).map(t => t.hours), 1);
+    const filteredBreakdown = useMemo(() => {
+        const source = analytics?.userBreakdown || [];
+        if (productivityFilter === 'top') {
+            return source.filter((item) => item.efficiency >= 85);
+        }
+        if (productivityFilter === 'needs_attention') {
+            return source.filter((item) => item.efficiency < 85);
+        }
+        return source;
+    }, [analytics?.userBreakdown, productivityFilter]);
     
     // Pastel colors mappings for projects
     const colorClasses = [
@@ -327,8 +338,19 @@ const Reports: React.FC = () => {
                         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                                 <h4 className="font-bold text-slate-900 dark:text-white">User Productivity Breakdown</h4>
-                                <div className="flex gap-2">
-                                    <button className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors text-slate-500">
+                                <div className="flex gap-2 items-center">
+                                    <span className="text-xs text-slate-500 capitalize">
+                                        {productivityFilter === 'all' ? 'All users' : productivityFilter.replace('_', ' ')}
+                                    </span>
+                                    <button
+                                        className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors text-slate-500"
+                                        onClick={() => setProductivityFilter((previous) => {
+                                            if (previous === 'all') return 'top';
+                                            if (previous === 'top') return 'needs_attention';
+                                            return 'all';
+                                        })}
+                                        title="Cycle productivity filters"
+                                    >
                                         <span className="material-symbols-outlined text-xl">filter_list</span>
                                     </button>
                                 </div>
@@ -345,13 +367,13 @@ const Reports: React.FC = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                        {analytics?.userBreakdown.length === 0 ? (
+                                        {filteredBreakdown.length === 0 ? (
                                             <tr>
                                                 <td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">
-                                                    No activity found for this period.
+                                                    No users match the selected productivity filter.
                                                 </td>
                                             </tr>
-                                        ) : analytics?.userBreakdown.map((u) => (
+                                        ) : filteredBreakdown.map((u) => (
                                             <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">

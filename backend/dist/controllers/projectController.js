@@ -48,6 +48,7 @@ const getAllProjects = (req, res) => __awaiter(void 0, void 0, void 0, function*
 });
 exports.getAllProjects = getAllProjects;
 const createProject = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
         const { name, description, budget_hours, budget_amount } = req.body;
         const existingProject = yield db_1.default.project.findUnique({ where: { name } });
@@ -63,6 +64,24 @@ const createProject = (req, res) => __awaiter(void 0, void 0, void 0, function* 
                 budget_amount: budget_amount ? parseFloat(budget_amount) : null,
             },
         });
+        if ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) {
+            try {
+                yield db_1.default.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'project_created',
+                        resource: 'project',
+                        metadata: {
+                            project_id: newProject.id,
+                            project_name: newProject.name,
+                        },
+                    },
+                });
+            }
+            catch (error) {
+                console.error('Failed to write project creation audit log:', error);
+            }
+        }
         res.status(201).json(newProject);
     }
     catch (error) {

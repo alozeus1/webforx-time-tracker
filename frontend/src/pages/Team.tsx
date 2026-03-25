@@ -31,6 +31,8 @@ const Team: React.FC = () => {
     const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
     const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
     const [form, setForm] = useState<TeamFormState>(emptyForm);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
     const role = getStoredRole();
     const canManageTeam = role === 'Admin';
@@ -192,6 +194,42 @@ const Team: React.FC = () => {
             }));
     }, [team]);
 
+    const filteredTeam = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return team.filter((user) => {
+            const matchesQuery =
+                !query
+                || `${user.first_name} ${user.last_name}`.toLowerCase().includes(query)
+                || user.email.toLowerCase().includes(query)
+                || (user.role?.name || '').toLowerCase().includes(query);
+
+            const matchesStatus =
+                statusFilter === 'all'
+                || (statusFilter === 'active' && user.is_active)
+                || (statusFilter === 'inactive' && !user.is_active);
+
+            return matchesQuery && matchesStatus;
+        });
+    }, [searchQuery, statusFilter, team]);
+
+    const handleExportTeam = () => {
+        const header = 'First Name,Last Name,Email,Role,Status\n';
+        const rows = filteredTeam
+            .map((user) => [user.first_name, user.last_name, user.email, user.role?.name || 'Employee', user.is_active ? 'Active' : 'Inactive'].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+            .join('\n');
+
+        const csv = `${header}${rows}\n`;
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'team-directory.csv');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
     return (
         <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-background-dark w-full">
             <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
@@ -239,12 +277,36 @@ const Team: React.FC = () => {
                 <div className="xl:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">
                     <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                         <h3 className="text-lg font-bold">Team Directory</h3>
-                        <button
-                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                            onClick={() => void loadTeam()}
-                        >
-                            Refresh
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="text"
+                                placeholder="Filter members..."
+                                value={searchQuery}
+                                onChange={(event) => setSearchQuery(event.target.value)}
+                                className="w-44 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            />
+                            <select
+                                value={statusFilter}
+                                onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
+                                className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-600 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            >
+                                <option value="all">All</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                            </select>
+                            <button
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                                onClick={() => void loadTeam()}
+                            >
+                                Refresh
+                            </button>
+                            <button
+                                className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                                onClick={handleExportTeam}
+                            >
+                                Export
+                            </button>
+                        </div>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -258,7 +320,7 @@ const Team: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {loading && <tr><td colSpan={4} className="px-6 py-4 text-center">Loading...</td></tr>}
-                                {!loading && team.map((user) => (
+                                {!loading && filteredTeam.map((user) => (
                                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -309,6 +371,13 @@ const Team: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
+                                {!loading && filteredTeam.length === 0 && (
+                                    <tr>
+                                        <td colSpan={4} className="px-6 py-6 text-center text-sm text-slate-500">
+                                            No team members match this filter.
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { decryptConfig, encryptConfig } from '../utils/crypto';
@@ -65,7 +65,7 @@ export const listIntegrations = async (_req: AuthRequest, res: Response): Promis
     }
 };
 
-export const saveIntegration = async (req: Request, res: Response): Promise<void> => {
+export const saveIntegration = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { type, config } = req.body as { type?: IntegrationType; config?: Record<string, string> };
 
@@ -116,6 +116,24 @@ export const saveIntegration = async (req: Request, res: Response): Promise<void
             },
         });
 
+        if (req.user?.userId) {
+            try {
+                await prisma.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'integration_saved',
+                        resource: 'integration',
+                        metadata: {
+                            type: integration.type,
+                            is_active: integration.is_active,
+                        },
+                    },
+                });
+            } catch (error) {
+                console.error('Failed to write integration save audit log:', error);
+            }
+        }
+
         res.status(200).json({
             type: integration.type,
             is_active: integration.is_active,
@@ -158,6 +176,21 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
                 return;
             }
 
+            if (req.user?.userId) {
+                try {
+                    await prisma.auditLog.create({
+                        data: {
+                            user_id: req.user.userId,
+                            action: 'integration_tested',
+                            resource: 'integration',
+                            metadata: { type: 'mattermost', result: 'success' },
+                        },
+                    });
+                } catch (error) {
+                    console.error('Failed to write mattermost test audit log:', error);
+                }
+            }
+
             res.status(200).json({ status: 'success', message: 'Mattermost webhook test delivered successfully' });
             return;
         }
@@ -183,6 +216,21 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
         if (!payload?.auth_token) {
             res.status(400).json({ message: 'Taiga credential test failed: auth token missing from response' });
             return;
+        }
+
+        if (req.user?.userId) {
+            try {
+                await prisma.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'integration_tested',
+                        resource: 'integration',
+                        metadata: { type: 'taiga', result: 'success' },
+                    },
+                });
+            } catch (error) {
+                console.error('Failed to write taiga test audit log:', error);
+            }
         }
 
         res.status(200).json({ status: 'success', message: 'Taiga credentials validated successfully' });

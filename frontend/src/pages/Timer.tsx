@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type {
     ActiveTimerSummary,
@@ -31,7 +32,10 @@ const extractErrorMessage = (error: unknown, fallback: string) =>
         ? (error as { response: { data: { message: string } } }).response.data.message
         : fallback;
 
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 const Timer: React.FC = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [time, setTime] = useState(0);
     const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -42,6 +46,7 @@ const Timer: React.FC = () => {
     const [calendarStatus, setCalendarStatus] = useState<CalendarStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [taskError, setTaskError] = useState<string | null>(null);
 
     const isRunning = timerStartedAt !== null;
     const todaysProgress = completedSeconds + time;
@@ -64,7 +69,7 @@ const Timer: React.FC = () => {
         }
     }, []);
 
-    const loadTimerPageData = useCallback(async (clearDraft = false) => {
+    const loadTimerPageData = useCallback(async (clearDraft = false, expectStopped = false) => {
         setLoading(true);
 
         try {
@@ -73,9 +78,21 @@ const Timer: React.FC = () => {
                 api.get<TimerEntriesResponse>('/timers/me'),
             ]);
 
+            let resolvedTimerPayload = timerResponse.data;
+            if (expectStopped && resolvedTimerPayload.activeTimer) {
+                for (let attempt = 0; attempt < 3; attempt += 1) {
+                    await sleep(300);
+                    const retryResponse = await api.get<TimerEntriesResponse>('/timers/me');
+                    resolvedTimerPayload = retryResponse.data;
+                    if (!resolvedTimerPayload.activeTimer) {
+                        break;
+                    }
+                }
+            }
+
             setProjects(projectResponse.data || []);
-            setCompletedSeconds(getTodaysCompletedSeconds(timerResponse.data.entries || []));
-            syncFromActiveTimer(timerResponse.data.activeTimer, clearDraft);
+            setCompletedSeconds(getTodaysCompletedSeconds(resolvedTimerPayload.entries || []));
+            syncFromActiveTimer(resolvedTimerPayload.activeTimer, clearDraft);
 
             try {
                 const statusResponse = await api.get<CalendarStatus>('/calendar/status');
@@ -101,6 +118,30 @@ const Timer: React.FC = () => {
     useEffect(() => {
         void loadTimerPageData();
     }, [loadTimerPageData]);
+
+    useEffect(() => {
+        if (loading || isRunning) {
+            return;
+        }
+
+        const prefillTask = searchParams.get('task');
+        const prefillProjectId = searchParams.get('projectId');
+
+        if (prefillTask) {
+            setTask(prefillTask);
+        }
+
+        if (prefillProjectId && projects.some((project) => project.id === prefillProjectId)) {
+            setSelectedProject(prefillProjectId);
+        }
+
+        if (prefillTask || prefillProjectId) {
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete('task');
+            nextParams.delete('projectId');
+            setSearchParams(nextParams, { replace: true });
+        }
+    }, [isRunning, loading, projects, searchParams, setSearchParams]);
 
     useEffect(() => {
         let interval: number | undefined;
@@ -146,16 +187,17 @@ const Timer: React.FC = () => {
 
     const handleToggle = async () => {
         if (!isRunning && !task.trim()) {
-            alert('Please enter what you are working on before starting the timer.');
+            setTaskError('Task name is required before starting the timer.');
             return;
         }
 
+        setTaskError(null);
         setSubmitting(true);
 
         try {
             if (isRunning) {
                 await api.post('/timers/stop');
-                await loadTimerPageData(true);
+                await loadTimerPageData(true, true);
             } else {
                 const response = await api.post<ActiveTimerSummary>('/timers/start', {
                     project_id: selectedProject || undefined,
@@ -260,13 +302,27 @@ const Timer: React.FC = () => {
                             <div className="relative group text-left">
                                 <label className="text-xs font-bold text-slate-500 uppercase ml-1 block mb-1">Task</label>
                                 <input
-                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary focus:outline-none transition-all placeholder:text-slate-400"
+                                    className={`w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary focus:outline-none transition-all placeholder:text-slate-400 ${taskError ? 'border-rose-400 focus:ring-rose-400' : 'border-slate-200 dark:border-slate-700'}`}
                                     placeholder="What are you working on?"
                                     type="text"
                                     value={task}
-                                    onChange={(event) => setTask(event.target.value)}
+                                    onChange={(event) => {
+                                        setTask(event.target.value);
+                                        if (taskError) {
+                                            setTaskError(null);
+                                        }
+                                    }}
                                     disabled={isRunning || submitting}
+                                    title={isRunning ? 'Task is locked while timer is running. Stop timer to edit.' : undefined}
                                 />
+                                {taskError && (
+                                    <p className="mt-2 text-xs font-semibold text-rose-600">{taskError}</p>
+                                )}
+                                {isRunning && (
+                                    <p className="mt-2 text-xs text-slate-500">
+                                        Task is locked while recording. Stop timer to edit task/project.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="relative text-left">

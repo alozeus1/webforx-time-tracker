@@ -64,7 +64,7 @@ const listIntegrations = (_req, res) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.listIntegrations = listIntegrations;
 const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     try {
         const { type, config } = req.body;
         if (!type || !config) {
@@ -109,6 +109,24 @@ const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
                 is_active: true,
             },
         });
+        if ((_d = req.user) === null || _d === void 0 ? void 0 : _d.userId) {
+            try {
+                yield db_1.default.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'integration_saved',
+                        resource: 'integration',
+                        metadata: {
+                            type: integration.type,
+                            is_active: integration.is_active,
+                        },
+                    },
+                });
+            }
+            catch (error) {
+                console.error('Failed to write integration save audit log:', error);
+            }
+        }
         res.status(200).json({
             type: integration.type,
             is_active: integration.is_active,
@@ -122,6 +140,7 @@ const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.saveIntegration = saveIntegration;
 const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
     try {
         const { type } = req.body;
         if (!type || !['taiga', 'mattermost'].includes(type)) {
@@ -147,6 +166,21 @@ const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
                 res.status(400).json({ message: `Mattermost webhook test failed (${response.status}): ${body || 'No response body'}` });
                 return;
             }
+            if ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) {
+                try {
+                    yield db_1.default.auditLog.create({
+                        data: {
+                            user_id: req.user.userId,
+                            action: 'integration_tested',
+                            resource: 'integration',
+                            metadata: { type: 'mattermost', result: 'success' },
+                        },
+                    });
+                }
+                catch (error) {
+                    console.error('Failed to write mattermost test audit log:', error);
+                }
+            }
             res.status(200).json({ status: 'success', message: 'Mattermost webhook test delivered successfully' });
             return;
         }
@@ -169,6 +203,21 @@ const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
         if (!(payload === null || payload === void 0 ? void 0 : payload.auth_token)) {
             res.status(400).json({ message: 'Taiga credential test failed: auth token missing from response' });
             return;
+        }
+        if ((_b = req.user) === null || _b === void 0 ? void 0 : _b.userId) {
+            try {
+                yield db_1.default.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'integration_tested',
+                        resource: 'integration',
+                        metadata: { type: 'taiga', result: 'success' },
+                    },
+                });
+            }
+            catch (error) {
+                console.error('Failed to write taiga test audit log:', error);
+            }
         }
         res.status(200).json({ status: 'success', message: 'Taiga credentials validated successfully' });
     }

@@ -84,7 +84,7 @@ const resolveRoleId = async (roleId?: string, roleName?: string): Promise<string
     throw new Error('Role is required');
 };
 
-export const createUser = async (req: Request, res: Response): Promise<void> => {
+export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { email, password, first_name, last_name, role_id, role } = req.body;
 
@@ -128,13 +128,29 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
             },
         });
 
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_created',
+                    resource: 'user',
+                    metadata: {
+                        target_user_id: newUser.id,
+                        target_email: newUser.email,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write user creation audit log:', error);
+        }
+
         res.status(201).json(newUser);
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
     }
 };
 
-export const updateUser = async (req: Request, res: Response): Promise<void> => {
+export const updateUser = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userIdParam = req.params.id;
         const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
@@ -195,6 +211,22 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
             },
         });
 
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_updated',
+                    resource: 'user',
+                    metadata: {
+                        target_user_id: updatedUser.id,
+                        updated_fields: Object.keys(updateData),
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write user update audit log:', error);
+        }
+
         res.status(200).json(updatedUser);
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
@@ -231,6 +263,21 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
             data: updateData,
             include: { role: true },
         });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: userId,
+                    action: 'profile_updated',
+                    resource: 'user',
+                    metadata: {
+                        updated_fields: Object.keys(updateData),
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write profile update audit log:', error);
+        }
 
         res.status(200).json({
             id: updatedUser.id,

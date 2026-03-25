@@ -94,7 +94,15 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         const entries = await prisma.timeEntry.findMany({
             where: whereClause,
             include: {
-                user: { select: { id: true, first_name: true, last_name: true, role_id: true, hourly_rate: true } },
+                user: {
+                    select: {
+                        id: true,
+                        first_name: true,
+                        last_name: true,
+                        hourly_rate: true,
+                        role: { select: { name: true } },
+                    },
+                },
                 project: { select: { id: true, name: true } }
             }
         });
@@ -131,21 +139,23 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             }))
             .sort((a, b) => b.hours - a.hours);
 
-        // Compute Hours Trend (Weekly buckets over the period)
-        const weeksMap = new Map<string, number>(); // format: "Wk X" -> hours
-        // Simplistic grouping by week diff from start
+        // Compute Hours Trend (Weekly buckets over the period, including zero-hour weeks)
+        const totalDays = Math.max(Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)), 1);
+        const weekCount = Math.max(Math.ceil(totalDays / 7), 1);
+        const weekBuckets = Array.from({ length: weekCount }, (_, index) => ({
+            name: `Week ${index + 1}`,
+            hours: 0,
+        }));
+
         entries.forEach(entry => {
             const entryDate = new Date(entry.start_time);
             const diffTime = entryDate.getTime() - startDate.getTime();
             const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            const weekNumber = Math.floor(diffDays / 7) + 1;
-            const weekKey = `Week ${weekNumber}`;
-            weeksMap.set(weekKey, (weeksMap.get(weekKey) || 0) + (entry.duration / 3600));
+            const weekIndex = Math.min(Math.max(Math.floor(diffDays / 7), 0), weekCount - 1);
+            weekBuckets[weekIndex].hours += (entry.duration / 3600);
         });
 
-        const hoursTrend = Array.from(weeksMap.entries())
-            .map(([week, hours]) => ({ name: week, hours }))
-            .sort((a, b) => a.name.localeCompare(b.name));
+        const hoursTrend = weekBuckets;
 
         // Compute User Productivity Breakdown
         const userMap = new Map<string, any>();
@@ -155,7 +165,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 userMap.set(uId, {
                     id: uId,
                     name: `${entry.user.first_name} ${entry.user.last_name}`,
-                    role: entry.user.role_id, // Could map to role name if fetched
+                    role: entry.user.role?.name || 'Employee',
                     initials: `${entry.user.first_name[0]}${entry.user.last_name[0]}`,
                     totalHours: 0,
                     projectMap: new Map<string, number>()
@@ -168,7 +178,10 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             }
         });
 
-        const userBreakdown = Array.from(userMap.values()).map(u => {
+        const usersList = Array.from(userMap.values());
+        const maxUserHours = Math.max(...usersList.map((user) => user.totalHours), 0);
+
+        const userBreakdown = usersList.map(u => {
             let primaryProject = 'Unassigned';
             let maxDur = 0;
             for (const [pName, dur] of u.projectMap.entries()) {
@@ -177,15 +190,16 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                     primaryProject = pName;
                 }
             }
+            const efficiency = maxUserHours > 0 ? Math.round((u.totalHours / maxUserHours) * 100) : 0;
             return {
                 id: u.id,
                 name: u.name,
-                role: 'Engineer', // Fallback
+                role: u.role,
                 initials: u.initials,
                 primaryProject,
                 totalHours: u.totalHours.toFixed(1),
-                efficiency: 90, // Placeholder
-                status: 'On Track'
+                efficiency,
+                status: efficiency >= 85 ? 'On Track' : 'Needs Attention'
             };
         }).sort((a, b) => parseFloat(b.totalHours) - parseFloat(a.totalHours));
 

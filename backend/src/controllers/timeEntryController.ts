@@ -36,6 +36,23 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
             },
         });
 
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id,
+                    action: 'timer_started',
+                    resource: 'active_timer',
+                    metadata: {
+                        active_timer_id: newTimer.id,
+                        project_id: newTimer.project_id,
+                        task_description: newTimer.task_description,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write timer start audit log:', error);
+        }
+
         res.status(201).json(newTimer);
     } catch (error) {
         console.error('Failed to start timer:', error);
@@ -76,6 +93,23 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
         });
 
         await prisma.activeTimer.delete({ where: { user_id } });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id,
+                    action: 'timer_stopped',
+                    resource: 'time_entry',
+                    metadata: {
+                        time_entry_id: timeEntry.id,
+                        project_id: timeEntry.project_id,
+                        duration_seconds: timeEntry.duration,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write timer stop audit log:', error);
+        }
 
         res.status(200).json(timeEntry);
     } catch (error) {
@@ -211,6 +245,7 @@ export const getPendingTimesheets = async (req: AuthRequest, res: Response): Pro
 
 export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        const reviewerId = requireUserId(req);
         const entryId = req.params.entryId as string;
         const { action } = req.body; // 'approve' or 'reject'
 
@@ -234,6 +269,22 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
                 type: 'approval_status'
             }
         });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: reviewerId,
+                    action: `timesheet_${action}`,
+                    resource: 'time_entry',
+                    metadata: {
+                        entry_id: updatedEntry.id,
+                        target_user_id: updatedEntry.user_id,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write timesheet review audit log:', error);
+        }
 
         res.status(200).json(updatedEntry);
     } catch (error) {

@@ -44,6 +44,23 @@ const startTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 start_time: new Date(),
             },
         });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id,
+                    action: 'timer_started',
+                    resource: 'active_timer',
+                    metadata: {
+                        active_timer_id: newTimer.id,
+                        project_id: newTimer.project_id,
+                        task_description: newTimer.task_description,
+                    },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write timer start audit log:', error);
+        }
         res.status(201).json(newTimer);
     }
     catch (error) {
@@ -81,6 +98,23 @@ const stopTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             },
         });
         yield db_1.default.activeTimer.delete({ where: { user_id } });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id,
+                    action: 'timer_stopped',
+                    resource: 'time_entry',
+                    metadata: {
+                        time_entry_id: timeEntry.id,
+                        project_id: timeEntry.project_id,
+                        duration_seconds: timeEntry.duration,
+                    },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write timer stop audit log:', error);
+        }
         res.status(200).json(timeEntry);
     }
     catch (error) {
@@ -202,6 +236,7 @@ const getPendingTimesheets = (req, res) => __awaiter(void 0, void 0, void 0, fun
 exports.getPendingTimesheets = getPendingTimesheets;
 const reviewTimesheet = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        const reviewerId = requireUserId(req);
         const entryId = req.params.entryId;
         const { action } = req.body; // 'approve' or 'reject'
         if (!['approve', 'reject'].includes(action)) {
@@ -221,6 +256,22 @@ const reviewTimesheet = (req, res) => __awaiter(void 0, void 0, void 0, function
                 type: 'approval_status'
             }
         });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id: reviewerId,
+                    action: `timesheet_${action}`,
+                    resource: 'time_entry',
+                    metadata: {
+                        entry_id: updatedEntry.id,
+                        target_user_id: updatedEntry.user_id,
+                    },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write timesheet review audit log:', error);
+        }
         res.status(200).json(updatedEntry);
     }
     catch (error) {

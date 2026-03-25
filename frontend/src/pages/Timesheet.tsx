@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar as CalendarIcon, CheckCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import type { TimeEntrySummary } from '../types/api';
 
@@ -15,11 +16,15 @@ const startOfWeek = (date: Date) => {
 };
 
 const Timesheet: React.FC = () => {
+    const navigate = useNavigate();
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [weekAnchorDate, setWeekAnchorDate] = useState(() => new Date());
+    const [exporting, setExporting] = useState(false);
 
     useEffect(() => {
         const loadEntries = async () => {
+            setLoading(true);
             try {
                 const response = await api.get<{ entries: TimeEntrySummary[] }>('/timers/me');
                 setEntries(response.data.entries || []);
@@ -33,14 +38,14 @@ const Timesheet: React.FC = () => {
         void loadEntries();
     }, []);
 
-    const weekStart = useMemo(() => startOfWeek(new Date()), []);
+    const weekStart = useMemo(() => startOfWeek(weekAnchorDate), [weekAnchorDate]);
     const weekDays = useMemo(
         () => Array.from({ length: 7 }, (_, index) => {
             const day = new Date(weekStart);
             day.setDate(weekStart.getDate() + index);
             return day;
         }),
-        [weekStart]
+        [weekStart],
     );
 
     const { rows, dailyTotals, weeklyTotal } = useMemo(() => {
@@ -88,21 +93,91 @@ const Timesheet: React.FC = () => {
     }, [entries, weekStart]);
 
     const weekLabel = `${dayFormatter.format(weekDays[0])} - ${dayFormatter.format(weekDays[6])}`;
+    const maxDailyHours = Math.max(...dailyTotals, 1);
+
+    const handleWeekShift = (delta: number) => {
+        setWeekAnchorDate((previous) => {
+            const next = new Date(previous);
+            next.setDate(next.getDate() + delta * 7);
+            return next;
+        });
+    };
+
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            const response = await api.get('/reports/export', { responseType: 'blob' });
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `timesheet-${weekStart.toISOString().slice(0, 10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Failed to export timesheet CSV:', error);
+            alert('Export failed. Please try again.');
+        } finally {
+            setExporting(false);
+        }
+    };
 
     return (
         <div className="timesheet-container">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' }}>
                 <div>
                     <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Weekly Timesheet</h1>
-                    <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Your submitted and pending entries for the current week.</p>
+                    <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Your submitted and pending entries for the selected week.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => handleWeekShift(-1)}>
+                        <ChevronLeft size={16} /> Prev Week
+                    </button>
                     <button className="btn btn-outline" style={{ gap: '8px' }}>
                         <CalendarIcon size={16} /> {weekLabel}
                     </button>
-                    <button className="btn btn-primary" style={{ gap: '8px' }} disabled>
+                    <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => handleWeekShift(1)}>
+                        Next Week <ChevronRight size={16} />
+                    </button>
+                    <button className="btn btn-primary" style={{ gap: '8px' }} onClick={() => navigate('/reports')}>
                         <CheckCircle size={16} /> Submission Handled by Approvals
                     </button>
+                    <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => void handleExport()} disabled={exporting}>
+                        <Download size={16} /> {exporting ? 'Exporting...' : 'Export CSV'}
+                    </button>
+                </div>
+            </div>
+
+            <div className="card" style={{ marginBottom: '24px' }}>
+                <div className="card-body" style={{ padding: '16px 20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Hours Logged Trend</h3>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Weekly total: {weeklyTotal.toFixed(1)}h</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '10px', alignItems: 'end', minHeight: '140px' }}>
+                        {dailyTotals.map((hours, index) => {
+                            const ratio = Math.max((hours / maxDailyHours) * 100, 4);
+                            return (
+                                <div key={`trend-${index}`} style={{ textAlign: 'center' }}>
+                                    <div
+                                        style={{
+                                            height: `${ratio}%`,
+                                            minHeight: '10px',
+                                            background: 'var(--color-primary)',
+                                            borderRadius: '8px 8px 2px 2px',
+                                            opacity: hours > 0 ? 0.95 : 0.35,
+                                            transition: 'height 0.2s ease',
+                                        }}
+                                        title={`${hours.toFixed(1)}h`}
+                                    />
+                                    <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>{dayFormatter.format(weekDays[index])}</div>
+                                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{hours.toFixed(1)}h</div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
 
