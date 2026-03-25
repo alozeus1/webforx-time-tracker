@@ -2,6 +2,11 @@ export interface RoleSummary {
     name: string;
 }
 
+export interface RoleOption {
+    id: string;
+    name: string;
+}
+
 export interface UserSummary {
     id: string;
     email: string;

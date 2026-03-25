@@ -127,6 +127,71 @@ export const saveIntegration = async (req: Request, res: Response): Promise<void
     }
 };
 
+export const testIntegration = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const { type } = req.body as { type?: IntegrationType };
+
+        if (!type || !['taiga', 'mattermost'].includes(type)) {
+            res.status(400).json({ message: 'Supported test types are taiga and mattermost' });
+            return;
+        }
+
+        const integration = await prisma.integration.findUnique({ where: { type } });
+        if (!integration || !integration.is_active) {
+            res.status(404).json({ message: `${type} integration is not configured` });
+            return;
+        }
+
+        if (type === 'mattermost') {
+            const config = decryptConfig<MattermostConfig>(integration.config);
+            const response = await fetch(config.webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: `Web Forx Time Tracker integration test at ${new Date().toISOString()}`,
+                }),
+            });
+
+            if (!response.ok) {
+                const body = await response.text();
+                res.status(400).json({ message: `Mattermost webhook test failed (${response.status}): ${body || 'No response body'}` });
+                return;
+            }
+
+            res.status(200).json({ status: 'success', message: 'Mattermost webhook test delivered successfully' });
+            return;
+        }
+
+        const config = decryptConfig<TaigaConfig>(integration.config);
+        const response = await fetch('https://api.taiga.io/api/v1/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'normal',
+                username: config.username,
+                password: config.password,
+            }),
+        });
+
+        if (!response.ok) {
+            const body = await response.text();
+            res.status(400).json({ message: `Taiga credential test failed (${response.status}): ${body || 'No response body'}` });
+            return;
+        }
+
+        const payload = await response.json().catch(() => ({}));
+        if (!payload?.auth_token) {
+            res.status(400).json({ message: 'Taiga credential test failed: auth token missing from response' });
+            return;
+        }
+
+        res.status(200).json({ status: 'success', message: 'Taiga credentials validated successfully' });
+    } catch (error) {
+        console.error('Failed to test integration:', error);
+        res.status(500).json({ message: 'Internal server error while testing integration' });
+    }
+};
+
 export const syncQuickbooks = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         // In a real app, groups recent approved timesheets and POSTs an invoice to Intuit Quickbooks API

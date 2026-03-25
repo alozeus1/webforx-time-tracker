@@ -12,8 +12,14 @@ const requireUserId = (req: AuthRequest): string => {
 
 export const startTimer = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { project_id, task_description } = req.body;
+        const project_id = typeof req.body?.project_id === 'string' && req.body.project_id.trim() ? req.body.project_id : null;
+        const task_description = typeof req.body?.task_description === 'string' ? req.body.task_description.trim() : '';
         const user_id = requireUserId(req);
+
+        if (!task_description) {
+            res.status(400).json({ message: 'Task description is required to start a timer' });
+            return;
+        }
 
         const existingTimer = await prisma.activeTimer.findUnique({ where: { user_id } });
         if (existingTimer) {
@@ -32,14 +38,15 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
 
         res.status(201).json(newTimer);
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        console.error('Failed to start timer:', error);
+        res.status(500).json({ message: 'Internal server error while starting timer' });
     }
 };
 
 export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
-        const { notes } = req.body;
+        const notes = typeof req.body?.notes === 'string' && req.body.notes.trim() ? req.body.notes.trim() : null;
 
         const activeTimer = await prisma.activeTimer.findUnique({ where: { user_id } });
         if (!activeTimer) {
@@ -49,6 +56,11 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
 
         const end_time = new Date();
         const duration = Math.floor((end_time.getTime() - new Date(activeTimer.start_time).getTime()) / 1000);
+
+        if (duration <= 0) {
+            res.status(400).json({ message: 'Timer duration was invalid. Please try again.' });
+            return;
+        }
 
         const timeEntry = await prisma.timeEntry.create({
             data: {
@@ -67,13 +79,20 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
 
         res.status(200).json(timeEntry);
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        console.error('Failed to stop timer:', error);
+        res.status(500).json({ message: 'Internal server error while stopping timer' });
     }
 };
 
 export const manualEntry = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { project_id, task_description, start_time, end_time, notes } = req.body;
+        const {
+            project_id,
+            task_description,
+            start_time,
+            end_time,
+            notes,
+        } = req.body ?? {};
         const user_id = requireUserId(req);
 
         const start = new Date(start_time);
@@ -85,16 +104,21 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
+        if (typeof task_description !== 'string' || !task_description.trim()) {
+            res.status(400).json({ message: 'Task description is required for manual entries' });
+            return;
+        }
+
         const timeEntry = await prisma.timeEntry.create({
             data: {
                 user_id,
-                project_id,
-                task_description,
+                project_id: typeof project_id === 'string' && project_id.trim() ? project_id : null,
+                task_description: task_description.trim(),
                 start_time: start,
                 end_time: end,
                 duration,
                 entry_type: 'manual',
-                notes,
+                notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
             },
         });
 
@@ -114,6 +138,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
 
         res.status(201).json(timeEntry);
     } catch (error) {
+        console.error('Failed to create manual entry:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -127,7 +152,6 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
             include: { project: { select: { name: true } } },
         });
 
-        // Also fetch active timer
         const activeTimer = await prisma.activeTimer.findUnique({
             where: { user_id },
             include: { project: { select: { name: true } } },
@@ -135,6 +159,7 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
 
         res.status(200).json({ entries, activeTimer });
     } catch (error) {
+        console.error('Failed to fetch timer entries:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };
@@ -159,6 +184,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
 
         res.status(200).json({ message: 'Ping successful' });
     } catch (error) {
+        console.error('Failed to ping timer:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

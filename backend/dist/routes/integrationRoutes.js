@@ -9,6 +9,7 @@ router.use(auth_1.authenticateToken);
 router.get('/github/commits', integrationController_1.getGithubCommits);
 router.get('/', (0, auth_1.requireRole)(['Admin', 'Manager']), integrationController_1.listIntegrations);
 router.post('/', (0, auth_1.requireRole)(['Admin']), integrationController_1.saveIntegration);
+router.post('/test', (0, auth_1.requireRole)(['Admin', 'Manager']), integrationController_1.testIntegration);
 // Organization-level integrations (Managers/Admins only)
 router.post('/quickbooks/sync', (0, auth_1.requireRole)(['Admin', 'Manager']), integrationController_1.syncQuickbooks);
 exports.default = router;

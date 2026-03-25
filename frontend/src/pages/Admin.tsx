@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary } from '../types/api';
 
+const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'audit'] as const;
+
 const Admin: React.FC = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const queryTab = searchParams.get('tab');
+    const activeTab =
+        queryTab && availableTabs.includes(queryTab as (typeof availableTabs)[number])
+            ? queryTab
+            : 'projects';
+
     const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
@@ -16,7 +26,13 @@ const Admin: React.FC = () => {
     const [newProjectBudgetHours, setNewProjectBudgetHours] = useState('');
     const [newProjectBudgetAmount, setNewProjectBudgetAmount] = useState('');
     
-    const [activeTab, setActiveTab] = useState('projects'); // projects, users, integrations, audit, notifications
+    const handleTabChange = (tab: string) => {
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.set('tab', tab);
+            return next;
+        });
+    };
 
     async function fetchProjects() {
         try {
@@ -122,7 +138,7 @@ const Admin: React.FC = () => {
                         {['projects', 'users', 'integrations', 'notifications', 'audit'].map(tab => (
                             <button
                                 key={tab}
-                                onClick={() => setActiveTab(tab)}
+                                onClick={() => handleTabChange(tab)}
                                 className={`flex flex-col items-center justify-center border-b-2 pb-3 transition-all whitespace-nowrap ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                             >
                                 <p className="text-sm font-bold leading-normal capitalize">{tab === 'audit' ? 'Audit Logs' : tab}</p>

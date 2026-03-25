@@ -1,72 +1,130 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import type { TimeEntrySummary } from '../types/api';
+import type { NotificationSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
+import { getStoredRole } from '../utils/session';
+
+const getElapsedSeconds = (startTime: string) =>
+    Math.max(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000), 0);
 
 const Dashboard: React.FC = () => {
-    const [stats, setStats] = useState({ totalDuration: 0, topProject: 'None', topProjectDuration: 0 });
-    const [recentEntries, setRecentEntries] = useState<TimeEntrySummary[]>([]);
+    const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [activeTimerStart, setActiveTimerStart] = useState<string | null>(null);
+    const [liveSeconds, setLiveSeconds] = useState(0);
+    const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
+    const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
+    const role = getStoredRole();
+
+    const fetchDashboardData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [timersResponse, projectsResponse] = await Promise.all([
+                api.get<TimerEntriesResponse>('/timers/me'),
+                api.get<ProjectSummary[]>('/projects'),
+            ]);
+
+            setEntries(timersResponse.data.entries || []);
+            setProjects(projectsResponse.data || []);
+
+            if (timersResponse.data.activeTimer?.start_time) {
+                setActiveTimerStart(timersResponse.data.activeTimer.start_time);
+                setLiveSeconds(getElapsedSeconds(timersResponse.data.activeTimer.start_time));
+            } else {
+                setActiveTimerStart(null);
+                setLiveSeconds(0);
+            }
+
+            if (role === 'Admin' || role === 'Manager') {
+                const notificationsResponse = await api.get<{ notifications: NotificationSummary[] }>('/admin/notifications');
+                setNotifications((notificationsResponse.data.notifications || []).slice(0, 5));
+            }
+        } catch (error) {
+            console.error('Failed to load dashboard data:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [role]);
 
     useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                const response = await api.get<{ entries: TimeEntrySummary[] }>('/timers/me');
-                const entries = response.data.entries;
+        void fetchDashboardData();
+    }, [fetchDashboardData]);
 
-                let total = 0;
-                const projectMap: Record<string, number> = {};
+    useEffect(() => {
+        if (!activeTimerStart) {
+            return;
+        }
 
-                entries.forEach((e) => {
-                    total += e.duration || 0;
-                    if (e.project) {
-                        projectMap[e.project.name] = (projectMap[e.project.name] || 0) + (e.duration || 0);
-                    }
-                });
+        const interval = window.setInterval(() => {
+            setLiveSeconds(getElapsedSeconds(activeTimerStart));
+        }, 1000);
 
-                let topProject = 'None';
-                let topProjectDuration = 0;
-                Object.entries(projectMap).forEach(([name, duration]) => {
-                    if (duration > topProjectDuration) {
-                        topProject = name;
-                        topProjectDuration = duration;
-                    }
-                });
+        return () => window.clearInterval(interval);
+    }, [activeTimerStart]);
 
-                setStats({ totalDuration: total, topProject, topProjectDuration });
-                setRecentEntries(entries.slice(0, 5)); // Keep the 5 most recent
-            } catch (error) {
-                console.error('Failed to load dashboard data:', error);
-            } finally {
-                setLoading(false);
+    const completedSeconds = useMemo(
+        () => entries.reduce((total, entry) => total + (entry.duration || 0), 0),
+        [entries]
+    );
+    const totalSeconds = completedSeconds + liveSeconds;
+
+    const topProject = useMemo(() => {
+        const durations = new Map<string, number>();
+        entries.forEach((entry) => {
+            if (entry.project?.name) {
+                durations.set(entry.project.name, (durations.get(entry.project.name) || 0) + (entry.duration || 0));
             }
-        };
+        });
 
-        fetchDashboardData();
-    }, []);
+        let winner = 'None';
+        let winnerSeconds = 0;
+
+        durations.forEach((seconds, name) => {
+            if (seconds > winnerSeconds) {
+                winner = name;
+                winnerSeconds = seconds;
+            }
+        });
+
+        return { name: winner, seconds: winnerSeconds };
+    }, [entries]);
+
+    const formatClock = (seconds: number) => {
+        const hh = Math.floor(seconds / 3600).toString().padStart(2, '0');
+        const mm = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+        const ss = (seconds % 60).toString().padStart(2, '0');
+        return { hh, mm, ss };
+    };
 
     const formatHours = (seconds: number) => {
-        const hours = Math.floor(seconds / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        return `${hours}h ${minutes}m`;
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        return `${h}h ${m}m`;
     };
 
-    const formatDecimalHours = (seconds: number) => {
-        return (seconds / 3600).toFixed(1);
-    };
+    const clock = formatClock(liveSeconds);
+    const progressPercent = Math.min((totalSeconds / (8 * 3600)) * 100, 100);
 
     return (
         <div className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark w-full">
             <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10 hidden md:flex">
-                <div className="flex items-center gap-4 flex-1">
-                    <div className="relative w-full max-w-md">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-                        <input className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:outline-none" placeholder="Search tasks, code reviews, or projects..." type="text" />
-                    </div>
+                <div className="flex items-center gap-4">
+                    <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Dashboard</h1>
+                    {activeTimerStart && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            Timer Running
+                        </span>
+                    )}
                 </div>
-                <div className="flex flex-1 justify-end items-center gap-4">
-                    <button className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
+                <div className="flex items-center gap-3 relative">
+                    <button
+                        className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"
+                        onClick={() => setNotificationsOpen((prev) => !prev)}
+                        title="View alerts"
+                    >
                         <span className="material-symbols-outlined">notifications</span>
                         <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
                     </button>
@@ -77,30 +135,53 @@ const Dashboard: React.FC = () => {
                         <span className="material-symbols-outlined text-sm">add</span>
                         New Entry
                     </button>
+
+                    {notificationsOpen && (
+                        <div className="absolute right-0 top-12 w-80 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                <p className="text-sm font-bold">Recent Alerts</p>
+                                <button
+                                    className="text-xs font-semibold text-primary hover:underline"
+                                    onClick={() => navigate('/admin?tab=notifications')}
+                                >
+                                    Open All
+                                </button>
+                            </div>
+                            <div className="max-h-72 overflow-y-auto">
+                                {notifications.length === 0 && (
+                                    <p className="px-4 py-6 text-sm text-slate-500">No alerts found.</p>
+                                )}
+                                {notifications.map((notification) => (
+                                    <div key={notification.id} className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                                        <p className="text-xs font-semibold text-slate-500">{notification.type}</p>
+                                        <p className="text-sm text-slate-900 dark:text-slate-100">{notification.message}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </header>
 
             <div className="p-8 overflow-y-auto">
                 <div className="max-w-6xl mx-auto space-y-8">
-                    {/* Timer & Quick Input Section */}
                     <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
                         <div className="flex flex-col lg:flex-row gap-6 items-center">
-                            {/* Timer Graphic */}
                             <div className="flex items-center gap-4 lg:pr-8 lg:border-r border-slate-200 dark:border-slate-800 w-full lg:w-auto justify-center">
                                 <div className="text-center">
                                     <div className="flex gap-2">
                                         <div className="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                                            <span className="text-3xl font-bold tracking-tighter font-mono">00</span>
+                                            <span className="text-3xl font-bold tracking-tighter font-mono">{clock.hh}</span>
                                             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">HR</p>
                                         </div>
                                         <div className="text-2xl font-bold self-center text-slate-300">:</div>
                                         <div className="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                                            <span className="text-3xl font-bold tracking-tighter font-mono">00</span>
+                                            <span className="text-3xl font-bold tracking-tighter font-mono">{clock.mm}</span>
                                             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">MIN</p>
                                         </div>
                                         <div className="text-2xl font-bold self-center text-slate-300">:</div>
                                         <div className="bg-primary/10 text-primary px-4 py-3 rounded-xl border border-primary/20">
-                                            <span className="text-3xl font-bold tracking-tighter font-mono">00</span>
+                                            <span className="text-3xl font-bold tracking-tighter font-mono">{clock.ss}</span>
                                             <p className="text-[10px] uppercase tracking-wider text-primary/60 font-semibold mt-1">SEC</p>
                                         </div>
                                     </div>
@@ -109,171 +190,76 @@ const Dashboard: React.FC = () => {
                                     onClick={() => navigate('/timer')}
                                     className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/30 hover:scale-105 transition-transform"
                                 >
-                                    <span className="material-symbols-outlined text-3xl">play_arrow</span>
+                                    <span className="material-symbols-outlined text-3xl">{activeTimerStart ? 'pause' : 'play_arrow'}</span>
                                 </button>
                             </div>
 
-                            {/* Task Input Fields */}
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Project</label>
-                                    <select className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20">
-                                        <option>Cloud Infrastructure Migr...</option>
-                                        <option>Mobile App UI Redesign</option>
-                                        <option>Internal Admin Tools</option>
+                                    <select className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none">
+                                        <option value="">Select a project</option>
+                                        {projects.map((project) => (
+                                            <option key={project.id} value={project.id}>
+                                                {project.name}
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
-                                <div className="flex flex-col gap-1 md:col-span-2">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">What are you working on?</label>
-                                    <div className="relative">
-                                        <input className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Refactoring AWS Lambda functions for data pipeline..." type="text" />
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-                                            <span className="material-symbols-outlined text-slate-400 text-lg cursor-pointer hover:text-primary">sell</span>
-                                            <span className="material-symbols-outlined text-slate-400 text-lg cursor-pointer hover:text-primary">monetization_on</span>
-                                        </div>
+                                <div className="flex flex-col gap-1">
+                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Top Project</label>
+                                    <div className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2">
+                                        {topProject.name} ({formatHours(topProject.seconds)})
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </section>
 
-                    {/* Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-slate-500 text-sm font-medium">Daily Goal</span>
-                                <span className="material-symbols-outlined text-primary text-xl">target</span>
-                            </div>
-                            <div className="flex items-end gap-2">
-                                <span className="text-2xl font-bold">{loading ? '...' : formatDecimalHours(stats.totalDuration)}</span>
-                                <span className="text-slate-400 pb-1 text-sm">/ 8h</span>
-                            </div>
+                            <span className="text-slate-500 text-sm font-medium">Daily Goal</span>
+                            <div className="text-2xl font-bold mt-3">{loading ? '...' : (totalSeconds / 3600).toFixed(1)} / 8h</div>
                             <div className="mt-4 h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-primary rounded-full transition-all duration-1000" style={{ width: `${Math.min((stats.totalDuration / (8 * 3600)) * 100, 100)}%` }}></div>
+                                <div className="h-full bg-primary rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
                             </div>
                         </div>
-
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-slate-500 text-sm font-medium">Weekly Total</span>
-                                <span className="material-symbols-outlined text-emerald-500 text-xl">event_available</span>
-                            </div>
-                            <div className="flex items-end gap-2">
-                                <span className="text-2xl font-bold">34.2</span>
-                                <span className="text-slate-400 pb-1 text-sm">hours</span>
-                            </div>
-                            <p className="text-xs text-emerald-600 font-medium mt-4 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-xs">trending_up</span> 12% from last week
-                            </p>
+                            <span className="text-slate-500 text-sm font-medium">Projects</span>
+                            <div className="text-2xl font-bold mt-3">{loading ? '...' : projects.length}</div>
                         </div>
-
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-slate-500 text-sm font-medium">Top Project</span>
-                                <span className="material-symbols-outlined text-orange-500 text-xl">bolt</span>
-                            </div>
-                            <div className="flex items-end gap-2">
-                                <span className="text-2xl font-bold truncate max-w-[120px]" title={stats.topProject}>{loading ? '...' : stats.topProject}</span>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-4">{formatHours(stats.topProjectDuration)} Tracked</p>
+                            <span className="text-slate-500 text-sm font-medium">Recent Entries</span>
+                            <div className="text-2xl font-bold mt-3">{loading ? '...' : entries.length}</div>
                         </div>
-
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-slate-500 text-sm font-medium">Tasks Completed</span>
-                                <span className="material-symbols-outlined text-purple-500 text-xl">check_circle</span>
-                            </div>
-                            <div className="flex items-end gap-2">
-                                <span className="text-2xl font-bold">18</span>
-                                <span className="text-slate-400 pb-1 text-sm">this week</span>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-4">4 tasks pending for today</p>
+                            <span className="text-slate-500 text-sm font-medium">Live Timer</span>
+                            <div className="text-2xl font-bold mt-3">{activeTimerStart ? formatClock(liveSeconds).hh + ':' + formatClock(liveSeconds).mm : 'Stopped'}</div>
                         </div>
                     </div>
 
-                    {/* Timeline & Entries */}
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                        {/* Timeline Section */}
-                        <div className="xl:col-span-2 space-y-6">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-bold">Visual Timeline</h2>
-                                <div className="flex gap-2">
-                                    <button className="p-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200">
-                                        <span className="material-symbols-outlined text-sm">chevron_left</span>
-                                    </button>
-                                    <span className="text-sm font-semibold flex items-center">Today</span>
-                                    <button className="p-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 hover:bg-slate-200">
-                                        <span className="material-symbols-outlined text-sm">chevron_right</span>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden relative min-h-[400px]">
-                                {/* Time Labels */}
-                                <div className="grid grid-cols-1 divide-y divide-slate-100 dark:divide-slate-800">
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">09:00 AM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">10:00 AM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">11:00 AM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">12:00 PM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">01:00 PM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">02:00 PM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">03:00 PM</div>
-                                    <div className="h-12 flex items-center px-4 text-[10px] text-slate-400 font-bold uppercase">04:00 PM</div>
-                                </div>
-
-                                {/* Timeline Blocks */}
-                                <div className="absolute top-0 left-20 right-4 h-full">
-                                    <div className="absolute top-[12px] h-[72px] left-0 right-0 bg-primary/10 border-l-4 border-primary rounded px-3 py-2 cursor-pointer hover:bg-primary/20 transition-colors">
-                                        <p className="text-xs font-bold text-primary">Standup & Daily Sync</p>
-                                        <p className="text-[10px] text-primary/60">09:15 - 10:30 AM</p>
-                                    </div>
-                                    <div className="absolute top-[108px] h-[120px] left-0 right-0 bg-emerald-100 dark:bg-emerald-900/30 border-l-4 border-emerald-500 rounded px-3 py-2 cursor-pointer hover:bg-emerald-200 transition-colors">
-                                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">Deep Work: Code Refactor</p>
-                                        <p className="text-[10px] text-emerald-600/60 dark:text-emerald-400/60">11:00 AM - 01:30 PM</p>
-                                    </div>
-                                    <div className="absolute top-[252px] h-[48px] left-0 right-0 bg-slate-100 dark:bg-slate-800 border-l-4 border-slate-400 rounded px-3 py-2">
-                                        <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Lunch Break</p>
-                                        <p className="text-[10px] text-slate-500">02:00 PM - 03:00 PM</p>
-                                    </div>
-
-                                    {/* Current Time Line */}
-                                    <div className="absolute top-[340px] left-[-20px] right-[-10px] border-t-2 border-dashed border-red-500 flex items-center z-10">
-                                        <span className="bg-red-500 text-white text-[9px] font-bold px-1 rounded absolute -left-1">NOW</span>
-                                    </div>
-                                </div>
-                            </div>
+                    <section className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Recent Tasks</h3>
+                            <button
+                                onClick={() => navigate('/timer')}
+                                className="text-xs font-semibold text-primary hover:underline"
+                            >
+                                View Timer
+                            </button>
                         </div>
-
-                        {/* Recent Entries */}
-                        <div className="space-y-6">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-lg font-bold">Recent Entries</h2>
-                                <button className="text-xs text-primary font-semibold hover:underline">View All</button>
-                            </div>
-                            <div className="space-y-3">
-                                {recentEntries.length === 0 && !loading && (
-                                    <div className="text-center p-4 text-slate-500 text-sm">No recent entries found.</div>
-                                )}
-                                {recentEntries.map((entry) => (
-                                    <div key={entry.id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-colors cursor-pointer">
-                                        <div className="flex gap-4 items-center">
-                                            <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center">
-                                                <span className="material-symbols-outlined">code</span>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-bold">{entry.task_description || 'Untitled Task'}</p>
-                                                <p className="text-xs text-slate-500">{entry.project?.name || 'Unassigned'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-bold">{formatHours(entry.duration || 0)}</p>
-                                            <p className="text-[10px] text-slate-400 uppercase font-bold">Recorded</p>
-                                        </div>
+                        {entries.length === 0 ? (
+                            <p className="text-sm text-slate-500">No completed tasks yet today.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {entries.slice(0, 6).map((entry) => (
+                                    <div key={entry.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-200">
+                                        {entry.task_description}
                                     </div>
                                 ))}
                             </div>
-                        </div>
-                    </div>
+                        )}
+                    </section>
                 </div>
             </div>
         </div>

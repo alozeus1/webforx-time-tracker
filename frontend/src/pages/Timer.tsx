@@ -26,6 +26,11 @@ const getTodaysCompletedSeconds = (entries: TimeEntrySummary[]) => {
     }, 0);
 };
 
+const extractErrorMessage = (error: unknown, fallback: string) =>
+    typeof (error as { response?: { data?: { message?: string } } })?.response?.data?.message === 'string'
+        ? (error as { response: { data: { message: string } } }).response.data.message
+        : fallback;
+
 const Timer: React.FC = () => {
     const [time, setTime] = useState(0);
     const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null);
@@ -161,7 +166,17 @@ const Timer: React.FC = () => {
             }
         } catch (error) {
             console.error(isRunning ? 'Failed to stop timer' : 'Failed to start timer', error);
-            alert(isRunning ? 'Failed to stop timer' : 'Failed to start timer');
+            const fallback = isRunning ? 'Failed to stop timer' : 'Failed to start timer';
+            const message = extractErrorMessage(error, fallback);
+
+            if (isRunning && message.toLowerCase().includes('no active timer found')) {
+                // Keep UI in sync if the timer has already been cleared server-side.
+                await loadTimerPageData(true);
+                alert('Timer was already stopped. The page has been refreshed.');
+                return;
+            }
+
+            alert(message);
             await loadTimerPageData();
         } finally {
             setSubmitting(false);

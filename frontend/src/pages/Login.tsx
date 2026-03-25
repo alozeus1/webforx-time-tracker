@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Lock, Mail } from 'lucide-react';
 import api from '../services/api';
 import './Login.css';
+import { setStoredSession } from '../utils/session';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -16,8 +17,7 @@ const Login: React.FC = () => {
 
         try {
             const response = await api.post('/auth/login', { email, password });
-            localStorage.setItem('token', response.data.token);
-            localStorage.setItem('user_role', response.data.user.role);
+            setStoredSession(response.data.token, response.data.user.role, response.data.user);
             navigate('/dashboard');
         } catch (error) {
             console.error('Login failed:', error);

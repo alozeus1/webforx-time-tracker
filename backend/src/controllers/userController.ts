@@ -54,13 +54,56 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
     }
 };
 
+export const getRoles = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const roles = await prisma.role.findMany({
+            select: { id: true, name: true },
+            orderBy: { name: 'asc' },
+        });
+
+        res.status(200).json({ roles });
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+const resolveRoleId = async (roleId?: string, roleName?: string): Promise<string> => {
+    if (roleId?.trim()) {
+        return roleId.trim();
+    }
+
+    if (roleName?.trim()) {
+        const role = await prisma.role.findUnique({ where: { name: roleName.trim() } });
+        if (!role) {
+            throw new Error('Invalid role');
+        }
+
+        return role.id;
+    }
+
+    throw new Error('Role is required');
+};
+
 export const createUser = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { email, password, first_name, last_name, role_id } = req.body;
+        const { email, password, first_name, last_name, role_id, role } = req.body;
+
+        if (!email || !password || !first_name || !last_name) {
+            res.status(400).json({ message: 'Missing required fields' });
+            return;
+        }
 
         const existingUser = await prisma.user.findUnique({ where: { email } });
         if (existingUser) {
             res.status(400).json({ message: 'User with this email already exists' });
+            return;
+        }
+
+        let resolvedRoleId: string;
+        try {
+            resolvedRoleId = await resolveRoleId(role_id, role);
+        } catch (error) {
+            res.status(400).json({ message: 'Invalid or missing role' });
             return;
         }
 
@@ -73,17 +116,130 @@ export const createUser = async (req: Request, res: Response): Promise<void> => 
                 password_hash,
                 first_name,
                 last_name,
-                role_id,
+                role_id: resolvedRoleId,
             },
             select: {
                 id: true,
                 email: true,
                 first_name: true,
                 last_name: true,
+                is_active: true,
+                role: { select: { name: true } },
             },
         });
 
         res.status(201).json(newUser);
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const updateUser = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+        const { first_name, last_name, email, password, role_id, role, is_active } = req.body;
+
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+
+        const updateData: Record<string, unknown> = {};
+
+        if (typeof first_name === 'string' && first_name.trim()) {
+            updateData.first_name = first_name.trim();
+        }
+
+        if (typeof last_name === 'string' && last_name.trim()) {
+            updateData.last_name = last_name.trim();
+        }
+
+        if (typeof email === 'string' && email.trim()) {
+            updateData.email = email.trim().toLowerCase();
+        }
+
+        if (typeof is_active === 'boolean') {
+            updateData.is_active = is_active;
+        }
+
+        if (typeof password === 'string' && password.trim()) {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password_hash = await bcrypt.hash(password.trim(), salt);
+        }
+
+        if ((typeof role_id === 'string' && role_id.trim()) || (typeof role === 'string' && role.trim())) {
+            try {
+                updateData.role_id = await resolveRoleId(role_id, role);
+            } catch (error) {
+                res.status(400).json({ message: 'Invalid role' });
+                return;
+            }
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ message: 'No valid fields provided for update' });
+            return;
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: updateData,
+            select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+                is_active: true,
+                role: { select: { name: true } },
+            },
+        });
+
+        res.status(200).json(updatedUser);
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = requireUserId(req);
+        const { first_name, last_name, password } = req.body;
+
+        const updateData: Record<string, unknown> = {};
+
+        if (typeof first_name === 'string' && first_name.trim()) {
+            updateData.first_name = first_name.trim();
+        }
+
+        if (typeof last_name === 'string' && last_name.trim()) {
+            updateData.last_name = last_name.trim();
+        }
+
+        if (typeof password === 'string' && password.trim()) {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password_hash = await bcrypt.hash(password.trim(), salt);
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ message: 'No valid fields provided for update' });
+            return;
+        }
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: updateData,
+            include: { role: true },
+        });
+
+        res.status(200).json({
+            id: updatedUser.id,
+            email: updatedUser.email,
+            first_name: updatedUser.first_name,
+            last_name: updatedUser.last_name,
+            role: updatedUser.role.name,
+            is_active: updatedUser.is_active,
+        });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
     }

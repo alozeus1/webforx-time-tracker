@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncQuickbooks = exports.saveIntegration = exports.listIntegrations = exports.getGithubCommits = void 0;
+exports.syncQuickbooks = exports.testIntegration = exports.saveIntegration = exports.listIntegrations = exports.getGithubCommits = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const crypto_1 = require("../utils/crypto");
 const getGithubCommits = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -121,6 +121,63 @@ const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
     }
 });
 exports.saveIntegration = saveIntegration;
+const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { type } = req.body;
+        if (!type || !['taiga', 'mattermost'].includes(type)) {
+            res.status(400).json({ message: 'Supported test types are taiga and mattermost' });
+            return;
+        }
+        const integration = yield db_1.default.integration.findUnique({ where: { type } });
+        if (!integration || !integration.is_active) {
+            res.status(404).json({ message: `${type} integration is not configured` });
+            return;
+        }
+        if (type === 'mattermost') {
+            const config = (0, crypto_1.decryptConfig)(integration.config);
+            const response = yield fetch(config.webhookUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    text: `Web Forx Time Tracker integration test at ${new Date().toISOString()}`,
+                }),
+            });
+            if (!response.ok) {
+                const body = yield response.text();
+                res.status(400).json({ message: `Mattermost webhook test failed (${response.status}): ${body || 'No response body'}` });
+                return;
+            }
+            res.status(200).json({ status: 'success', message: 'Mattermost webhook test delivered successfully' });
+            return;
+        }
+        const config = (0, crypto_1.decryptConfig)(integration.config);
+        const response = yield fetch('https://api.taiga.io/api/v1/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                type: 'normal',
+                username: config.username,
+                password: config.password,
+            }),
+        });
+        if (!response.ok) {
+            const body = yield response.text();
+            res.status(400).json({ message: `Taiga credential test failed (${response.status}): ${body || 'No response body'}` });
+            return;
+        }
+        const payload = yield response.json().catch(() => ({}));
+        if (!(payload === null || payload === void 0 ? void 0 : payload.auth_token)) {
+            res.status(400).json({ message: 'Taiga credential test failed: auth token missing from response' });
+            return;
+        }
+        res.status(200).json({ status: 'success', message: 'Taiga credentials validated successfully' });
+    }
+    catch (error) {
+        console.error('Failed to test integration:', error);
+        res.status(500).json({ message: 'Internal server error while testing integration' });
+    }
+});
+exports.testIntegration = testIntegration;
 const syncQuickbooks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         // In a real app, groups recent approved timesheets and POSTs an invoice to Intuit Quickbooks API

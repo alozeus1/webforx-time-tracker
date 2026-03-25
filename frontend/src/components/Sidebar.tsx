@@ -1,8 +1,8 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users, Settings, Box, ShieldCheck, X } from 'lucide-react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users, Settings, Box, ShieldCheck, X, LogOut } from 'lucide-react';
 import './Sidebar.css';
-import { hasAnyRole } from '../utils/session';
+import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -10,6 +10,10 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+    const navigate = useNavigate();
+    const user = getStoredUserProfile();
+    const initials = `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U';
+
     const navItems = [
         { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
         { name: 'Timer', path: '/timer', icon: <Clock size={20} /> },
@@ -52,12 +56,23 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
             <div className="sidebar-footer">
                 <NavLink to="/profile" className="profile-widget">
-                    <div className="avatar">JD</div>
+                    <div className="avatar">{initials}</div>
                     <div className="user-info">
-                        <span className="user-name">John Doe</span>
-                        <span className="user-role">Engineer</span>
+                        <span className="user-name">{user ? `${user.first_name} ${user.last_name}` : 'Profile'}</span>
+                        <span className="user-role">{user?.role || 'User'}</span>
                     </div>
                 </NavLink>
+                <button
+                    className="sidebar-link mt-2"
+                    onClick={() => {
+                        clearStoredSession();
+                        navigate('/login', { replace: true });
+                    }}
+                    type="button"
+                >
+                    <span className="link-icon"><LogOut size={20} /></span>
+                    <span className="link-text">Sign Out</span>
+                </button>
             </div>
         </aside>
     );

@@ -1,76 +1,250 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
-import type { UserSummary } from '../types/api';
+import type { RoleOption, UserSummary } from '../types/api';
+import { getStoredRole } from '../utils/session';
+
+interface TeamFormState {
+    first_name: string;
+    last_name: string;
+    email: string;
+    password: string;
+    role: string;
+    is_active: boolean;
+}
+
+const emptyForm: TeamFormState = {
+    first_name: '',
+    last_name: '',
+    email: '',
+    password: '',
+    role: 'Employee',
+    is_active: true,
+};
 
 const Team: React.FC = () => {
     const [team, setTeam] = useState<UserSummary[]>([]);
+    const [roles, setRoles] = useState<RoleOption[]>([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+    const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
+    const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
+    const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
+    const [form, setForm] = useState<TeamFormState>(emptyForm);
+
+    const role = getStoredRole();
+    const canManageTeam = role === 'Admin';
+
+    const loadTeam = useCallback(async () => {
+        try {
+            const res = await api.get<UserSummary[]>('/users');
+            setTeam(res.data);
+        } catch (error) {
+            console.error('Failed to load team', error);
+            setFeedback({ message: 'Failed to load team members', tone: 'error' });
+        }
+    }, []);
+
+    const loadRoles = useCallback(async () => {
+        if (!canManageTeam) {
+            return;
+        }
+
+        try {
+            const response = await api.get<{ roles: RoleOption[] }>('/users/roles');
+            setRoles(response.data.roles || []);
+        } catch (error) {
+            console.error('Failed to load roles', error);
+        }
+    }, [canManageTeam]);
 
     useEffect(() => {
-        const fetchTeam = async () => {
-            try {
-                const res = await api.get<UserSummary[]>('/users');
-                setTeam(res.data);
-            } catch (error) {
-                console.error('Failed to load team', error);
-            } finally {
-                setLoading(false);
-            }
+        const load = async () => {
+            setLoading(true);
+            await Promise.all([loadTeam(), loadRoles()]);
+            setLoading(false);
         };
 
-        fetchTeam();
-    }, []);
+        void load();
+    }, [loadRoles, loadTeam]);
+
+    const activeCount = team.filter((user) => user.is_active).length;
+    const adminsCount = team.filter((user) => user.role?.name === 'Admin').length;
+
+    const openCreateModal = () => {
+        setSelectedUser(null);
+        setForm({
+            ...emptyForm,
+            role: roles.find((item) => item.name === 'Employee')?.name || roles[0]?.name || 'Employee',
+        });
+        setModalMode('create');
+        setMenuOpenFor(null);
+        setFeedback(null);
+    };
+
+    const openEditModal = (user: UserSummary) => {
+        setSelectedUser(user);
+        setForm({
+            first_name: user.first_name,
+            last_name: user.last_name,
+            email: user.email,
+            password: '',
+            role: user.role?.name || 'Employee',
+            is_active: user.is_active,
+        });
+        setModalMode('edit');
+        setMenuOpenFor(null);
+        setFeedback(null);
+    };
+
+    const closeModal = () => {
+        setModalMode(null);
+        setSelectedUser(null);
+        setForm(emptyForm);
+    };
+
+    const handleSaveMember = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!canManageTeam) {
+            return;
+        }
+
+        if (modalMode === 'create' && !form.password.trim()) {
+            setFeedback({ message: 'Password is required when creating a team member', tone: 'error' });
+            return;
+        }
+
+        setSaving(true);
+        setFeedback(null);
+
+        try {
+            if (modalMode === 'create') {
+                await api.post('/users', {
+                    first_name: form.first_name.trim(),
+                    last_name: form.last_name.trim(),
+                    email: form.email.trim().toLowerCase(),
+                    password: form.password,
+                    role: form.role,
+                });
+                setFeedback({ message: 'Team member added successfully', tone: 'success' });
+            }
+
+            if (modalMode === 'edit' && selectedUser) {
+                await api.put(`/users/${selectedUser.id}`, {
+                    first_name: form.first_name.trim(),
+                    last_name: form.last_name.trim(),
+                    email: form.email.trim().toLowerCase(),
+                    role: form.role,
+                    is_active: form.is_active,
+                    password: form.password.trim() ? form.password : undefined,
+                });
+                setFeedback({ message: 'Team member updated successfully', tone: 'success' });
+            }
+
+            await loadTeam();
+            closeModal();
+        } catch (error) {
+            console.error('Failed to save team member', error);
+            const message =
+                typeof (error as { response?: { data?: { message?: string } } })?.response?.data?.message === 'string'
+                    ? (error as { response: { data: { message: string } } }).response.data.message
+                    : 'Failed to save team member';
+            setFeedback({ message, tone: 'error' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const toggleUserActive = async (user: UserSummary) => {
+        if (!canManageTeam) {
+            return;
+        }
+
+        setSaving(true);
+        setFeedback(null);
+        setMenuOpenFor(null);
+
+        try {
+            await api.put(`/users/${user.id}`, { is_active: !user.is_active });
+            await loadTeam();
+            setFeedback({
+                message: `${user.first_name} ${user.last_name} is now ${!user.is_active ? 'active' : 'inactive'}`,
+                tone: 'success',
+            });
+        } catch (error) {
+            console.error('Failed to update team member status', error);
+            setFeedback({ message: 'Failed to update team member status', tone: 'error' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const activityFeed = useMemo(() => {
+        return team
+            .slice()
+            .sort((a, b) => a.first_name.localeCompare(b.first_name))
+            .slice(0, 6)
+            .map((user) => ({
+                id: user.id,
+                icon: user.is_active ? 'check_circle' : 'pause_circle',
+                iconClass: user.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400',
+                text: `${user.first_name} ${user.last_name} is ${user.is_active ? 'active' : 'inactive'} as ${user.role?.name || 'Employee'}`,
+            }));
+    }, [team]);
 
     return (
         <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-background-dark w-full">
-            {/* Page Title */}
-            <div className="mb-8">
-                <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Engineering Team</h2>
-                <p className="text-slate-500 dark:text-slate-400 mt-1">Manage specialized engineers across active product squads.</p>
+            <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Team Management</h2>
+                    <p className="text-slate-500 dark:text-slate-400 mt-1">Manage members, roles, and status for your organization.</p>
+                </div>
+                {canManageTeam && (
+                    <button
+                        onClick={openCreateModal}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+                    >
+                        <span className="material-symbols-outlined text-base">group_add</span>
+                        Add Team Member
+                    </button>
+                )}
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8">
+            {feedback && (
+                <div className={`mb-6 rounded-xl px-4 py-3 text-sm font-medium ${
+                    feedback.tone === 'success'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : 'border border-rose-200 bg-rose-50 text-rose-800'
+                }`}>
+                    {feedback.message}
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-500">Total Headcount</span>
-                        <span className="text-emerald-500 text-xs font-bold flex items-center bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">+2%</span>
-                    </div>
-                    <div className="text-3xl font-bold">{loading ? '...' : team.length}</div>
+                    <span className="text-sm font-medium text-slate-500">Total Members</span>
+                    <div className="text-3xl font-bold mt-3">{loading ? '...' : team.length}</div>
                 </div>
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-500">Currently Active</span>
-                        <span className="text-emerald-500 text-xs font-bold flex items-center bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 rounded-full">+5%</span>
-                    </div>
-                    <div className="text-3xl font-bold">{loading ? '...' : team.filter(u => u.is_active).length}</div>
+                    <span className="text-sm font-medium text-slate-500">Currently Active</span>
+                    <div className="text-3xl font-bold mt-3">{loading ? '...' : activeCount}</div>
                 </div>
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-500">Open Roles</span>
-                        <span className="text-slate-400 text-xs font-bold flex items-center bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-full">Stable</span>
-                    </div>
-                    <div className="text-3xl font-bold">4</div>
-                </div>
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-slate-500">Avg. Task Velocity</span>
-                        <span className="text-red-500 text-xs font-bold flex items-center bg-red-50 dark:bg-red-500/10 px-2 py-0.5 rounded-full">-1.2%</span>
-                    </div>
-                    <div className="text-3xl font-bold">24.5</div>
+                    <span className="text-sm font-medium text-slate-500">Admin Accounts</span>
+                    <div className="text-3xl font-bold mt-3">{loading ? '...' : adminsCount}</div>
                 </div>
             </div>
 
-            {/* Live Status & Directory */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-                {/* Member Directory Table */}
-                <div className="xl:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                <div className="xl:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">
                     <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                         <h3 className="text-lg font-bold">Team Directory</h3>
-                        <div className="flex gap-2">
-                            <button className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Filter</button>
-                            <button className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">Export</button>
-                        </div>
+                        <button
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                            onClick={() => void loadTeam()}
+                        >
+                            Refresh
+                        </button>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
@@ -79,12 +253,11 @@ const Team: React.FC = () => {
                                     <th className="px-6 py-4 font-semibold">Member</th>
                                     <th className="px-6 py-4 font-semibold">Role</th>
                                     <th className="px-6 py-4 font-semibold">Status</th>
-                                    <th className="px-6 py-4 font-semibold">Squad</th>
                                     <th className="px-6 py-4 font-semibold"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {loading && <tr><td colSpan={5} className="px-6 py-4 text-center">Loading...</td></tr>}
+                                {loading && <tr><td colSpan={4} className="px-6 py-4 text-center">Loading...</td></tr>}
                                 {!loading && team.map((user) => (
                                     <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                                         <td className="px-6 py-4">
@@ -97,21 +270,42 @@ const Team: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="text-sm capitalize">{user.role?.name || 'Engineer'}</span>
+                                            <span className="text-sm capitalize">{user.role?.name || 'Employee'}</span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
                                                 <span className={`w-2 h-2 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
-                                                <span className="text-xs font-medium">{user.is_active ? 'Active Now' : 'Offline'}</span>
+                                                <span className="text-xs font-medium">{user.is_active ? 'Active' : 'Inactive'}</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <span className="px-2 py-1 rounded-md bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-tight">Core App</span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <button className="text-slate-400 hover:text-slate-600">
+                                        <td className="px-6 py-4 text-right relative">
+                                            <button
+                                                className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                onClick={() => setMenuOpenFor((prev) => prev === user.id ? null : user.id)}
+                                            >
                                                 <span className="material-symbols-outlined text-sm">more_vert</span>
                                             </button>
+
+                                            {menuOpenFor === user.id && (
+                                                <div className="absolute right-6 top-12 z-20 min-w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                                    <button
+                                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        onClick={() => openEditModal(user)}
+                                                        disabled={!canManageTeam}
+                                                    >
+                                                        <span className="material-symbols-outlined text-base">edit</span>
+                                                        Edit Member
+                                                    </button>
+                                                    <button
+                                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        onClick={() => void toggleUserActive(user)}
+                                                        disabled={!canManageTeam || saving}
+                                                    >
+                                                        <span className="material-symbols-outlined text-base">{user.is_active ? 'person_off' : 'person'}</span>
+                                                        {user.is_active ? 'Deactivate' : 'Activate'}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -120,63 +314,137 @@ const Team: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Real-time Activity Feed */}
                 <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
                     <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-                        <h3 className="text-lg font-bold">Real-time Activity</h3>
-                        <p className="text-xs text-slate-500 mt-1">Live updates from repos and tools</p>
+                        <h3 className="text-lg font-bold">Team Activity</h3>
+                        <p className="text-xs text-slate-500 mt-1">Latest status snapshots</p>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                        {/* Activity Item */}
-                        <div className="flex gap-4 relative">
-                            <div className="absolute left-4 top-8 bottom-[-24px] w-px bg-slate-100 dark:bg-slate-800"></div>
-                            <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0 z-10">
-                                <span className="material-symbols-outlined text-sm text-blue-600 dark:text-blue-400">commit</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <p className="text-sm">
-                                    <span className="font-semibold text-slate-900 dark:text-slate-100">Marcus Chen</span>
-                                    pushed 4 commits to <span className="text-primary font-medium">origin/main</span>
-                                </p>
-                                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">Just now</span>
-                                <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <p className="text-xs text-slate-600 dark:text-slate-300 font-mono">feat: integrate stripe checkout api</p>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {activityFeed.length === 0 && (
+                            <p className="text-sm text-slate-500">No activity yet.</p>
+                        )}
+                        {activityFeed.map((activity) => (
+                            <div key={activity.id} className="flex gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                                    <span className={`material-symbols-outlined text-sm ${activity.iconClass}`}>{activity.icon}</span>
                                 </div>
+                                <p className="text-sm text-slate-700 dark:text-slate-300">{activity.text}</p>
                             </div>
-                        </div>
-
-                        {/* Activity Item */}
-                        <div className="flex gap-4 relative">
-                            <div className="absolute left-4 top-8 bottom-[-24px] w-px bg-slate-100 dark:bg-slate-800"></div>
-                            <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0 z-10">
-                                <span className="material-symbols-outlined text-sm text-emerald-600 dark:text-emerald-400">check_circle</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <p className="text-sm">
-                                    <span className="font-semibold text-slate-900 dark:text-slate-100">Sarah Jenkins</span>
-                                    approved PR <span className="text-primary font-medium">#412: DB Migration</span>
-                                </p>
-                                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">12 minutes ago</span>
-                            </div>
-                        </div>
-
-                        {/* Activity Item */}
-                        <div className="flex gap-4 relative">
-                            <div className="absolute left-4 top-8 bottom-[-24px] w-px bg-slate-100 dark:bg-slate-800"></div>
-                            <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0 z-10">
-                                <span className="material-symbols-outlined text-sm text-purple-600 dark:text-purple-400">rocket_launch</span>
-                            </div>
-                            <div className="flex flex-col gap-1">
-                                <p className="text-sm">
-                                    <span className="font-semibold text-slate-900 dark:text-slate-100">Deployment</span>
-                                    to <span className="font-medium">staging</span> was successful
-                                </p>
-                                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-tight">45 minutes ago</span>
-                            </div>
-                        </div>
+                        ))}
                     </div>
                 </div>
             </div>
+
+            {modalMode && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm p-4 flex items-center justify-center">
+                    <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                        <div className="mb-4 flex items-center justify-between">
+                            <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">
+                                {modalMode === 'create' ? 'Add Team Member' : 'Edit Team Member'}
+                            </h3>
+                            <button
+                                className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                onClick={closeModal}
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <form className="space-y-4" onSubmit={(event) => void handleSaveMember(event)}>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">First Name</label>
+                                    <input
+                                        type="text"
+                                        value={form.first_name}
+                                        onChange={(event) => setForm((prev) => ({ ...prev, first_name: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Last Name</label>
+                                    <input
+                                        type="text"
+                                        value={form.last_name}
+                                        onChange={(event) => setForm((prev) => ({ ...prev, last_name: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Email</label>
+                                <input
+                                    type="email"
+                                    value={form.email}
+                                    onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                    required
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">
+                                        {modalMode === 'create' ? 'Temporary Password' : 'Reset Password (Optional)'}
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={form.password}
+                                        onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                        required={modalMode === 'create'}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Role</label>
+                                    <select
+                                        value={form.role}
+                                        onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                    >
+                                        {(roles.length > 0 ? roles : [{ id: 'fallback', name: 'Employee' }, { id: 'fallback-admin', name: 'Admin' }]).map((option) => (
+                                            <option key={option.id} value={option.name}>
+                                                {option.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {modalMode === 'edit' && (
+                                <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.is_active}
+                                        onChange={(event) => setForm((prev) => ({ ...prev, is_active: event.target.checked }))}
+                                    />
+                                    Active account
+                                </label>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                    onClick={closeModal}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={saving}
+                                    className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {saving ? 'Saving...' : (modalMode === 'create' ? 'Add Member' : 'Save Changes')}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

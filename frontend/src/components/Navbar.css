@@ -52,6 +52,7 @@
 .navbar-right {
     display: flex;
     align-items: center;
+    gap: var(--space-2);
 }
 
 .notification-btn {
@@ -68,6 +69,24 @@
 .notification-btn:hover {
     background-color: var(--bg-subtle);
     color: var(--text-main);
+}
+
+.logout-btn {
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    cursor: pointer;
+}
+
+.logout-btn:hover {
+    background-color: var(--bg-subtle);
 }
 
 .badge {

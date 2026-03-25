@@ -57,6 +57,13 @@
     transition: all var(--transition-fast);
 }
 
+button.sidebar-link {
+    width: 100%;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+}
+
 .sidebar-link:hover {
     background-color: var(--bg-subtle);
     color: var(--text-main);

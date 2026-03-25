@@ -9,8 +9,9 @@ const Integrations: React.FC = () => {
     const [taigaUsername, setTaigaUsername] = useState('');
     const [taigaPassword, setTaigaPassword] = useState('');
     const [mattermostWebhookUrl, setMattermostWebhookUrl] = useState('');
-    const [feedback, setFeedback] = useState<string | null>(null);
+    const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
     const [savingType, setSavingType] = useState<string | null>(null);
+    const [testingType, setTestingType] = useState<string | null>(null);
 
     const integrationMap = useMemo(
         () => new Map(integrations.map((integration) => [integration.type, integration])),
@@ -40,7 +41,7 @@ const Integrations: React.FC = () => {
         const calendarState = params.get('calendar');
 
         if (calendarState === 'connected') {
-            setFeedback('Google Calendar connected successfully');
+            setFeedback({ message: 'Google Calendar connected successfully', tone: 'success' });
             params.delete('calendar');
             params.delete('reason');
             const nextQuery = params.toString();
@@ -49,7 +50,7 @@ const Integrations: React.FC = () => {
         }
 
         if (calendarState === 'error') {
-            setFeedback('Google Calendar connection failed. Please try again.');
+            setFeedback({ message: 'Google Calendar connection failed. Please try again.', tone: 'error' });
             params.delete('calendar');
             params.delete('reason');
             const nextQuery = params.toString();
@@ -70,7 +71,7 @@ const Integrations: React.FC = () => {
 
         try {
             const response = await api.post<{ message: string }>('/integrations', { type, config });
-            setFeedback(response.data.message);
+            setFeedback({ message: response.data.message, tone: 'success' });
             await fetchIntegrations();
 
             if (type === 'taiga') {
@@ -78,9 +79,28 @@ const Integrations: React.FC = () => {
             }
         } catch (error) {
             console.error(`Failed to save ${type} integration:`, error);
-            setFeedback(`Failed to save ${type} integration`);
+            setFeedback({ message: `Failed to save ${type} integration`, tone: 'error' });
         } finally {
             setSavingType(null);
+        }
+    };
+
+    const handleTest = async (type: 'taiga' | 'mattermost') => {
+        setTestingType(type);
+        setFeedback(null);
+
+        try {
+            const response = await api.post<{ message: string }>('/integrations/test', { type });
+            setFeedback({ message: response.data.message, tone: 'success' });
+        } catch (error) {
+            console.error(`Failed to test ${type} integration:`, error);
+            const message =
+                typeof (error as { response?: { data?: { message?: string } } })?.response?.data?.message === 'string'
+                    ? (error as { response: { data: { message: string } } }).response.data.message
+                    : `Failed to test ${type} integration`;
+            setFeedback({ message, tone: 'error' });
+        } finally {
+            setTestingType(null);
         }
     };
 
@@ -93,18 +113,18 @@ const Integrations: React.FC = () => {
             window.location.assign(response.data.url);
         } catch (error) {
             console.error('Failed to start Google Calendar connection:', error);
-            setFeedback('Failed to start Google Calendar connection');
+            setFeedback({ message: 'Failed to start Google Calendar connection', tone: 'error' });
         }
     };
 
     const handleGoogleCalendarDisconnect = async () => {
         try {
             const response = await api.delete<{ message: string }>('/calendar/disconnect');
-            setFeedback(response.data.message);
+            setFeedback({ message: response.data.message, tone: 'success' });
             await loadCalendarStatus();
         } catch (error) {
             console.error('Failed to disconnect Google Calendar:', error);
-            setFeedback('Failed to disconnect Google Calendar');
+            setFeedback({ message: 'Failed to disconnect Google Calendar', tone: 'error' });
         }
     };
 
@@ -116,8 +136,12 @@ const Integrations: React.FC = () => {
             </div>
 
             {feedback && (
-                <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
-                    {feedback}
+                <div className={`mb-6 rounded-xl px-4 py-3 text-sm font-medium ${
+                    feedback.tone === 'success'
+                        ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : 'border border-rose-200 bg-rose-50 text-rose-800'
+                }`}>
+                    {feedback.message}
                 </div>
             )}
 
@@ -224,7 +248,7 @@ const Integrations: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div>
+                            <div className="flex flex-wrap gap-3">
                                 <button
                                     onClick={() => void handleSave('taiga', { username: taigaUsername, password: taigaPassword })}
                                     disabled={savingType === 'taiga' || !taigaUsername.trim() || !taigaPassword.trim()}
@@ -232,6 +256,14 @@ const Integrations: React.FC = () => {
                                 >
                                     <Save size={16} />
                                     {savingType === 'taiga' ? 'Saving...' : 'Save Taiga Config'}
+                                </button>
+                                <button
+                                    onClick={() => void handleTest('taiga')}
+                                    disabled={testingType === 'taiga' || !integrationMap.get('taiga')?.is_active}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                                >
+                                    <BadgeCheck size={16} />
+                                    {testingType === 'taiga' ? 'Testing...' : 'Test Taiga'}
                                 </button>
                             </div>
                         </div>
@@ -275,7 +307,7 @@ const Integrations: React.FC = () => {
                                 />
                             </div>
 
-                            <div>
+                            <div className="flex flex-wrap gap-3">
                                 <button
                                     onClick={() => void handleSave('mattermost', { webhookUrl: mattermostWebhookUrl })}
                                     disabled={savingType === 'mattermost' || !mattermostWebhookUrl.trim()}
@@ -283,6 +315,14 @@ const Integrations: React.FC = () => {
                                 >
                                     <Save size={16} />
                                     {savingType === 'mattermost' ? 'Saving...' : 'Save Mattermost Config'}
+                                </button>
+                                <button
+                                    onClick={() => void handleTest('mattermost')}
+                                    disabled={testingType === 'mattermost' || !integrationMap.get('mattermost')?.is_active}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                                >
+                                    <BadgeCheck size={16} />
+                                    {testingType === 'mattermost' ? 'Testing...' : 'Test Mattermost'}
                                 </button>
                             </div>
                         </div>
