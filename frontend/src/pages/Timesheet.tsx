@@ -1,10 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar as CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import type { TimeEntrySummary } from '../types/api';
 
 const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+const toISODate = (value: Date) => {
+    const year = value.getFullYear();
+    const month = `${value.getMonth() + 1}`.padStart(2, '0');
+    const day = `${value.getDate()}`.padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 const startOfWeek = (date: Date) => {
     const copy = new Date(date);
@@ -21,6 +27,7 @@ const Timesheet: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [weekAnchorDate, setWeekAnchorDate] = useState(() => new Date());
     const [exporting, setExporting] = useState(false);
+    const datePickerRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         const loadEntries = async () => {
@@ -103,6 +110,29 @@ const Timesheet: React.FC = () => {
         });
     };
 
+    const handleOpenDatePicker = () => {
+        const dateInput = datePickerRef.current;
+        if (!dateInput) {
+            return;
+        }
+
+        const pickerApi = dateInput as HTMLInputElement & { showPicker?: () => void };
+        if (typeof pickerApi.showPicker === 'function') {
+            pickerApi.showPicker();
+            return;
+        }
+
+        dateInput.click();
+    };
+
+    const handleDateSelected = (value: string) => {
+        if (!value) {
+            return;
+        }
+
+        setWeekAnchorDate(new Date(`${value}T12:00:00`));
+    };
+
     const handleExport = async () => {
         setExporting(true);
         try {
@@ -135,9 +165,20 @@ const Timesheet: React.FC = () => {
                     <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => handleWeekShift(-1)}>
                         <ChevronLeft size={16} /> Prev Week
                     </button>
-                    <button className="btn btn-outline" style={{ gap: '8px' }}>
-                        <CalendarIcon size={16} /> {weekLabel}
-                    </button>
+                    <div style={{ position: 'relative' }}>
+                        <button className="btn btn-outline" style={{ gap: '8px' }} onClick={handleOpenDatePicker}>
+                            <CalendarIcon size={16} /> {weekLabel}
+                        </button>
+                        <input
+                            ref={datePickerRef}
+                            type="date"
+                            value={toISODate(weekAnchorDate)}
+                            onChange={(event) => handleDateSelected(event.target.value)}
+                            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+                            tabIndex={-1}
+                            aria-hidden="true"
+                        />
+                    </div>
                     <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => handleWeekShift(1)}>
                         Next Week <ChevronRight size={16} />
                     </button>
