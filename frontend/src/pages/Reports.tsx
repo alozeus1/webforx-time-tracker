@@ -3,16 +3,25 @@ import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 
+/** Returns Tailwind classes based on a trend string like "+5%", "-3%", "0%" */
+function getTrendClasses(trend: string | undefined): string {
+    if (!trend) return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
+    const trimmed = trend.trim();
+    if (trimmed.startsWith('+')) return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400';
+    if (trimmed.startsWith('-')) return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+    return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
+}
+
 const Reports: React.FC = () => {
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
     const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    
+
     // Filters
     const [range, setRange] = useState('30d');
     const [projectId, setProjectId] = useState('all');
     const [queryUserId, setQueryUserId] = useState('all');
-    
+
     // Dropdown Data
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
@@ -106,27 +115,42 @@ const Reports: React.FC = () => {
         }
         return source;
     }, [analytics?.userBreakdown, productivityFilter]);
-    
-    // Pastel colors mappings for projects
+
     const colorClasses = [
         'bg-primary', 'bg-indigo-400', 'bg-slate-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400'
     ];
 
+    const pillSelectClass = 'px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all cursor-pointer hover:border-slate-300 dark:hover:border-slate-600';
+
     return (
-        <div className="flex-1 w-full overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
+        <div className="flex-1 w-full overflow-y-auto bg-slate-50 dark:bg-slate-900 p-4 md:p-6 lg:p-8">
             <div className="max-w-6xl mx-auto space-y-8">
-                {/* Header & Filters */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                    <div className="space-y-1">
-                        <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Reports Dashboard</h1>
-                        <p className="text-slate-500 text-base">Performance analysis for Engineering team projects.</p>
+
+                {/* Header */}
+                <div>
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                        <div className="space-y-1">
+                            <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight" style={{ fontFamily: 'var(--font-family-display)' }}>
+                                Reports Dashboard
+                            </h1>
+                            <p className="text-slate-500 dark:text-slate-400 text-base">Performance analysis for Engineering team projects.</p>
+                        </div>
+                        <button
+                            onClick={handleExport}
+                            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start md:self-auto"
+                        >
+                            <span className="material-symbols-outlined text-lg">download</span>
+                            <span>Export CSV</span>
+                        </button>
                     </div>
-                    <div className="flex flex-wrap gap-3 items-center">
+
+                    {/* Filter bar — pill-style, below title */}
+                    <div className="mt-4 flex flex-wrap gap-2 items-center">
                         {canReviewApprovals && (
-                            <select 
+                            <select
                                 value={queryUserId}
                                 onChange={(e) => setQueryUserId(e.target.value)}
-                                className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:shadow-sm transition-all text-slate-700 dark:text-slate-300 focus:ring-primary focus:border-primary outline-none"
+                                className={pillSelectClass}
                             >
                                 <option value="all">User: All</option>
                                 {users.map(u => (
@@ -134,29 +158,25 @@ const Reports: React.FC = () => {
                                 ))}
                             </select>
                         )}
-                        <select 
+                        <select
                             value={projectId}
                             onChange={(e) => setProjectId(e.target.value)}
-                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:shadow-sm transition-all text-slate-700 dark:text-slate-300 focus:ring-primary focus:border-primary outline-none"
+                            className={pillSelectClass}
                         >
                             <option value="all">Project: All</option>
                             {projects.map(p => (
                                 <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                         </select>
-                        <select 
+                        <select
                             value={range}
                             onChange={(e) => setRange(e.target.value)}
-                            className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:shadow-sm transition-all text-slate-700 dark:text-slate-300 focus:ring-primary focus:border-primary outline-none"
+                            className={pillSelectClass}
                         >
                             <option value="7d">Last 7 Days</option>
                             <option value="30d">Last 30 Days</option>
                             <option value="90d">Last 90 Days</option>
                         </select>
-                        <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all">
-                            <span className="material-symbols-outlined text-lg">download</span>
-                            <span>Export CSV</span>
-                        </button>
                     </div>
                 </div>
 
@@ -168,8 +188,13 @@ const Reports: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500">Total Hours</p>
-                                    <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded text-xs font-bold">{analytics?.metrics.trends.hours}</span>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Hours</p>
+                                    <span
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.hours)}`}
+                                        title="Compared to previous period"
+                                    >
+                                        {analytics?.metrics.trends.hours}
+                                    </span>
                                 </div>
                                 <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.totalHours}h</h3>
                                 <p className="text-xs text-slate-400 mt-1">Logged over timeframe</p>
@@ -177,8 +202,13 @@ const Reports: React.FC = () => {
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500">Active Projects</p>
-                                    <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded text-xs font-bold">{analytics?.metrics.trends.projects}</span>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Active Projects</p>
+                                    <span
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.projects)}`}
+                                        title="Compared to previous period"
+                                    >
+                                        {analytics?.metrics.trends.projects}
+                                    </span>
                                 </div>
                                 <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.activeProjects}</h3>
                                 <p className="text-xs text-slate-400 mt-1">With logged hours</p>
@@ -186,8 +216,13 @@ const Reports: React.FC = () => {
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500">Avg. Productivity</p>
-                                    <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded text-xs font-bold">{analytics?.metrics.trends.productivity}</span>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Avg. Productivity</p>
+                                    <span
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.productivity)}`}
+                                        title="Compared to previous period"
+                                    >
+                                        {analytics?.metrics.trends.productivity}
+                                    </span>
                                 </div>
                                 <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.avgProductivity}%</h3>
                                 <p className="text-xs text-slate-400 mt-1">Target is 85%</p>
@@ -195,8 +230,13 @@ const Reports: React.FC = () => {
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500">Billable Amount</p>
-                                    <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded text-xs font-bold">{analytics?.metrics.trends.billable}</span>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Billable Amount</p>
+                                    <span
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.billable)}`}
+                                        title="Compared to previous period"
+                                    >
+                                        {analytics?.metrics.trends.billable}
+                                    </span>
                                 </div>
                                 <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">${analytics?.metrics.billableAmount}</h3>
                                 <p className="text-xs text-slate-400 mt-1">Computed by hourly rate</p>
@@ -205,11 +245,13 @@ const Reports: React.FC = () => {
 
                         {/* Charts Section */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Hours Trend Graph */}
+                            {/* Hours Trend */}
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
                                 <div className="flex items-center justify-between mb-6">
                                     <h4 className="font-bold text-slate-900 dark:text-white">Hours Logged Trend</h4>
-                                    <button className="text-slate-400 hover:text-primary"><span className="material-symbols-outlined">more_vert</span></button>
+                                    <button className="text-slate-400 hover:text-primary transition-colors">
+                                        <span className="material-symbols-outlined">more_vert</span>
+                                    </button>
                                 </div>
                                 <div className="h-64 flex items-end gap-2 px-2 relative flex-1">
                                     <div className="absolute left-0 top-0 h-full w-full flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none">
@@ -219,7 +261,6 @@ const Reports: React.FC = () => {
                                         <div className="border-t border-slate-100 dark:border-slate-700 w-full pt-1">{Math.round(maxHours * 0.25)}h</div>
                                         <div className="base-line w-full pt-1">0h</div>
                                     </div>
-                                    
                                     {analytics?.hoursTrend.map((t, idx) => {
                                         const hPercent = Math.max((t.hours / maxHours) * 100, 2);
                                         return (
@@ -254,7 +295,7 @@ const Reports: React.FC = () => {
                                             <div key={p.id} className="space-y-2">
                                                 <div className="flex justify-between text-xs font-medium">
                                                     <span className="text-slate-700 dark:text-slate-300 truncate w-3/5">{p.name}</span>
-                                                    <span className="text-slate-500">{p.hours.toFixed(1)}h ({p.percentage}%)</span>
+                                                    <span className="text-slate-500 dark:text-slate-400">{p.hours.toFixed(1)}h ({p.percentage}%)</span>
                                                 </div>
                                                 <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                                                     <div className={`${colorClasses[idx % colorClasses.length]} h-full`} style={{ width: `${p.percentage}%` }}></div>
@@ -266,7 +307,7 @@ const Reports: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Pending Approvals Table */}
+                        {/* Pending Approvals */}
                         {canReviewApprovals && (
                         <div className="bg-white dark:bg-slate-800 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-sm overflow-hidden mb-8">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-rose-50/50 dark:bg-rose-900/10">
@@ -334,7 +375,7 @@ const Reports: React.FC = () => {
                         </div>
                         )}
 
-                        {/* Data Table */}
+                        {/* User Productivity */}
                         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                                 <h4 className="font-bold text-slate-900 dark:text-white">User Productivity Breakdown</h4>
@@ -377,7 +418,7 @@ const Reports: React.FC = () => {
                                             <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-primary/10 text-primary`}>
+                                                        <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs bg-primary/10 text-primary">
                                                             {u.initials}
                                                         </div>
                                                         <div>
@@ -397,7 +438,9 @@ const Reports: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">{u.status}</span>
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                        {u.status}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         ))}

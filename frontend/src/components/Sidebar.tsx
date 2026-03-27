@@ -1,9 +1,25 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle } from 'lucide-react';
+import {
+    LayoutDashboard, Clock, Calendar, FileText, BarChart2,
+    Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle,
+    Sun, Moon,
+} from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
 import UserAvatar from './UserAvatar';
+
+interface NavItem {
+    name: string;
+    path: string;
+    icon: React.ReactNode;
+    allowedRoles?: string[];
+}
+
+interface NavGroup {
+    label?: string;
+    items: NavItem[];
+}
 
 interface SidebarProps {
     isOpen: boolean;
@@ -11,22 +27,50 @@ interface SidebarProps {
     onStartTour?: () => void;
 }
 
+const NAV_GROUPS: NavGroup[] = [
+    {
+        items: [
+            { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+            { name: 'Timer', path: '/timer', icon: <Clock size={20} /> },
+        ],
+    },
+    {
+        label: 'INSIGHTS',
+        items: [
+            { name: 'Timeline', path: '/timeline', icon: <Calendar size={20} /> },
+            { name: 'Timesheet', path: '/timesheet', icon: <FileText size={20} /> },
+            { name: 'Reports', path: '/reports', icon: <BarChart2 size={20} /> },
+        ],
+    },
+    {
+        label: 'WORKSPACE',
+        items: [
+            { name: 'Team', path: '/team', icon: <Users size={20} />, allowedRoles: ['Manager', 'Admin'] },
+            { name: 'Admin', path: '/admin', icon: <ShieldCheck size={20} />, allowedRoles: ['Admin'] },
+            { name: 'Integrations', path: '/integrations', icon: <Box size={20} /> },
+            { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
+        ],
+    },
+];
+
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
     const navigate = useNavigate();
     const user = getStoredUserProfile();
     const initials = `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U';
 
-    const navItems = [
-        { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
-        { name: 'Timer', path: '/timer', icon: <Clock size={20} /> },
-        { name: 'Timeline', path: '/timeline', icon: <Calendar size={20} /> },
-        { name: 'Timesheet', path: '/timesheet', icon: <FileText size={20} /> },
-        { name: 'Reports', path: '/reports', icon: <BarChart2 size={20} /> },
-        { name: 'Team', path: '/team', icon: <Users size={20} />, allowedRoles: ['Manager', 'Admin'] },
-        { name: 'Admin', path: '/admin', icon: <ShieldCheck size={20} />, allowedRoles: ['Admin'] },
-        { name: 'Integrations', path: '/integrations', icon: <Box size={20} /> },
-        { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
-    ].filter((item) => !item.allowedRoles || hasAnyRole(item.allowedRoles));
+    const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+    const toggleTheme = () => {
+        const next = !isDark;
+        setIsDark(next);
+        if (next) {
+            document.documentElement.classList.add('dark');
+            localStorage.setItem('wfx-theme', 'dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.setItem('wfx-theme', 'light');
+        }
+    };
 
     return (
         <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
@@ -41,19 +85,33 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
             </div>
 
             <nav className="sidebar-nav">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.path}
-                        to={item.path}
-                        className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-                        onClick={() => {
-                            if (window.innerWidth <= 768) onClose();
-                        }}
-                    >
-                        <span className="link-icon">{item.icon}</span>
-                        <span className="link-text">{item.name}</span>
-                    </NavLink>
-                ))}
+                {NAV_GROUPS.map((group, groupIndex) => {
+                    const visibleItems = group.items.filter(
+                        (item) => !item.allowedRoles || hasAnyRole(item.allowedRoles),
+                    );
+                    if (visibleItems.length === 0) return null;
+
+                    return (
+                        <React.Fragment key={groupIndex}>
+                            {group.label && (
+                                <span className="nav-group-label">{group.label}</span>
+                            )}
+                            {visibleItems.map((item) => (
+                                <NavLink
+                                    key={item.path}
+                                    to={item.path}
+                                    className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+                                    onClick={() => {
+                                        if (window.innerWidth <= 768) onClose();
+                                    }}
+                                >
+                                    <span className="link-icon">{item.icon}</span>
+                                    <span className="link-text">{item.name}</span>
+                                </NavLink>
+                            ))}
+                        </React.Fragment>
+                    );
+                })}
             </nav>
 
             <div className="sidebar-footer">
@@ -76,12 +134,24 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
                     <span className="link-text">Product Tour</span>
                 </button>
                 <button
-                    className="sidebar-link mt-2"
+                    className="sidebar-link"
+                    onClick={toggleTheme}
+                    type="button"
+                    aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                    <span className="link-icon">
+                        {isDark ? <Sun size={20} /> : <Moon size={20} />}
+                    </span>
+                    <span className="link-text">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+                </button>
+                <button
+                    className="sidebar-link"
                     onClick={() => {
                         clearStoredSession();
                         navigate('/login', { replace: true });
                     }}
                     type="button"
+                    aria-label="Sign out"
                 >
                     <span className="link-icon"><LogOut size={20} /></span>
                     <span className="link-text">Sign Out</span>

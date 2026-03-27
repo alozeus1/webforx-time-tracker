@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CalendarX } from 'lucide-react';
 import api from '../services/api';
 import type { ActiveTimerSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 
@@ -142,35 +143,40 @@ const Timeline: React.FC = () => {
     };
 
     return (
-        <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50">
-            <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/95 p-4 backdrop-blur md:p-6">
+        <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50 dark:bg-slate-900">
+            <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 p-4 backdrop-blur md:p-6">
                 <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <button
-                        className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+                        className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                         onClick={() => moveDay(-1)}
                         title="Previous day"
                     >
                         <span className="material-symbols-outlined">chevron_left</span>
                     </button>
                     <div className="text-center">
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{toDayLabel(currentDate)}</h2>
-                        <p className="text-sm text-slate-500">Week {toWeekNumber(currentDate)} of {currentDate.getFullYear()}</p>
+                        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight" style={{ fontFamily: 'var(--font-family-display)' }}>
+                            {toDayLabel(currentDate)}
+                        </h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">Week {toWeekNumber(currentDate)} of {currentDate.getFullYear()}</p>
                     </div>
                     <button
-                        className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
+                        className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                         onClick={() => moveDay(1)}
                         title="Next day"
                     >
                         <span className="material-symbols-outlined">chevron_right</span>
                     </button>
-                    <button className="ml-1 rounded-lg bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600" onClick={() => setCurrentDate(today)}>
+                    <button
+                        className="ml-1 rounded-lg bg-slate-100 dark:bg-slate-700 px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        onClick={() => setCurrentDate(today)}
+                    >
                         Today
                     </button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 md:gap-3">
                     <button
-                        className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-300"
+                        className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                         onClick={() => setShowOnlyCurrentDay((value) => !value)}
                         title={showOnlyCurrentDay ? 'Showing selected day only' : 'Showing full week'}
                     >
@@ -178,7 +184,7 @@ const Timeline: React.FC = () => {
                         Filter
                     </button>
                     <button
-                        className="flex items-center gap-2 bg-primary px-6 py-2 rounded-lg text-sm font-bold text-white shadow-lg shadow-primary/30 hover:bg-primary/90"
+                        className="flex items-center gap-2 bg-primary px-6 py-2 rounded-lg text-sm font-bold text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all"
                         onClick={() => navigate('/timer')}
                     >
                         <span className="material-symbols-outlined text-[18px]">add</span>
@@ -189,22 +195,23 @@ const Timeline: React.FC = () => {
 
             <div className="flex flex-1 overflow-hidden">
                 <main className="flex flex-1 flex-col overflow-y-auto p-4 md:p-6">
-                    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    {/* Timeline container — position:relative + overflow:hidden keeps the time pill inside */}
+                    <div className="relative overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
                         {isCurrentDateToday && (
                             <div className="absolute z-10 w-full border-t-2 border-rose-500" style={{ top: `${currentLineTopPercent}%` }}>
-                                <div className="absolute -left-2 -top-1 w-3 h-3 rounded-full bg-rose-500 ring-4 ring-rose-500/20"></div>
-                                <div className="absolute left-[85px] -top-3 px-2 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full">
+                                <div className="absolute -left-1.5 -top-1.5 w-3 h-3 rounded-full bg-rose-500 ring-4 ring-rose-500/20"></div>
+                                <div className="absolute left-[88px] top-0.5 px-2 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full whitespace-nowrap">
                                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </div>
                             </div>
                         )}
 
-                        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-5 py-4">
                             <div>
                                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                                     {showOnlyCurrentDay ? 'Selected Day Entries' : 'Week Entries'}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-slate-500 dark:text-slate-400">
                                     {formatDuration(totalSeconds)} logged • {displayedEntries.length} entries
                                 </p>
                             </div>
@@ -216,12 +223,29 @@ const Timeline: React.FC = () => {
                             </button>
                         </div>
 
-                        {loading && <p className="px-5 py-8 text-sm text-slate-500">Loading timeline...</p>}
+                        {loading && (
+                            <div className="px-5 py-8 space-y-3">
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="skeleton h-14 w-full rounded-lg" />
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Empty state */}
                         {!loading && displayedEntries.length === 0 && (
-                            <div className="px-5 py-8">
-                                <p className="text-sm text-slate-500 mb-4">No entries for this range yet.</p>
+                            <div className="flex flex-col items-center justify-center px-5 py-14 text-center">
+                                <div className="mb-5 flex items-center justify-center w-20 h-20 rounded-full"
+                                    style={{ backgroundColor: 'rgba(53, 74, 192, 0.12)' }}>
+                                    <CalendarX size={40} style={{ color: 'var(--color-primary)' }} />
+                                </div>
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-1">
+                                    Nothing tracked yet
+                                </h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 max-w-xs">
+                                    Start tracking your work to see it appear here.
+                                </p>
                                 <button
-                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white hover:bg-primary/90"
+                                    className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
                                     onClick={() => navigate('/timer')}
                                 >
                                     <span className="material-symbols-outlined text-base">add</span>
@@ -231,12 +255,12 @@ const Timeline: React.FC = () => {
                         )}
 
                         {!loading && displayedEntries.length > 0 && (
-                            <div className="divide-y divide-slate-100">
+                            <div className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {displayedEntries.map((entry) => (
-                                    <div key={entry.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                                    <div key={entry.id} className="px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
                                         <div>
                                             <p className="font-bold text-slate-900 dark:text-slate-100">{entry.task_description}</p>
-                                            <p className="text-xs text-slate-500">
+                                            <p className="text-xs text-slate-500 dark:text-slate-400">
                                                 {entry.project?.name || 'No project'} • {new Date(entry.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(entry.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </p>
                                         </div>
@@ -245,7 +269,7 @@ const Timeline: React.FC = () => {
                                                 {formatDuration(entry.duration || 0)}
                                             </span>
                                             <button
-                                                className="rounded p-1 hover:bg-slate-100"
+                                                className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
                                                 title="Edit in Timer"
                                                 onClick={() => navigate(`/timer?task=${encodeURIComponent(entry.task_description)}${entry.project?.id ? `&projectId=${encodeURIComponent(entry.project.id)}` : ''}`)}
                                             >
@@ -257,9 +281,9 @@ const Timeline: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="border-t border-slate-100 px-5 py-4">
+                        <div className="border-t border-slate-100 dark:border-slate-700 px-5 py-4">
                             <button
-                                className="w-full rounded-lg border border-dashed border-slate-300 px-4 py-3 text-xs font-bold text-slate-500 hover:bg-slate-50"
+                                className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-600 px-4 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                                 onClick={() => navigate('/timer')}
                             >
                                 + Add Entry
@@ -268,15 +292,15 @@ const Timeline: React.FC = () => {
                     </div>
                 </main>
 
-                <aside className="hidden w-80 flex-col gap-8 overflow-y-auto border-l border-slate-200 bg-white p-6 lg:flex">
+                <aside className="hidden w-80 flex-col gap-8 overflow-y-auto border-l border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 lg:flex">
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest">Mini Calendar</h3>
                             <span className="material-symbols-outlined text-slate-400">calendar_view_day</span>
                         </div>
                         <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day) => (
-                                <span key={day} className="text-[10px] font-bold text-slate-400">{day}</span>
+                            {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
+                                <span key={i} className="text-[10px] font-bold text-slate-400">{day}</span>
                             ))}
                         </div>
                         <div className="grid grid-cols-7 gap-1 text-center">
@@ -285,7 +309,7 @@ const Timeline: React.FC = () => {
                                 return (
                                     <button
                                         key={day.toISOString()}
-                                        className={`text-xs p-1 rounded-lg ${isSelected ? 'bg-primary text-white font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+                                        className={`text-xs p-1 rounded-lg transition-colors ${isSelected ? 'bg-primary text-white font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
                                         onClick={() => setCurrentDate(getStartOfDay(day))}
                                     >
                                         {day.getDate()}
@@ -302,7 +326,7 @@ const Timeline: React.FC = () => {
                         </div>
                         <div className="space-y-4">
                             {activity.length === 0 && (
-                                <p className="text-sm text-slate-500">No project activity yet.</p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">No project activity yet.</p>
                             )}
                             {activity.map((item) => (
                                 <div key={item.id} className="flex gap-3">
@@ -320,7 +344,9 @@ const Timeline: React.FC = () => {
                         <div className="bg-primary/5 rounded-xl p-4 border border-primary/20 text-center">
                             <span className="material-symbols-outlined text-primary text-4xl mb-2">stars</span>
                             <h4 className="font-bold text-slate-900 dark:text-slate-100 mb-1">Weekly Summary</h4>
-                            <p className="text-xs text-slate-500 mb-4">You&apos;ve logged {formatDuration(weekEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0))} this week.</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                                You&apos;ve logged {formatDuration(weekEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0))} this week.
+                            </p>
                             <button
                                 className="w-full py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary/90 transition-all"
                                 onClick={() => navigate('/reports')}

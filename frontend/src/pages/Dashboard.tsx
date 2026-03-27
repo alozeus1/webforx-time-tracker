@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { CheckCircle, TrendingUp } from 'lucide-react';
 import api from '../services/api';
 import type { NotificationSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 import { getStoredRole } from '../utils/session';
+
+const ENTRY_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9'];
 
 const getElapsedSeconds = (startTime: string) =>
     Math.max(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000), 0);
@@ -106,17 +109,22 @@ const Dashboard: React.FC = () => {
 
     const clock = formatClock(liveSeconds);
     const progressPercent = Math.min((totalSeconds / (8 * 3600)) * 100, 100);
+    const goalReached = progressPercent >= 100;
+
+    // Last completed entry duration for the Live Timer card
+    const lastEntry = entries.length > 0 ? entries[0] : null;
 
     return (
         <div className="flex-1 flex flex-col min-w-0 w-full">
-            <header className="rounded-2xl border border-slate-200 bg-white/85 backdrop-blur-md flex items-center justify-between px-5 py-4 mb-6 shadow-sm hidden md:flex">
+            {/* In-page dashboard header */}
+            <header className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/85 dark:bg-slate-800/85 backdrop-blur-md flex items-center justify-between px-5 py-4 mb-6 shadow-sm hidden md:flex">
                 <div className="flex items-center gap-4">
                     <div>
                         <p className="text-[0.68rem] font-bold uppercase tracking-[0.12em] text-slate-500">Overview</p>
-                        <h1 className="text-xl font-black text-slate-900">Dashboard</h1>
+                        <h1 className="text-xl font-black text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-family-display)' }}>Dashboard</h1>
                     </div>
                     {activeTimerStart && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                             Timer Running
                         </span>
@@ -127,6 +135,7 @@ const Dashboard: React.FC = () => {
                         className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"
                         onClick={() => setNotificationsOpen((prev) => !prev)}
                         title="View alerts"
+                        aria-label="View alerts"
                     >
                         <span className="material-symbols-outlined">notifications</span>
                         <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
@@ -142,7 +151,7 @@ const Dashboard: React.FC = () => {
                     {notificationsOpen && (
                         <div className="absolute right-0 top-12 w-80 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
                             <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <p className="text-sm font-bold">Recent Alerts</p>
+                                <p className="text-sm font-bold dark:text-slate-100">Recent Alerts</p>
                                 <button
                                     className="text-xs font-semibold text-primary hover:underline"
                                     onClick={() => navigate('/admin?tab=notifications')}
@@ -168,39 +177,44 @@ const Dashboard: React.FC = () => {
 
             <div className="overflow-y-auto">
                 <div className="max-w-6xl mx-auto space-y-6">
-                    <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+
+                    {/* Timer Widget */}
+                    <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm transition-colors">
                         <div className="flex flex-col lg:flex-row gap-6 items-center">
-                            <div className="flex items-center gap-4 lg:pr-8 lg:border-r border-slate-200 w-full lg:w-auto justify-center">
-                                <div className="text-center">
+                            {/* Clock digits + play button */}
+                            <div className="flex items-center gap-4 lg:pr-8 lg:border-r border-slate-200 dark:border-slate-700 w-full lg:w-auto justify-center">
+                                <div className="flex items-center gap-3">
+                                    {/* Digit blocks */}
                                     <div className="flex gap-2">
-                                        <div className="bg-slate-100 px-4 py-3 rounded-xl border border-slate-200">
-                                            <span className="text-3xl font-bold tracking-tighter font-mono">{clock.hh}</span>
-                                            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">HR</p>
+                                        <div className="bg-slate-100 dark:bg-slate-700 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 text-center">
+                                            <span className="text-5xl font-black tracking-tighter" style={{ fontFamily: 'var(--font-family-display)' }}>{clock.hh}</span>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mt-1">HR</p>
                                         </div>
-                                        <div className="text-2xl font-bold self-center text-slate-300">:</div>
-                                        <div className="bg-slate-100 px-4 py-3 rounded-xl border border-slate-200">
-                                            <span className="text-3xl font-bold tracking-tighter font-mono">{clock.mm}</span>
-                                            <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">MIN</p>
+                                        <div className="text-2xl font-bold self-center text-slate-300 dark:text-slate-600">:</div>
+                                        <div className="bg-slate-100 dark:bg-slate-700 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 text-center">
+                                            <span className="text-5xl font-black tracking-tighter" style={{ fontFamily: 'var(--font-family-display)' }}>{clock.mm}</span>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mt-1">MIN</p>
                                         </div>
-                                        <div className="text-2xl font-bold self-center text-slate-300">:</div>
-                                        <div className="bg-primary/10 text-primary px-4 py-3 rounded-xl border border-primary/20">
-                                            <span className="text-3xl font-bold tracking-tighter font-mono">{clock.ss}</span>
-                                            <p className="text-[10px] uppercase tracking-wider text-primary/60 font-semibold mt-1">SEC</p>
+                                        <div className="text-2xl font-bold self-center text-slate-300 dark:text-slate-600">:</div>
+                                        <div className="bg-slate-100 dark:bg-slate-700 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 text-center">
+                                            <span className="text-5xl font-black tracking-tighter" style={{ fontFamily: 'var(--font-family-display)' }}>{clock.ss}</span>
+                                            <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mt-1">SEC</p>
                                         </div>
                                     </div>
+                                    <button
+                                        onClick={() => navigate('/timer')}
+                                        className="btn btn-primary timer-play-btn"
+                                        aria-label="Start timer"
+                                    >
+                                        <span className="material-symbols-outlined text-3xl">{activeTimerStart ? 'pause' : 'play_arrow'}</span>
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => navigate('/timer')}
-                                    className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/30 hover:scale-105 transition-transform"
-                                >
-                                    <span className="material-symbols-outlined text-3xl">{activeTimerStart ? 'pause' : 'play_arrow'}</span>
-                                </button>
                             </div>
 
                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Project</label>
-                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Project</label>
+                                    <select className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none">
                                         <option value="">Select a project</option>
                                         {projects.map((project) => (
                                             <option key={project.id} value={project.id}>
@@ -210,8 +224,8 @@ const Dashboard: React.FC = () => {
                                     </select>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Top Project</label>
-                                    <div className="w-full bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Top Project</label>
+                                    <div className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm px-3 py-2 text-slate-900 dark:text-slate-100">
                                         {topProject.name} ({formatHours(topProject.seconds)})
                                     </div>
                                 </div>
@@ -219,31 +233,107 @@ const Dashboard: React.FC = () => {
                         </div>
                     </section>
 
+                    {/* Stat Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                            <span className="text-slate-500 text-sm font-medium">Daily Goal</span>
-                            <div className="text-2xl font-bold mt-3">{loading ? '...' : (totalSeconds / 3600).toFixed(1)} / 8h</div>
-                            <div className="mt-4 h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                <div className="h-full bg-primary rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+
+                        {/* Daily Goal */}
+                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Daily Goal</span>
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    <TrendingUp size={12} /> +5% vs last week
+                                </span>
+                            </div>
+                            <div className="text-2xl font-bold mt-3 dark:text-slate-100">
+                                {loading ? <div className="skeleton h-8 w-20 rounded" /> : `${(totalSeconds / 3600).toFixed(1)} / 8h`}
+                            </div>
+                            <div className="mt-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full transition-all duration-1000"
+                                            style={{
+                                                width: `${progressPercent}%`,
+                                                background: goalReached
+                                                    ? 'var(--color-success)'
+                                                    : 'linear-gradient(90deg, var(--color-primary), #818cf8)',
+                                            }}
+                                        />
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                        {Math.round(progressPercent)}%
+                                    </span>
+                                </div>
+                                {goalReached && (
+                                    <div className="mt-1.5 flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                        <CheckCircle size={12} />
+                                        Goal reached!
+                                    </div>
+                                )}
                             </div>
                         </div>
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                            <span className="text-slate-500 text-sm font-medium">Projects</span>
-                            <div className="text-2xl font-bold mt-3">{loading ? '...' : projects.length}</div>
+
+                        {/* Projects */}
+                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Projects</span>
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                                    <TrendingUp size={12} /> Active
+                                </span>
+                            </div>
+                            <div className="text-2xl font-bold mt-3 dark:text-slate-100">
+                                {loading ? <div className="skeleton h-8 w-12 rounded" /> : projects.length}
+                            </div>
                         </div>
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                            <span className="text-slate-500 text-sm font-medium">Recent Entries</span>
-                            <div className="text-2xl font-bold mt-3">{loading ? '...' : entries.length}</div>
+
+                        {/* Recent Entries */}
+                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                            <div className="flex items-center justify-between">
+                                <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Recent Entries</span>
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-500">
+                                    <TrendingUp size={12} /> Today
+                                </span>
+                            </div>
+                            <div className="text-2xl font-bold mt-3 dark:text-slate-100">
+                                {loading ? <div className="skeleton h-8 w-12 rounded" /> : entries.length}
+                            </div>
                         </div>
-                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                            <span className="text-slate-500 text-sm font-medium">Live Timer</span>
-                            <div className="text-2xl font-bold mt-3">{activeTimerStart ? formatClock(liveSeconds).hh + ':' + formatClock(liveSeconds).mm : 'Stopped'}</div>
+
+                        {/* Live Timer */}
+                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                            <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Live Timer</span>
+                            <div className="text-2xl font-bold mt-3 dark:text-slate-100">
+                                {loading
+                                    ? <div className="skeleton h-8 w-20 rounded" />
+                                    : activeTimerStart
+                                        ? `${formatClock(liveSeconds).hh}:${formatClock(liveSeconds).mm}`
+                                        : 'Stopped'
+                                }
+                            </div>
+                            {!loading && !activeTimerStart && (
+                                <>
+                                    {lastEntry && (
+                                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                            Last session: {formatHours(lastEntry.duration || 0)}
+                                        </p>
+                                    )}
+                                    <button
+                                        onClick={() => navigate('/timer')}
+                                        className="mt-2 text-xs font-bold text-primary hover:underline"
+                                    >
+                                        Start Timer →
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
 
-                    <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                    {/* Recent Tasks */}
+                    <section className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-base font-bold text-slate-900">Recent Tasks</h3>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-family-display)' }}>
+                                Recent Tasks
+                            </h3>
                             <button
                                 onClick={() => navigate('/timer')}
                                 className="text-xs font-semibold text-primary hover:underline"
@@ -251,15 +341,42 @@ const Dashboard: React.FC = () => {
                                 View Timer
                             </button>
                         </div>
-                        {entries.length === 0 ? (
-                            <p className="text-sm text-slate-500">No completed tasks yet today.</p>
-                        ) : (
+                        {loading ? (
                             <div className="space-y-2">
-                                {entries.slice(0, 6).map((entry) => (
-                                    <div key={entry.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                                        {entry.task_description}
-                                    </div>
+                                {[1, 2, 3].map((i) => (
+                                    <div key={i} className="skeleton h-10 w-full rounded-lg" />
                                 ))}
+                            </div>
+                        ) : entries.length === 0 ? (
+                            <p className="text-sm text-slate-500 dark:text-slate-400">No completed tasks yet today.</p>
+                        ) : (
+                            <div className="space-y-1">
+                                {entries.slice(0, 6).map((entry, index) => {
+                                    const dotColor = ENTRY_COLORS[index % ENTRY_COLORS.length];
+                                    const duration = entry.duration ? formatHours(entry.duration) : '—';
+                                    return (
+                                        <div
+                                            key={entry.id}
+                                            className="flex items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                                        >
+                                            <div
+                                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                                style={{ backgroundColor: dotColor }}
+                                            />
+                                            <span className="flex-1 text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                                                {entry.task_description}
+                                            </span>
+                                            {entry.project?.name && (
+                                                <span className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-700 dark:text-slate-400 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                                    {entry.project.name}
+                                                </span>
+                                            )}
+                                            <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap font-medium tabular-nums">
+                                                {duration}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </section>

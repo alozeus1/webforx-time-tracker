@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Menu, Bell, Search, LogOut } from 'lucide-react';
+import { Menu, Bell, Search } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { clearStoredSession, getStoredRole } from '../utils/session';
+import { getStoredRole } from '../utils/session';
 import api from '../services/api';
 import './Navbar.css';
 
@@ -59,11 +59,6 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
         navigate('/reports');
     };
 
-    const handleSignOut = () => {
-        clearStoredSession();
-        navigate('/login', { replace: true });
-    };
-
     return (
         <header className="top-navbar">
             <div className="navbar-left">
@@ -89,13 +84,19 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
             </div>
 
             <div className="navbar-right">
-                <button className="notification-btn" onClick={handleNotifications} title="Open notifications" type="button">
+                <button
+                    className="notification-btn"
+                    onClick={handleNotifications}
+                    title="View notifications"
+                    type="button"
+                    aria-label="View notifications"
+                >
                     <Bell size={20} />
-                    {alertCount > 0 && <span className="badge">{alertCount > 99 ? '99+' : alertCount}</span>}
-                </button>
-                <button className="logout-btn" onClick={handleSignOut} title="Sign out" type="button">
-                    <LogOut size={18} />
-                    <span>Sign Out</span>
+                    {alertCount > 0 && (
+                        <span className="badge" style={{ animation: 'badge-pulse 2s ease-in-out infinite' }}>
+                            {alertCount > 99 ? '99+' : alertCount}
+                        </span>
+                    )}
                 </button>
             </div>
         </header>
