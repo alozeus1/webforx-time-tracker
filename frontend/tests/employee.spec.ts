@@ -13,6 +13,12 @@ test.describe('Employee Daily Time Tracking Simulation', () => {
         await page.getByRole('button', { name: 'Sign In' }).click();
 
         await expect(page).toHaveURL(/.*dashboard/);
+
+        // Dismiss onboarding tour if it appears
+        const skipBtn = page.getByRole('button', { name: 'Skip tour' });
+        if (await skipBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await skipBtn.click();
+        }
     });
 
     test('Employee full day simulation: Clock In, Add Task, Clock Out', async ({ page }) => {
