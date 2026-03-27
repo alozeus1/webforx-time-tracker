@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
 import Timer from './pages/Timer';
 import Timeline from './pages/Timeline';
@@ -33,26 +34,35 @@ const ProtectedRoute = ({
   return <>{children}</>;
 };
 
+const RootRedirect: React.FC = () => {
+  const token = getStoredToken();
+  if (token) return <Navigate to="/dashboard" replace />;
+  return <Landing />;
+};
+
 const App: React.FC = () => {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public routes */}
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/landing" element={<Landing />} />
         <Route path="/login" element={<Login />} />
 
-        <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="timer" element={<Timer />} />
-          <Route path="timeline" element={<Timeline />} />
-          <Route path="timesheet" element={<Timesheet />} />
-          <Route path="reports" element={<Reports />} />
-          <Route path="team" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Team /></ProtectedRoute>} />
-          <Route path="admin" element={<ProtectedRoute allowedRoles={['Admin']}><Admin /></ProtectedRoute>} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="profile" element={<Profile />} />
-          <Route path="integrations" element={<Integrations />} />
-          <Route path="integrations/taiga" element={<Integrations />} />
-          <Route path="integrations/mattermost" element={<Integrations />} />
+        {/* Protected app routes */}
+        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/timer" element={<Timer />} />
+          <Route path="/timeline" element={<Timeline />} />
+          <Route path="/timesheet" element={<Timesheet />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/team" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Team /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin']}><Admin /></ProtectedRoute>} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/integrations" element={<Integrations />} />
+          <Route path="/integrations/taiga" element={<Integrations />} />
+          <Route path="/integrations/mattermost" element={<Integrations />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,15 +1,16 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users, Settings, Box, ShieldCheck, X, LogOut } from 'lucide-react';
+import { LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
 
 interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
+    onStartTour?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
     const navigate = useNavigate();
     const user = getStoredUserProfile();
     const initials = `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U';
@@ -33,7 +34,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                     <div className="logo-icon">TF</div>
                     <span className="logo-text">Time Tracker</span>
                 </div>
-                <button className="sidebar-close" onClick={onClose}>
+                <button className="sidebar-close" onClick={onClose} type="button" aria-label="Close navigation">
                     <X size={24} />
                 </button>
             </div>
@@ -62,6 +63,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                         <span className="user-role">{user?.role || 'User'}</span>
                     </div>
                 </NavLink>
+                <button
+                    className="sidebar-link"
+                    onClick={() => {
+                        onStartTour?.();
+                        if (window.innerWidth <= 768) onClose();
+                    }}
+                    type="button"
+                >
+                    <span className="link-icon"><HelpCircle size={20} /></span>
+                    <span className="link-text">Product Tour</span>
+                </button>
                 <button
                     className="sidebar-link mt-2"
                     onClick={() => {

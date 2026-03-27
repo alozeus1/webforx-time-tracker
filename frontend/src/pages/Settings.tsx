@@ -21,17 +21,23 @@ const settings = [
 
 const Settings: React.FC = () => {
     return (
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark p-8 w-full">
-            <div className="max-w-3xl mx-auto space-y-6">
-                <div>
-                    <h1 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Settings</h1>
-                    <p className="mt-1 text-slate-500">Environment-backed configuration notes for live testing and deployment.</p>
+        <div className="flex-1 w-full overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
+            <div className="mx-auto max-w-5xl space-y-6">
+                <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Workspace Configuration</p>
+                    <h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900">Settings</h1>
+                    <p className="mt-2 max-w-2xl text-sm text-slate-500">
+                        Environment-backed configuration notes for live testing and deployment.
+                    </p>
                 </div>
 
-                <div className="space-y-4">
-                    {settings.map((setting) => (
-                        <div key={setting.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">{setting.title}</h2>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {settings.map((setting, index) => (
+                        <div key={setting.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <div className="mb-3 inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                                Section {index + 1}
+                            </div>
+                            <h2 className="text-lg font-bold text-slate-900">{setting.title}</h2>
                             <p className="mt-2 text-sm leading-6 text-slate-500">{setting.description}</p>
                         </div>
                     ))}

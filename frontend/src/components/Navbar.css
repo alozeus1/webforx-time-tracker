@@ -3,32 +3,68 @@
     align-items: center;
     gap: var(--space-4);
     flex: 1;
+    min-width: 0;
+}
+
+.workspace-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.workspace-kicker {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    line-height: 1;
+}
+
+.workspace-title {
+    font-size: 1rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
 }
 
 .menu-trigger {
     display: none;
-    background: none;
-    border: none;
+    background: transparent;
+    border: 1px solid var(--border-color);
     color: var(--text-main);
     cursor: pointer;
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-md);
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-trigger:hover {
+    background: var(--bg-soft);
 }
 
 .search-bar {
     display: flex;
     align-items: center;
-    background-color: var(--bg-subtle);
+    background-color: #fff;
     border: 1px solid var(--border-color);
     border-radius: var(--radius-full);
     padding: var(--space-2) var(--space-4);
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     transition: all var(--transition-fast);
+    box-shadow: var(--shadow-xs);
 }
 
 .search-bar:focus-within {
-    border-color: var(--color-primary);
-    background-color: var(--bg-main);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: rgba(53, 74, 192, 0.45);
+    box-shadow: 0 0 0 4px rgba(53, 74, 192, 0.12);
 }
 
 .search-icon {
@@ -45,6 +81,10 @@
     color: var(--text-main);
 }
 
+.search-input::placeholder {
+    color: #94a3b8;
+}
+
 .search-input:focus {
     outline: none;
 }
@@ -56,63 +96,85 @@
 }
 
 .notification-btn {
-    background: none;
-    border: none;
+    background: #fff;
+    border: 1px solid var(--border-color);
     color: var(--text-muted);
     cursor: pointer;
     position: relative;
-    padding: var(--space-2);
-    border-radius: var(--radius-full);
-    transition: background-color var(--transition-fast);
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-md);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
 }
 
 .notification-btn:hover {
-    background-color: var(--bg-subtle);
+    background-color: var(--bg-soft);
     color: var(--text-main);
+    border-color: var(--border-color-strong);
 }
 
 .logout-btn {
     border: 1px solid var(--border-color);
-    background-color: var(--bg-main);
+    background-color: #fff;
     color: var(--text-main);
     border-radius: var(--radius-md);
-    padding: var(--space-2) var(--space-3);
+    padding: 0.55rem 0.8rem;
     font-size: 0.8rem;
     font-weight: 700;
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
     cursor: pointer;
+    transition: all var(--transition-fast);
 }
 
 .logout-btn:hover {
-    background-color: var(--bg-subtle);
+    background-color: var(--bg-soft);
+    border-color: var(--border-color-strong);
 }
 
 .badge {
     position: absolute;
-    top: 2px;
-    right: 2px;
+    top: -4px;
+    right: -4px;
     background-color: var(--color-danger);
     color: white;
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     font-weight: 700;
-    min-width: 16px;
-    height: 16px;
+    min-width: 18px;
+    height: 18px;
     border-radius: var(--radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid var(--bg-main);
+    border: 2px solid #fff;
 }
 
 @media (max-width: 768px) {
     .menu-trigger {
-        display: block;
+        display: inline-flex;
     }
 
     .search-bar {
         display: none;
-        /* Hide search on small mobile for cleaner layout */
+    }
+
+    .workspace-title {
+        max-width: 130px;
+        font-size: 0.92rem;
+    }
+
+    .logout-btn span {
+        display: none;
+    }
+
+    .logout-btn {
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        justify-content: center;
     }
 }

@@ -142,9 +142,9 @@ const Timeline: React.FC = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-background-dark w-full overflow-y-auto">
-            <div className="flex flex-wrap justify-between items-center gap-4 p-6 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10 hidden md:flex">
-                <div className="flex items-center gap-4">
+        <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50">
+            <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 bg-white/95 p-4 backdrop-blur md:p-6">
+                <div className="flex flex-wrap items-center gap-3 md:gap-4">
                     <button
                         className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50"
                         onClick={() => moveDay(-1)}
@@ -163,15 +163,12 @@ const Timeline: React.FC = () => {
                     >
                         <span className="material-symbols-outlined">chevron_right</span>
                     </button>
-                    <button
-                        className="ml-2 px-4 py-2 text-sm font-bold text-slate-600 bg-slate-100 rounded-lg"
-                        onClick={() => setCurrentDate(today)}
-                    >
+                    <button className="ml-1 rounded-lg bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600" onClick={() => setCurrentDate(today)}>
                         Today
                     </button>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 md:gap-3">
                     <button
                         className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-300"
                         onClick={() => setShowOnlyCurrentDay((value) => !value)}
@@ -191,10 +188,10 @@ const Timeline: React.FC = () => {
             </div>
 
             <div className="flex flex-1 overflow-hidden">
-                <main className="flex-1 flex flex-col p-6 overflow-y-auto">
-                    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden relative">
+                <main className="flex flex-1 flex-col overflow-y-auto p-4 md:p-6">
+                    <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                         {isCurrentDateToday && (
-                            <div className="absolute w-full border-t-2 border-rose-500 z-10" style={{ top: `${currentLineTopPercent}%` }}>
+                            <div className="absolute z-10 w-full border-t-2 border-rose-500" style={{ top: `${currentLineTopPercent}%` }}>
                                 <div className="absolute -left-2 -top-1 w-3 h-3 rounded-full bg-rose-500 ring-4 ring-rose-500/20"></div>
                                 <div className="absolute left-[85px] -top-3 px-2 py-0.5 bg-rose-500 text-white text-[10px] font-bold rounded-full">
                                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -202,7 +199,7 @@ const Timeline: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
                             <div>
                                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                                     {showOnlyCurrentDay ? 'Selected Day Entries' : 'Week Entries'}
@@ -234,7 +231,7 @@ const Timeline: React.FC = () => {
                         )}
 
                         {!loading && displayedEntries.length > 0 && (
-                            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                            <div className="divide-y divide-slate-100">
                                 {displayedEntries.map((entry) => (
                                     <div key={entry.id} className="px-5 py-4 flex items-center justify-between gap-3">
                                         <div>
@@ -248,7 +245,7 @@ const Timeline: React.FC = () => {
                                                 {formatDuration(entry.duration || 0)}
                                             </span>
                                             <button
-                                                className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+                                                className="rounded p-1 hover:bg-slate-100"
                                                 title="Edit in Timer"
                                                 onClick={() => navigate(`/timer?task=${encodeURIComponent(entry.task_description)}${entry.project?.id ? `&projectId=${encodeURIComponent(entry.project.id)}` : ''}`)}
                                             >
@@ -260,9 +257,9 @@ const Timeline: React.FC = () => {
                             </div>
                         )}
 
-                        <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800">
+                        <div className="border-t border-slate-100 px-5 py-4">
                             <button
-                                className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-700 px-4 py-3 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                                className="w-full rounded-lg border border-dashed border-slate-300 px-4 py-3 text-xs font-bold text-slate-500 hover:bg-slate-50"
                                 onClick={() => navigate('/timer')}
                             >
                                 + Add Entry
@@ -271,7 +268,7 @@ const Timeline: React.FC = () => {
                     </div>
                 </main>
 
-                <aside className="w-80 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hidden lg:flex flex-col p-6 gap-8 overflow-y-auto">
+                <aside className="hidden w-80 flex-col gap-8 overflow-y-auto border-l border-slate-200 bg-white p-6 lg:flex">
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-widest">Mini Calendar</h3>

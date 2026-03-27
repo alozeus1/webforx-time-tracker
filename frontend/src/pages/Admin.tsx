@@ -115,8 +115,8 @@ const Admin: React.FC = () => {
     };
 
     return (
-        <div className="flex-1 flex flex-col bg-slate-50 dark:bg-slate-900/50 overflow-y-auto w-full">
-            <div className="p-8 max-w-7xl mx-auto w-full">
+        <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50">
+            <div className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
                 <div className="flex flex-wrap justify-between items-end gap-4 mb-8">
                     <div className="flex flex-col gap-1">
                         <h1 className="text-slate-900 dark:text-white text-3xl font-black leading-tight tracking-tight">Organization Management</h1>

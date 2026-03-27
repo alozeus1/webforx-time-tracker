@@ -108,10 +108,13 @@ const Dashboard: React.FC = () => {
     const progressPercent = Math.min((totalSeconds / (8 * 3600)) * 100, 100);
 
     return (
-        <div className="flex-1 flex flex-col min-w-0 bg-background-light dark:bg-background-dark w-full">
-            <header className="h-16 border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md flex items-center justify-between px-8 sticky top-0 z-10 hidden md:flex">
+        <div className="flex-1 flex flex-col min-w-0 w-full">
+            <header className="rounded-2xl border border-slate-200 bg-white/85 backdrop-blur-md flex items-center justify-between px-5 py-4 mb-6 shadow-sm hidden md:flex">
                 <div className="flex items-center gap-4">
-                    <h1 className="text-lg font-bold text-slate-900 dark:text-slate-100">Dashboard</h1>
+                    <div>
+                        <p className="text-[0.68rem] font-bold uppercase tracking-[0.12em] text-slate-500">Overview</p>
+                        <h1 className="text-xl font-black text-slate-900">Dashboard</h1>
+                    </div>
                     {activeTimerStart && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -130,7 +133,7 @@ const Dashboard: React.FC = () => {
                     </button>
                     <button
                         onClick={() => navigate('/timer')}
-                        className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm hover:bg-primary/90 transition-all"
+                        className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
                     >
                         <span className="material-symbols-outlined text-sm">add</span>
                         New Entry
@@ -163,19 +166,19 @@ const Dashboard: React.FC = () => {
                 </div>
             </header>
 
-            <div className="p-8 overflow-y-auto">
-                <div className="max-w-6xl mx-auto space-y-8">
-                    <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6 shadow-sm">
+            <div className="overflow-y-auto">
+                <div className="max-w-6xl mx-auto space-y-6">
+                    <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
                         <div className="flex flex-col lg:flex-row gap-6 items-center">
-                            <div className="flex items-center gap-4 lg:pr-8 lg:border-r border-slate-200 dark:border-slate-800 w-full lg:w-auto justify-center">
+                            <div className="flex items-center gap-4 lg:pr-8 lg:border-r border-slate-200 w-full lg:w-auto justify-center">
                                 <div className="text-center">
                                     <div className="flex gap-2">
-                                        <div className="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                                        <div className="bg-slate-100 px-4 py-3 rounded-xl border border-slate-200">
                                             <span className="text-3xl font-bold tracking-tighter font-mono">{clock.hh}</span>
                                             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">HR</p>
                                         </div>
                                         <div className="text-2xl font-bold self-center text-slate-300">:</div>
-                                        <div className="bg-slate-100 dark:bg-slate-800 px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                                        <div className="bg-slate-100 px-4 py-3 rounded-xl border border-slate-200">
                                             <span className="text-3xl font-bold tracking-tighter font-mono">{clock.mm}</span>
                                             <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1">MIN</p>
                                         </div>
@@ -197,7 +200,7 @@ const Dashboard: React.FC = () => {
                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Project</label>
-                                    <select className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2 focus:outline-none">
+                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2 focus:outline-none">
                                         <option value="">Select a project</option>
                                         {projects.map((project) => (
                                             <option key={project.id} value={project.id}>
@@ -208,7 +211,7 @@ const Dashboard: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col gap-1">
                                     <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Top Project</label>
-                                    <div className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm px-3 py-2">
+                                    <div className="w-full bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2">
                                         {topProject.name} ({formatHours(topProject.seconds)})
                                     </div>
                                 </div>
@@ -217,30 +220,30 @@ const Dashboard: React.FC = () => {
                     </section>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                             <span className="text-slate-500 text-sm font-medium">Daily Goal</span>
                             <div className="text-2xl font-bold mt-3">{loading ? '...' : (totalSeconds / 3600).toFixed(1)} / 8h</div>
                             <div className="mt-4 h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                 <div className="h-full bg-primary rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
                             </div>
                         </div>
-                        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                             <span className="text-slate-500 text-sm font-medium">Projects</span>
                             <div className="text-2xl font-bold mt-3">{loading ? '...' : projects.length}</div>
                         </div>
-                        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                             <span className="text-slate-500 text-sm font-medium">Recent Entries</span>
                             <div className="text-2xl font-bold mt-3">{loading ? '...' : entries.length}</div>
                         </div>
-                        <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                             <span className="text-slate-500 text-sm font-medium">Live Timer</span>
                             <div className="text-2xl font-bold mt-3">{activeTimerStart ? formatClock(liveSeconds).hh + ':' + formatClock(liveSeconds).mm : 'Stopped'}</div>
                         </div>
                     </div>
 
-                    <section className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                    <section className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Recent Tasks</h3>
+                            <h3 className="text-base font-bold text-slate-900">Recent Tasks</h3>
                             <button
                                 onClick={() => navigate('/timer')}
                                 className="text-xs font-semibold text-primary hover:underline"
@@ -253,7 +256,7 @@ const Dashboard: React.FC = () => {
                         ) : (
                             <div className="space-y-2">
                                 {entries.slice(0, 6).map((entry) => (
-                                    <div key={entry.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-200">
+                                    <div key={entry.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                                         {entry.task_description}
                                     </div>
                                 ))}

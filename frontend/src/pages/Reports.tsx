@@ -113,7 +113,7 @@ const Reports: React.FC = () => {
     ];
 
     return (
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 p-8 w-full">
+        <div className="flex-1 w-full overflow-y-auto bg-slate-50 p-4 md:p-6 lg:p-8">
             <div className="max-w-6xl mx-auto space-y-8">
                 {/* Header & Filters */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -390,8 +390,8 @@ const Reports: React.FC = () => {
                                                 <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{u.totalHours}h</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="w-16 bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full">
-                                                            <div className="bg-emerald-500 h-full border-radius-full" style={{ width: `${Math.min(u.efficiency, 100)}%` }}></div>
+                                                        <div className="h-1.5 w-16 rounded-full bg-slate-100 dark:bg-slate-700">
+                                                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(u.efficiency, 100)}%` }}></div>
                                                         </div>
                                                         <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{u.efficiency}%</span>
                                                     </div>

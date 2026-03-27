@@ -253,56 +253,48 @@ const Timer: React.FC = () => {
     const progressPercentage = Math.min((todaysProgress / (8 * 3600)) * 100, 100);
 
     return (
-        <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-background-dark w-full pb-24">
-            <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-8 py-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                        <span className="material-symbols-outlined">timer</span>
-                    </div>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Web Forx Tracker</h1>
-                </div>
-            </header>
-
-            <main className="max-w-xl mx-auto px-4 pt-10 space-y-8">
-                <section className="bg-white dark:bg-slate-800/50 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800">
-                    <div className="flex justify-between items-end mb-4">
-                        <div>
-                            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Today's Progress</p>
-                            <h2 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-                                {loading ? '...' : formatProgressHours(todaysProgress)}
-                            </h2>
+        <div className="flex-1 w-full overflow-y-auto pb-12">
+            <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 lg:px-6">
+                <section className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="space-y-1">
+                            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Time Workspace</p>
+                            <h1 className="text-2xl font-black tracking-tight text-slate-900">Live Timer</h1>
+                            <p className="text-sm text-slate-500">Track focused work sessions with project context and daily goal visibility.</p>
                         </div>
-                        <div className="text-right">
-                            <p className="text-xs font-medium text-slate-400">Goal: 8h</p>
-                            <p className="text-sm font-bold text-emerald-500">{Math.round(progressPercentage)}% Complete</p>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Today</p>
+                            <p className="text-xl font-black text-slate-900">{loading ? '...' : formatProgressHours(todaysProgress)}</p>
                         </div>
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
-                        <div className="bg-emerald-500 h-full rounded-full transition-all duration-1000" style={{ width: `${progressPercentage}%` }}></div>
+                    <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                        <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                            {Math.round(progressPercentage)}% of 8h goal
+                        </div>
+                        {isRunning && (
+                            <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-rose-600">
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
+                                Recording
+                            </div>
+                        )}
+                    </div>
+                    <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${progressPercentage}%` }} />
                     </div>
                 </section>
 
-                <section className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Live Timer</h2>
-                        {isRunning && (
-                            <span className="text-xs font-medium text-red-500 bg-red-500/10 px-2 py-1 rounded-full uppercase flex items-center gap-1">
-                                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                                Recording
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="bg-white dark:bg-slate-800/50 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center">
-                        <div className={`text-6xl font-black font-mono tracking-tighter mb-8 ${isRunning ? 'text-primary' : 'text-slate-300 dark:text-slate-600'}`}>
+                <section className="grid gap-6 lg:grid-cols-[1.25fr_0.75fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className={`mb-6 text-center font-mono text-6xl font-black tracking-tighter ${isRunning ? 'text-primary' : 'text-slate-300'}`}>
                             {formatTime(time)}
                         </div>
 
                         <div className="space-y-4">
-                            <div className="relative group text-left">
-                                <label className="text-xs font-bold text-slate-500 uppercase ml-1 block mb-1">Task</label>
+                            <div className="relative text-left">
+                                <label className="mb-1 ml-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Task</label>
                                 <input
-                                    className={`w-full bg-slate-50 dark:bg-slate-900 border rounded-xl px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary focus:outline-none transition-all placeholder:text-slate-400 ${taskError ? 'border-rose-400 focus:ring-rose-400' : 'border-slate-200 dark:border-slate-700'}`}
+                                    className={`w-full rounded-xl border bg-slate-50 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 ${taskError ? 'border-rose-400 focus:ring-rose-400' : 'border-slate-200 focus:border-primary focus:ring-primary/20'}`}
                                     placeholder="What are you working on?"
                                     type="text"
                                     value={task}
@@ -315,9 +307,7 @@ const Timer: React.FC = () => {
                                     disabled={isRunning || submitting}
                                     title={isRunning ? 'Task is locked while timer is running. Stop timer to edit.' : undefined}
                                 />
-                                {taskError && (
-                                    <p className="mt-2 text-xs font-semibold text-rose-600">{taskError}</p>
-                                )}
+                                {taskError && <p className="mt-2 text-xs font-semibold text-rose-600">{taskError}</p>}
                                 {isRunning && (
                                     <p className="mt-2 text-xs text-slate-500">
                                         Task is locked while recording. Stop timer to edit task/project.
@@ -326,9 +316,9 @@ const Timer: React.FC = () => {
                             </div>
 
                             <div className="relative text-left">
-                                <label className="text-xs font-bold text-slate-500 uppercase ml-1 block mb-1">Project</label>
+                                <label className="mb-1 ml-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Project</label>
                                 <select
-                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary focus:outline-none appearance-none"
+                                    className="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     value={selectedProject}
                                     onChange={(event) => setSelectedProject(event.target.value)}
                                     disabled={isRunning || submitting}
@@ -338,72 +328,96 @@ const Timer: React.FC = () => {
                                         <option key={project.id} value={project.id}>{project.name}</option>
                                     ))}
                                 </select>
-                                <div className="absolute right-4 top-[38px] pointer-events-none text-slate-400">
+                                <div className="pointer-events-none absolute right-4 top-[38px] text-slate-400">
                                     <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
                                 </div>
                             </div>
 
-                            <div className="pt-4">
-                                <button
-                                    onClick={() => void handleToggle()}
-                                    disabled={submitting}
-                                    className={`w-full font-bold rounded-xl flex items-center justify-center py-4 gap-2 transition-all active:scale-95 shadow-lg disabled:cursor-not-allowed disabled:opacity-70 ${isRunning ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20' : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20'}`}
-                                >
-                                    <span className="material-symbols-outlined">{isRunning ? 'stop' : 'play_arrow'}</span>
-                                    {submitting ? 'Saving...' : (isRunning ? 'Stop Timer' : 'Start Timer')}
-                                </button>
-                            </div>
+                            <button
+                                onClick={() => void handleToggle()}
+                                disabled={submitting}
+                                className={`mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-70 ${isRunning ? 'bg-rose-500 shadow-rose-500/20 hover:bg-rose-600' : 'bg-emerald-500 shadow-emerald-500/20 hover:bg-emerald-600'}`}
+                            >
+                                <span className="material-symbols-outlined">{isRunning ? 'stop' : 'play_arrow'}</span>
+                                {submitting ? 'Saving...' : (isRunning ? 'Stop Timer' : 'Start Timer')}
+                            </button>
                         </div>
                     </div>
+
+                    <aside className="space-y-4">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Session Status</p>
+                            <p className="mt-2 text-lg font-black text-slate-900">{isRunning ? 'Timer is running' : 'Timer is stopped'}</p>
+                            <p className="mt-1 text-sm text-slate-500">
+                                {isRunning
+                                    ? 'Current task and project are locked until you stop tracking.'
+                                    : 'Add task context and start logging time.'}
+                            </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Progress Breakdown</p>
+                            <div className="mt-3 space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-slate-500">Tracked Today</span>
+                                    <span className="font-semibold text-slate-900">{loading ? '...' : formatProgressHours(todaysProgress)}</span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-slate-500">Daily Goal</span>
+                                    <span className="font-semibold text-slate-900">8h 0m</span>
+                                </div>
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-slate-500">Completion</span>
+                                    <span className="font-semibold text-emerald-600">{Math.round(progressPercentage)}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
                 </section>
 
                 {calendarStatus?.configured && !calendarStatus.connected && (
-                    <section className="space-y-3 pt-4">
-                        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-800/50">
-                            <h2 className="text-sm font-bold tracking-wide text-slate-900 dark:text-slate-100">Connect Google Calendar</h2>
-                            <p className="mt-2 text-sm text-slate-500">Pull today&apos;s real meetings into your timer suggestions and map them to active projects.</p>
-                            <button
-                                onClick={() => void handleGoogleCalendarConnect()}
-                                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
-                            >
-                                <span className="material-symbols-outlined text-sm">calendar_month</span>
-                                Connect Google Calendar
-                            </button>
-                        </div>
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <h2 className="text-sm font-bold tracking-wide text-slate-900">Connect Google Calendar</h2>
+                        <p className="mt-2 text-sm text-slate-500">Pull today&apos;s meetings into timer suggestions and map them to project work.</p>
+                        <button
+                            onClick={() => void handleGoogleCalendarConnect()}
+                            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+                        >
+                            <span className="material-symbols-outlined text-sm">calendar_month</span>
+                            Connect Google Calendar
+                        </button>
                     </section>
                 )}
 
                 {calendarStatus?.configured === false && (
-                    <section className="space-y-3 pt-4">
-                        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-                            <h2 className="text-sm font-bold tracking-wide text-amber-900">Google Calendar Not Configured</h2>
-                            <p className="mt-2 text-sm text-amber-700">Add Google OAuth credentials to the backend env before users can connect calendars.</p>
-                        </div>
+                    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+                        <h2 className="text-sm font-bold tracking-wide text-amber-900">Google Calendar Not Configured</h2>
+                        <p className="mt-2 text-sm text-amber-700">Add Google OAuth credentials to the backend env before users can connect calendars.</p>
                     </section>
                 )}
 
                 {calendarEvents.length > 0 && (
-                    <section className="space-y-4 pt-4">
-                        <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 mb-2">
-                            <span className="material-symbols-outlined text-[#6366f1] text-[20px]">auto_awesome</span>
+                    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="mb-3 flex items-center gap-2 text-slate-900">
+                            <span className="material-symbols-outlined text-[20px] text-[#6366f1]">auto_awesome</span>
                             <h2 className="text-sm font-bold tracking-wide">Suggested from Calendar</h2>
                         </div>
-                        <div className="flex gap-4 overflow-x-auto pb-4 snap-x hide-scrollbar">
+                        <div className="hide-scrollbar flex gap-4 overflow-x-auto pb-2">
                             {calendarEvents.map((event) => (
-                                <div
+                                <button
                                     key={event.id}
-                                    className="snap-start min-w-[280px] bg-slate-50 border border-slate-200 dark:bg-slate-800/50 dark:border-slate-700/50 p-4 rounded-xl shadow-sm hover:border-primary/50 cursor-pointer transition-all group"
+                                    type="button"
+                                    className="min-w-[280px] rounded-xl border border-slate-200 bg-slate-50 p-4 text-left shadow-sm transition-all hover:border-primary/50"
                                     onClick={() => handleApplySuggestion(event)}
                                 >
-                                    <div className="flex justify-between items-start mb-2">
-                                        <p className="text-sm font-bold text-slate-800 dark:text-slate-200 line-clamp-1">{event.title}</p>
-                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#6366f1]/10 text-[#6366f1] whitespace-nowrap">
+                                    <div className="mb-2 flex items-start justify-between gap-2">
+                                        <p className="line-clamp-1 text-sm font-bold text-slate-800">{event.title}</p>
+                                        <span className="whitespace-nowrap rounded bg-[#6366f1]/10 px-2 py-0.5 text-[10px] font-bold text-[#6366f1]">
                                             {new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </span>
                                     </div>
-                                    <p className="text-xs text-slate-500 mb-3 line-clamp-1">{event.suggested_project}</p>
-                                    <button className="text-xs font-bold text-primary group-hover:underline">Use This Task</button>
-                                </div>
+                                    <p className="mb-3 line-clamp-1 text-xs text-slate-500">{event.suggested_project}</p>
+                                    <span className="text-xs font-bold text-primary">Use This Task</span>
+                                </button>
                             ))}
                         </div>
                     </section>

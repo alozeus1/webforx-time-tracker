@@ -155,18 +155,18 @@ const Timesheet: React.FC = () => {
     };
 
     return (
-        <div className="timesheet-container">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px', flexWrap: 'wrap' }}>
+        <div className="timesheet-container flex-1 w-full overflow-y-auto">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                 <div>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Weekly Timesheet</h1>
-                    <p style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Your submitted and pending entries for the selected week.</p>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900">Weekly Timesheet</h1>
+                    <p className="mt-1 text-sm text-slate-500">Review weekly totals by project and export structured time records.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => handleWeekShift(-1)}>
+                <div className="flex flex-wrap items-center gap-2">
+                    <button className="btn btn-outline" onClick={() => handleWeekShift(-1)}>
                         <ChevronLeft size={16} /> Prev Week
                     </button>
-                    <div style={{ position: 'relative' }}>
-                        <button className="btn btn-outline" style={{ gap: '8px' }} onClick={handleOpenDatePicker}>
+                    <div className="relative">
+                        <button className="btn btn-outline" onClick={handleOpenDatePicker}>
                             <CalendarIcon size={16} /> {weekLabel}
                         </button>
                         <input
@@ -174,47 +174,41 @@ const Timesheet: React.FC = () => {
                             type="date"
                             value={toISODate(weekAnchorDate)}
                             onChange={(event) => handleDateSelected(event.target.value)}
-                            style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }}
+                            className="pointer-events-none absolute h-0 w-0 opacity-0"
                             tabIndex={-1}
                             aria-hidden="true"
                         />
                     </div>
-                    <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => handleWeekShift(1)}>
+                    <button className="btn btn-outline" onClick={() => handleWeekShift(1)}>
                         Next Week <ChevronRight size={16} />
                     </button>
-                    <button className="btn btn-primary" style={{ gap: '8px' }} onClick={() => navigate('/reports')}>
-                        <CheckCircle size={16} /> Submission Handled by Approvals
+                    <button className="btn btn-primary" onClick={() => navigate('/reports')}>
+                        <CheckCircle size={16} /> Approval Queue
                     </button>
-                    <button className="btn btn-outline" style={{ gap: '8px' }} onClick={() => void handleExport()} disabled={exporting}>
+                    <button className="btn btn-outline" onClick={() => void handleExport()} disabled={exporting}>
                         <Download size={16} /> {exporting ? 'Exporting...' : 'Export CSV'}
                     </button>
                 </div>
             </div>
 
-            <div className="card" style={{ marginBottom: '24px' }}>
-                <div className="card-body" style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Hours Logged Trend</h3>
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Weekly total: {weeklyTotal.toFixed(1)}h</span>
+            <div className="card mb-6">
+                <div className="card-body">
+                    <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-base font-bold text-slate-900">Hours Logged Trend</h3>
+                        <span className="text-sm font-medium text-slate-500">Weekly total: {weeklyTotal.toFixed(1)}h</span>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '10px', alignItems: 'end', minHeight: '140px' }}>
+                    <div className="grid min-h-[150px] grid-cols-7 items-end gap-3">
                         {dailyTotals.map((hours, index) => {
                             const ratio = Math.max((hours / maxDailyHours) * 100, 4);
                             return (
-                                <div key={`trend-${index}`} style={{ textAlign: 'center' }}>
+                                <div key={`trend-${index}`} className="text-center">
                                     <div
-                                        style={{
-                                            height: `${ratio}%`,
-                                            minHeight: '10px',
-                                            background: 'var(--color-primary)',
-                                            borderRadius: '8px 8px 2px 2px',
-                                            opacity: hours > 0 ? 0.95 : 0.35,
-                                            transition: 'height 0.2s ease',
-                                        }}
+                                        className="mx-auto min-h-[10px] w-full max-w-[52px] rounded-t-lg bg-primary transition-all"
+                                        style={{ height: `${ratio}%`, opacity: hours > 0 ? 0.95 : 0.35 }}
                                         title={`${hours.toFixed(1)}h`}
                                     />
-                                    <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>{dayFormatter.format(weekDays[index])}</div>
-                                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{hours.toFixed(1)}h</div>
+                                    <div className="mt-2 text-[11px] font-semibold text-slate-500">{dayFormatter.format(weekDays[index])}</div>
+                                    <div className="text-xs font-bold text-slate-700">{hours.toFixed(1)}h</div>
                                 </div>
                             );
                         })}
@@ -223,29 +217,29 @@ const Timesheet: React.FC = () => {
             </div>
 
             <div className="card">
-                <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-                    <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', textAlign: 'center' }}>
+                <div className="overflow-x-auto">
+                    <table className="min-w-[880px] w-full border-collapse text-center">
                         <thead>
-                            <tr style={{ borderBottom: '1px solid var(--border-color)', backgroundColor: 'var(--bg-subtle)' }}>
-                                <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 500, color: 'var(--text-muted)' }}>Project</th>
+                            <tr className="border-b border-slate-200 bg-slate-50">
+                                <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wide text-slate-500">Project</th>
                                 {weekDays.map((day) => (
-                                    <th key={day.toISOString()} style={{ padding: '12px 8px', fontWeight: 500, color: 'var(--text-muted)' }}>
+                                    <th key={day.toISOString()} className="px-2 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">
                                         {dayFormatter.format(day)}
                                     </th>
                                 ))}
-                                <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>Total</th>
+                                <th className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-slate-500">Total</th>
                             </tr>
                         </thead>
                         <tbody>
                             {loading && (
                                 <tr>
-                                    <td colSpan={9} style={{ padding: '24px', color: 'var(--text-muted)' }}>Loading weekly summary...</td>
+                                    <td colSpan={9} className="px-6 py-7 text-sm text-slate-500">Loading weekly summary...</td>
                                 </tr>
                             )}
 
                             {!loading && rows.length === 0 && (
                                 <tr>
-                                    <td colSpan={9} style={{ padding: '24px', color: 'var(--text-muted)' }}>No entries logged for this week yet.</td>
+                                    <td colSpan={9} className="px-6 py-7 text-sm text-slate-500">No entries logged for this week yet.</td>
                                 </tr>
                             )}
 
@@ -253,21 +247,20 @@ const Timesheet: React.FC = () => {
                                 const total = row.totals.reduce((sum, value) => sum + value, 0);
 
                                 return (
-                                    <tr key={row.project} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                        <td style={{ padding: '16px', textAlign: 'left', fontWeight: 500 }}>{row.project}</td>
+                                    <tr key={row.project} className="border-b border-slate-100">
+                                        <td className="px-4 py-3 text-left text-sm font-semibold text-slate-800">{row.project}</td>
                                         {row.totals.map((value, index) => (
-                                            <td key={`${row.project}-${index}`} style={{ padding: '16px 8px' }}>
+                                            <td key={`${row.project}-${index}`} className="px-2 py-3">
                                                 <input
                                                     type="text"
-                                                    className="form-control"
-                                                    style={{ textAlign: 'center', height: '36px', width: '72px', margin: '0 auto', backgroundColor: 'var(--bg-main)' }}
+                                                    className="form-control mx-auto h-9 w-[74px] text-center font-semibold text-slate-700"
                                                     value={value > 0 ? value.toFixed(1) : '-'}
                                                     disabled
                                                     readOnly
                                                 />
                                             </td>
                                         ))}
-                                        <td style={{ padding: '16px', textAlign: 'right', fontWeight: 600, color: 'var(--color-primary)' }}>
+                                        <td className="px-4 py-3 text-right text-sm font-bold text-primary">
                                             {total.toFixed(1)}h
                                         </td>
                                     </tr>
@@ -275,14 +268,14 @@ const Timesheet: React.FC = () => {
                             })}
 
                             {!loading && (
-                                <tr style={{ backgroundColor: 'var(--bg-subtle)', borderTop: '2px solid var(--border-color)' }}>
-                                    <td style={{ padding: '16px', textAlign: 'left', fontWeight: 700 }}>Daily Total</td>
+                                <tr className="border-t-2 border-slate-200 bg-slate-50">
+                                    <td className="px-4 py-3 text-left text-sm font-black text-slate-900">Daily Total</td>
                                     {dailyTotals.map((value, index) => (
-                                        <td key={`total-${index}`} style={{ padding: '16px 8px', fontWeight: 600, color: value > 0 ? 'var(--text-main)' : 'var(--text-muted)' }}>
+                                        <td key={`total-${index}`} className={`px-2 py-3 text-sm font-bold ${value > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
                                             {value > 0 ? `${value.toFixed(1)}h` : '0h'}
                                         </td>
                                     ))}
-                                    <td style={{ padding: '16px', textAlign: 'right', fontWeight: 700, fontSize: '1.1rem' }}>{weeklyTotal.toFixed(1)}h</td>
+                                    <td className="px-4 py-3 text-right text-base font-black text-slate-900">{weeklyTotal.toFixed(1)}h</td>
                                 </tr>
                             )}
                         </tbody>
