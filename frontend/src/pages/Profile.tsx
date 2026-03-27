@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
+import AvatarPicker from '../components/AvatarPicker';
 
 interface CurrentUser {
     id: string;
@@ -17,6 +18,7 @@ const Profile: React.FC = () => {
     const [password, setPassword] = useState('');
     const [saving, setSaving] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
+    const [avatarKey, setAvatarKey] = useState(0);
 
     const loadProfile = async () => {
         try {
@@ -91,6 +93,15 @@ const Profile: React.FC = () => {
                         {feedback}
                     </div>
                 )}
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Profile Avatar</p>
+                    <AvatarPicker
+                        key={avatarKey}
+                        initials={`${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase() || 'U'}
+                        onSave={() => setAvatarKey((k) => k + 1)}
+                    />
+                </div>
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.3fr_0.7fr]">
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

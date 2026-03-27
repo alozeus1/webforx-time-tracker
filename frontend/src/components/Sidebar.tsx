@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
+import UserAvatar from './UserAvatar';
 
 interface SidebarProps {
     isOpen: boolean;
@@ -57,7 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
 
             <div className="sidebar-footer">
                 <NavLink to="/profile" className="profile-widget">
-                    <div className="avatar">{initials}</div>
+                    <UserAvatar initials={initials} size={40} />
                     <div className="user-info">
                         <span className="user-name">{user ? `${user.first_name} ${user.last_name}` : 'Profile'}</span>
                         <span className="user-role">{user?.role || 'User'}</span>
