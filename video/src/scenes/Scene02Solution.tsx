@@ -2,8 +2,10 @@ import React from "react";
 import {
   AbsoluteFill,
   Easing,
+  Img,
   interpolate,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
@@ -88,30 +90,16 @@ export const Scene02Solution: React.FC = () => {
             marginBottom: 36,
           }}
         >
-          <div
+          <Img
+            src={staticFile("webforx-logo.png")}
             style={{
               width: 80,
               height: 80,
               borderRadius: 20,
-              background: `linear-gradient(135deg, ${C.accent} 0%, ${C.purple} 100%)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              objectFit: "contain",
               boxShadow: `0 0 40px ${C.accentGlow}`,
             }}
-          >
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 28,
-                fontWeight: 800,
-                color: "#fff",
-                letterSpacing: "-0.04em",
-              }}
-            >
-              WF
-            </span>
-          </div>
+          />
         </div>
 
         {/* Product name */}

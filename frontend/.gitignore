@@ -30,3 +30,6 @@ dist-ssr
 /playwright/.cache/
 /playwright/.auth/
 .vercel
+
+# Large generated assets — store externally, not in git
+public/demo.mp4

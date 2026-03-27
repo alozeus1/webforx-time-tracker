@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users,
-  ShieldCheck, Box, CheckCircle2, ArrowRight, Timer, Target,
-  Eye, ClipboardCheck, TrendingUp, Briefcase, UserCheck, Zap,
+  ShieldCheck, Box, CheckCircle2, ArrowRight,
+  Eye, Briefcase, UserCheck, Zap,
 } from 'lucide-react';
 import './Landing.css';
 
@@ -177,11 +177,47 @@ const heroMetrics = [
   { label: 'Avg. Approval Time', value: '< 8 hrs' },
 ];
 
+/* ───────────────────── video modal ───────────────────── */
+
+const VideoModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  return (
+    <div className="video-modal-backdrop" onClick={onClose}>
+      <div className="video-modal-container" onClick={(e) => e.stopPropagation()}>
+        <button className="video-modal-close" onClick={onClose} aria-label="Close video">✕</button>
+        <video
+          ref={videoRef}
+          className="video-modal-player"
+          src="/demo.mp4"
+          controls
+          autoPlay
+          playsInline
+        />
+      </div>
+    </div>
+  );
+};
+
 /* ───────────────────── component ───────────────────── */
 
 const Landing: React.FC = () => {
   const navigate = useNavigate();
   const [activeDemo, setActiveDemo] = useState('dashboard');
+  const [showVideo, setShowVideo] = useState(false);
+  const openVideo = useCallback(() => setShowVideo(true), []);
+  const closeVideo = useCallback(() => setShowVideo(false), []);
   const currentDemo = demoTabs.find((t) => t.key === activeDemo) ?? demoTabs[0];
 
   const goLogin = () => navigate('/login');
@@ -195,7 +231,7 @@ const Landing: React.FC = () => {
       {/* ── Nav ── */}
       <nav className="landing-nav">
         <a href="/landing" className="landing-nav-brand">
-          <div className="logo-mark">TF</div>
+          <img src="/webforx-logo.png" alt="Web Forx" className="logo-mark-img" />
           <span>Web Forx Time Tracker</span>
         </a>
         <div className="landing-nav-actions">
@@ -232,39 +268,12 @@ const Landing: React.FC = () => {
             </div>
           ))}
         </div>
-        <div className="hero-visual">
-          <div className="hero-visual-inner">
-            <div className="preview-card">
-              <div className="pc-icon"><Timer size={16} /></div>
-              <div className="pc-title">Today's Hours</div>
-              <div className="pc-bar pc-bar-60" />
-            </div>
-            <div className="preview-card">
-              <div className="pc-icon"><Target size={16} /></div>
-              <div className="pc-title">Weekly Goal</div>
-              <div className="pc-bar pc-bar-80" />
-            </div>
-            <div className="preview-card">
-              <div className="pc-icon"><TrendingUp size={16} /></div>
-              <div className="pc-title">Team Output</div>
-              <div className="pc-bar pc-bar-70" />
-            </div>
-            <div className="preview-card">
-              <div className="pc-icon"><Eye size={16} /></div>
-              <div className="pc-title">Active Timers</div>
-              <div className="pc-bar pc-bar-40" />
-            </div>
-            <div className="preview-card">
-              <div className="pc-icon"><ClipboardCheck size={16} /></div>
-              <div className="pc-title">Pending Approvals</div>
-              <div className="pc-bar pc-bar-30" />
-            </div>
-            <div className="preview-card">
-              <div className="pc-icon"><BarChart2 size={16} /></div>
-              <div className="pc-title">Reports Ready</div>
-              <div className="pc-bar pc-bar-50" />
-            </div>
+        <div className="hero-visual hero-video-thumb" onClick={openVideo} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && openVideo()} aria-label="Watch product demo">
+          <img src="/webforx-logo.png" alt="Web Forx" className="video-thumb-logo" />
+          <div className="video-play-btn" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21" /></svg>
           </div>
+          <div className="video-thumb-label">Watch the Demo &nbsp;·&nbsp; 76 seconds</div>
         </div>
       </section>
 
@@ -465,6 +474,8 @@ const Landing: React.FC = () => {
       <div className="landing-trademark">
         Powered by <strong>Maralito Labs</strong> for <strong>Webforx Technology</strong>
       </div>
+
+      {showVideo && <VideoModal onClose={closeVideo} />}
     </div>
   );
 };

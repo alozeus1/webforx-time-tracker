@@ -2,8 +2,10 @@ import React from "react";
 import {
   AbsoluteFill,
   Easing,
+  Img,
   interpolate,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
@@ -211,29 +213,16 @@ const LoginMock: React.FC = () => {
       >
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 40 }}>
-          <div
+          <Img
+            src={staticFile("webforx-logo.png")}
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
               width: 52,
               height: 52,
               borderRadius: 13,
-              background: `linear-gradient(135deg, ${C.accent} 0%, ${C.purple} 100%)`,
+              objectFit: "contain",
               marginBottom: 16,
             }}
-          >
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 18,
-                fontWeight: 800,
-                color: "#fff",
-              }}
-            >
-              WF
-            </span>
-          </div>
+          />
           <div
             style={{
               fontFamily: FONT,
@@ -394,28 +383,15 @@ const DashboardMock: React.FC = () => {
             gap: 16,
           }}
         >
-          <div
+          <Img
+            src={staticFile("webforx-logo.png")}
             style={{
               width: 28,
               height: 28,
               borderRadius: 7,
-              background: `linear-gradient(135deg, ${C.accent} 0%, ${C.purple} 100%)`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              objectFit: "contain",
             }}
-          >
-            <span
-              style={{
-                fontFamily: FONT,
-                fontSize: 10,
-                fontWeight: 800,
-                color: "#fff",
-              }}
-            >
-              WF
-            </span>
-          </div>
+          />
           <span
             style={{
               fontFamily: FONT,

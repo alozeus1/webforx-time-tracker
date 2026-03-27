@@ -41,7 +41,7 @@ const VO_FILES = [
 //     https://www.bensound.com/royalty-free-music/track/inspire
 //
 // Ideal spec: 90–120 BPM, no vocals, subtle pad/piano, gentle dynamics.
-const MUSIC_FILE = "music/background.mp3";
+const MUSIC_FILE = "music/kornevmusic-upbeat-happy-corporate-487426.mp3";
 const MUSIC_VOLUME = 0.12; // background stays well under the VO at 12%
 
 // ─── Background music component ───────────────────────────────────────────────
@@ -68,14 +68,32 @@ const BackgroundMusic: React.FC = () => {
 
 // ─── Voiceover layer ──────────────────────────────────────────────────────────
 // Each clip is placed at its scene's absolute start frame + VO_DELAY.
-// The VO_DELAY clears the crossfade so the voice enters on a clean frame.
+// durationInFrames is set so the Sequence (and its Audio) stops at the next
+// scene boundary — preventing clips from bleeding into the following scene.
+// A 3-frame volume fade-out avoids hard cuts at the boundary.
+const VO_FADE_FRAMES = 3;
+
 const VoiceoverTracks: React.FC = () => (
   <>
-    {VO_FILES.map((file, i) => (
-      <Sequence key={file} from={SCENE_STARTS[i] + VO_DELAY} layout="none">
-        <Audio src={staticFile(file)} volume={1} />
-      </Sequence>
-    ))}
+    {VO_FILES.map((file, i) => {
+      const seqStart = SCENE_STARTS[i] + VO_DELAY;
+      const seqEnd = i < VO_FILES.length - 1 ? SCENE_STARTS[i + 1] : TOTAL_FRAMES;
+      const durationInFrames = seqEnd - seqStart;
+
+      const volume = (f: number) =>
+        interpolate(
+          f,
+          [durationInFrames - VO_FADE_FRAMES, durationInFrames],
+          [1, 0],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+
+      return (
+        <Sequence key={file} from={seqStart} durationInFrames={durationInFrames} layout="none">
+          <Audio src={staticFile(file)} volume={volume} />
+        </Sequence>
+      );
+    })}
   </>
 );
 

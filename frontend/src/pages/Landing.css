@@ -683,6 +683,138 @@
   background: var(--border-color);
 }
 
+/* ── Nav logo image ── */
+.logo-mark-img {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-lg);
+  object-fit: contain;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* ── Hero video thumbnail ── */
+.hero-video-thumb {
+  cursor: pointer;
+  position: relative;
+  background: linear-gradient(135deg, #070c1a 0%, #0c1426 60%, #101b33 100%);
+  border-color: rgba(59, 130, 246, 0.25);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+}
+
+.hero-video-thumb:hover {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35), var(--shadow-lg);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-2px);
+}
+
+.hero-video-thumb:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.video-thumb-logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  opacity: 0.92;
+  filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.4));
+}
+
+.video-play-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 12px rgba(59, 130, 246, 0.15), 0 4px 24px rgba(59, 130, 246, 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hero-video-thumb:hover .video-play-btn {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 16px rgba(59, 130, 246, 0.18), 0 6px 32px rgba(59, 130, 246, 0.6);
+}
+
+.video-thumb-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Video modal ── */
+.video-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: modal-fade-in 0.2s ease;
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.video-modal-container {
+  position: relative;
+  width: 100%;
+  max-width: 1080px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.7);
+  animation: modal-scale-in 0.22s ease;
+}
+
+@keyframes modal-scale-in {
+  from { transform: scale(0.94); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+.video-modal-player {
+  width: 100%;
+  display: block;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.video-modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.video-modal-close:hover {
+  background: rgba(0, 0, 0, 0.85);
+}
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .landing-section {
