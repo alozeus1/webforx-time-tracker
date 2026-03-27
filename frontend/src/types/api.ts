@@ -20,6 +20,7 @@ export interface ProjectSummary {
     id: string;
     name: string;
     description?: string | null;
+    logo_url?: string | null;
     budget_hours?: number | null;
     budget_amount?: number | null;
     hours_burned?: number;

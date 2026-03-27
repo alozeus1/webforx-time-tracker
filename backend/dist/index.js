@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const path_1 = __importDefault(require("path"));
 const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
@@ -47,7 +48,8 @@ app.use((0, cors_1.default)({
         callback(new Error(`Origin not allowed by CORS: ${origin}`));
     },
 }));
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
 // Routes
 app.use('/api/v1/auth', authRoutes_1.default);
 app.use('/api/v1/users', userRoutes_1.default);

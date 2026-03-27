@@ -35,7 +35,7 @@ const Team: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
     const role = getStoredRole();
-    const canManageTeam = role === 'Admin';
+    const canManageTeam = role === 'Admin' || role === 'Manager';
 
     const loadTeam = useCallback(async () => {
         try {
@@ -176,6 +176,26 @@ const Team: React.FC = () => {
         } catch (error) {
             console.error('Failed to update team member status', error);
             setFeedback({ message: 'Failed to update team member status', tone: 'error' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDeleteUser = async (user: UserSummary) => {
+        if (!canManageTeam) return;
+        if (!window.confirm(`Are you sure you want to remove ${user.first_name} ${user.last_name}? This will deactivate their account.`)) return;
+
+        setSaving(true);
+        setFeedback(null);
+        setMenuOpenFor(null);
+
+        try {
+            await api.delete(`/users/${user.id}`);
+            await loadTeam();
+            setFeedback({ message: `${user.first_name} ${user.last_name} has been removed`, tone: 'success' });
+        } catch (error) {
+            console.error('Failed to delete team member', error);
+            setFeedback({ message: 'Failed to remove team member', tone: 'error' });
         } finally {
             setSaving(false);
         }
@@ -365,6 +385,14 @@ const Team: React.FC = () => {
                                                     >
                                                         <span className="material-symbols-outlined text-base">{user.is_active ? 'person_off' : 'person'}</span>
                                                         {user.is_active ? 'Deactivate' : 'Activate'}
+                                                    </button>
+                                                    <button
+                                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                                        onClick={() => void handleDeleteUser(user)}
+                                                        disabled={!canManageTeam || saving}
+                                                    >
+                                                        <span className="material-symbols-outlined text-base">delete</span>
+                                                        Remove User
                                                     </button>
                                                 </div>
                                             )}

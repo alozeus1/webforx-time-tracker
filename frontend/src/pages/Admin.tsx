@@ -25,6 +25,10 @@ const Admin: React.FC = () => {
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [newProjectBudgetHours, setNewProjectBudgetHours] = useState('');
     const [newProjectBudgetAmount, setNewProjectBudgetAmount] = useState('');
+    const [projectLogoPreview, setProjectLogoPreview] = useState<string | null>(null);
+    const [projectLogoData, setProjectLogoData] = useState<string | null>(null);
+    const [editingProject, setEditingProject] = useState<ProjectSummary | null>(null);
+    const [projectMenuOpen, setProjectMenuOpen] = useState<string | null>(null);
     
     const handleTabChange = (tab: string) => {
         setSearchParams((prev) => {
@@ -93,24 +97,77 @@ const Admin: React.FC = () => {
         void loadAdminData();
     }, []);
 
+    const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            alert('Logo must be under 2MB');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result as string;
+            setProjectLogoPreview(result);
+            setProjectLogoData(result);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const resetProjectForm = () => {
+        setIsProjectModalOpen(false);
+        setEditingProject(null);
+        setNewProjectName('');
+        setNewProjectDesc('');
+        setNewProjectBudgetHours('');
+        setNewProjectBudgetAmount('');
+        setProjectLogoPreview(null);
+        setProjectLogoData(null);
+    };
+
+    const openEditProject = (project: ProjectSummary) => {
+        setEditingProject(project);
+        setNewProjectName(project.name);
+        setNewProjectDesc(project.description || '');
+        setNewProjectBudgetHours(project.budget_hours?.toString() || '');
+        setNewProjectBudgetAmount(project.budget_amount?.toString() || '');
+        setProjectLogoPreview(project.logo_url ? `${import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5005'}${project.logo_url}` : null);
+        setProjectLogoData(null);
+        setIsProjectModalOpen(true);
+        setProjectMenuOpen(null);
+    };
+
+    const handleDeleteProject = async (project: ProjectSummary) => {
+        if (!window.confirm(`Archive project "${project.name}"? This will deactivate it.`)) return;
+        try {
+            await api.delete(`/projects/${project.id}`);
+            void fetchProjects();
+            setProjectMenuOpen(null);
+        } catch {
+            alert('Failed to archive project.');
+        }
+    };
+
     const handleCreateProject = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.post('/projects', {
+            const payload = {
                 name: newProjectName,
                 description: newProjectDesc,
                 budget_hours: newProjectBudgetHours,
-                budget_amount: newProjectBudgetAmount
-            });
-            setIsProjectModalOpen(false);
-            setNewProjectName('');
-            setNewProjectDesc('');
-            setNewProjectBudgetHours('');
-            setNewProjectBudgetAmount('');
-            fetchProjects();
+                budget_amount: newProjectBudgetAmount,
+                logo_data: projectLogoData || undefined,
+            };
+
+            if (editingProject) {
+                await api.put(`/projects/${editingProject.id}`, payload);
+            } else {
+                await api.post('/projects', payload);
+            }
+            resetProjectForm();
+            void fetchProjects();
         } catch (error) {
-            console.error('Error creating project:', error);
-            alert('Failed to create project.');
+            console.error('Error saving project:', error);
+            alert('Failed to save project.');
         }
     };
 
@@ -160,10 +217,11 @@ const Admin: React.FC = () => {
                                 <tr className="bg-slate-50 dark:bg-slate-900/50">
                                     {activeTab === 'projects' && (
                                         <>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Project Name</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Project</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Time Budget Burn</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Profitability (Cost)</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400"></th>
                                         </>
                                     )}
                                     {activeTab === 'users' && (
@@ -205,11 +263,21 @@ const Admin: React.FC = () => {
                                     const costBurned = p.cost_burned ?? 0;
                                     const timePct = p.budget_hours ? (hoursBurned / p.budget_hours) * 100 : 0;
                                     const costPct = p.budget_amount ? (costBurned / p.budget_amount) * 100 : 0;
+                                    const apiBase = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5005';
                                     return (
                                         <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                             <td className="px-6 py-4 text-sm font-semibold">
-                                                <p className="text-slate-900 dark:text-slate-100">{p.name}</p>
-                                                <p className="text-xs text-slate-500 font-normal">{p.description || 'No description'}</p>
+                                                <div className="flex items-center gap-3">
+                                                    {p.logo_url ? (
+                                                        <img src={`${apiBase}${p.logo_url}`} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
+                                                    ) : (
+                                                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">{p.name.slice(0, 2).toUpperCase()}</div>
+                                                    )}
+                                                    <div>
+                                                        <p className="text-slate-900 dark:text-slate-100">{p.name}</p>
+                                                        <p className="text-xs text-slate-500 font-normal">{p.description || 'No description'}</p>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex gap-2 items-center">
@@ -231,6 +299,21 @@ const Admin: React.FC = () => {
                                                 <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-500">
                                                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Active
                                                 </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-right relative">
+                                                <button className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setProjectMenuOpen(prev => prev === p.id ? null : p.id)}>
+                                                    <span className="material-symbols-outlined text-sm">more_vert</span>
+                                                </button>
+                                                {projectMenuOpen === p.id && (
+                                                    <div className="absolute right-6 top-12 z-20 min-w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => openEditProject(p)}>
+                                                            <span className="material-symbols-outlined text-base">edit</span> Edit
+                                                        </button>
+                                                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20" onClick={() => void handleDeleteProject(p)}>
+                                                            <span className="material-symbols-outlined text-base">archive</span> Archive
+                                                        </button>
+                                                    </div>
+                                                )}
                                             </td>
                                         </tr>
                                     );
@@ -307,13 +390,33 @@ const Admin: React.FC = () => {
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                         <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800">
                             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                                <span className="font-bold text-lg dark:text-white">Create New Project</span>
-                                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={() => setIsProjectModalOpen(false)}>
+                                <span className="font-bold text-lg dark:text-white">{editingProject ? 'Edit Project' : 'Create New Project'}</span>
+                                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={resetProjectForm}>
                                     <X size={20} />
                                 </button>
                             </div>
                             <div className="p-6">
                                 <form onSubmit={handleCreateProject}>
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Project Logo</label>
+                                        <div className="flex items-center gap-4">
+                                            {projectLogoPreview ? (
+                                                <img src={projectLogoPreview} alt="Logo" className="w-14 h-14 rounded-xl object-cover border border-slate-200" />
+                                            ) : (
+                                                <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-xs font-bold">LOGO</div>
+                                            )}
+                                            <div>
+                                                <label className="inline-flex items-center gap-1.5 cursor-pointer px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                                    Upload Image
+                                                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                                                </label>
+                                                {projectLogoPreview && (
+                                                    <button type="button" className="ml-2 text-xs text-rose-500 hover:underline" onClick={() => { setProjectLogoPreview(null); setProjectLogoData(null); }}>Remove</button>
+                                                )}
+                                                <p className="text-xs text-slate-400 mt-1">Max 2MB. PNG, JPG, or SVG.</p>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div className="mb-4">
                                         <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Project Name</label>
                                         <input
@@ -359,8 +462,8 @@ const Admin: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex justify-end gap-3">
-                                        <button type="button" className="px-4 py-2 font-bold text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" onClick={() => setIsProjectModalOpen(false)}>Cancel</button>
-                                        <button type="submit" className="px-6 py-2 bg-primary text-white font-bold text-sm rounded-lg hover:bg-primary/90 shadow-md">Create Project</button>
+                                        <button type="button" className="px-4 py-2 font-bold text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white" onClick={resetProjectForm}>Cancel</button>
+                                        <button type="submit" className="px-6 py-2 bg-primary text-white font-bold text-sm rounded-lg hover:bg-primary/90 shadow-md">{editingProject ? 'Save Changes' : 'Create Project'}</button>
                                     </div>
                                 </form>
                             </div>

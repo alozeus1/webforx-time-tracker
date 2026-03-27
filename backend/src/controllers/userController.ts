@@ -233,6 +233,52 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
+export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+
+        if (userId === requireUserId(req)) {
+            res.status(400).json({ message: 'Cannot delete your own account' });
+            return;
+        }
+
+        const target = await prisma.user.findUnique({ where: { id: userId } });
+        if (!target) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        // Soft-delete: deactivate + anonymize
+        await prisma.user.update({
+            where: { id: userId },
+            data: { is_active: false },
+        });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_deleted',
+                    resource: 'user',
+                    metadata: { target_user_id: userId, target_email: target.email },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write user deletion audit log:', error);
+        }
+
+        res.status(200).json({ message: 'User deactivated successfully' });
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = requireUserId(req);

@@ -117,6 +117,7 @@ const Login: React.FC = () => {
                 </form>
 
                 <div className="login-footer">
+                    <Link to="/forgot-password">Forgot your password?</Link>
                     <p>Need access? Contact your organization admin.</p>
                     <Link to="/landing">Back to product overview</Link>
                 </div>

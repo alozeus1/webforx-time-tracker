@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
+import ForgotPassword from './pages/ForgotPassword';
 import Dashboard from './pages/Dashboard';
 import Timer from './pages/Timer';
 import Timeline from './pages/Timeline';
@@ -48,6 +49,7 @@ const App: React.FC = () => {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/landing" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* Protected app routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
@@ -57,7 +59,7 @@ const App: React.FC = () => {
           <Route path="/timesheet" element={<Timesheet />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/team" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Team /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin']}><Admin /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin', 'Manager']}><Admin /></ProtectedRoute>} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/integrations" element={<Integrations />} />

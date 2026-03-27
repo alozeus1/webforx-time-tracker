@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import OnboardingTour, { ONBOARDING_KEY } from './OnboardingTour';
+import HelpChatbot from './HelpChatbot';
 
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,6 +38,7 @@ const Layout: React.FC = () => {
             </main>
 
             <OnboardingTour key={tourKey} />
+            <HelpChatbot />
         </div>
     );
 };

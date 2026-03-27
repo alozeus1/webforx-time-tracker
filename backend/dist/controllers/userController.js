@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.updateUser = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMe = void 0;
+exports.updateMe = exports.deleteUser = exports.updateUser = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMe = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
 const requireUserId = (req) => {
@@ -227,6 +227,48 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.updateUser = updateUser;
+const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+        if (userId === requireUserId(req)) {
+            res.status(400).json({ message: 'Cannot delete your own account' });
+            return;
+        }
+        const target = yield db_1.default.user.findUnique({ where: { id: userId } });
+        if (!target) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+        // Soft-delete: deactivate + anonymize
+        yield db_1.default.user.update({
+            where: { id: userId },
+            data: { is_active: false },
+        });
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_deleted',
+                    resource: 'user',
+                    metadata: { target_user_id: userId, target_email: target.email },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write user deletion audit log:', error);
+        }
+        res.status(200).json({ message: 'User deactivated successfully' });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.deleteUser = deleteUser;
 const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = requireUserId(req);

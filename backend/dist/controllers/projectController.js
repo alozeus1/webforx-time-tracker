@@ -12,8 +12,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createProject = exports.getAllProjects = void 0;
+exports.deleteProject = exports.updateProject = exports.createProject = exports.getAllProjects = void 0;
+const fs_1 = __importDefault(require("fs"));
+const path_1 = __importDefault(require("path"));
 const db_1 = __importDefault(require("../config/db"));
+const UPLOADS_DIR = path_1.default.join(__dirname, '../../uploads/projects');
+if (!fs_1.default.existsSync(UPLOADS_DIR)) {
+    fs_1.default.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 const getAllProjects = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const projects = yield db_1.default.project.findMany({
@@ -50,16 +56,27 @@ exports.getAllProjects = getAllProjects;
 const createProject = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {
-        const { name, description, budget_hours, budget_amount } = req.body;
+        const { name, description, budget_hours, budget_amount, logo_data } = req.body;
         const existingProject = yield db_1.default.project.findUnique({ where: { name } });
         if (existingProject) {
             res.status(400).json({ message: 'Project with this name already exists' });
             return;
         }
+        let logo_url = null;
+        if (typeof logo_data === 'string' && logo_data.startsWith('data:image/')) {
+            const matches = logo_data.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
+            if (matches) {
+                const ext = matches[1].replace('+xml', '');
+                const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+                fs_1.default.writeFileSync(path_1.default.join(UPLOADS_DIR, fileName), Buffer.from(matches[2], 'base64'));
+                logo_url = `/uploads/projects/${fileName}`;
+            }
+        }
         const newProject = yield db_1.default.project.create({
             data: {
                 name,
                 description,
+                logo_url,
                 budget_hours: budget_hours ? parseInt(budget_hours) : null,
                 budget_amount: budget_amount ? parseFloat(budget_amount) : null,
             },
@@ -89,3 +106,91 @@ const createProject = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.createProject = createProject;
+const updateProject = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const projectId = req.params.id;
+        const { name, description, budget_hours, budget_amount, logo_data, is_active } = req.body;
+        const updateData = {};
+        if (typeof name === 'string' && name.trim())
+            updateData.name = name.trim();
+        if (typeof description === 'string')
+            updateData.description = description;
+        if (typeof is_active === 'boolean')
+            updateData.is_active = is_active;
+        if (budget_hours !== undefined)
+            updateData.budget_hours = budget_hours ? parseInt(budget_hours) : null;
+        if (budget_amount !== undefined)
+            updateData.budget_amount = budget_amount ? parseFloat(budget_amount) : null;
+        if (typeof logo_data === 'string' && logo_data.startsWith('data:image/')) {
+            const matches = logo_data.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
+            if (matches) {
+                const ext = matches[1].replace('+xml', '');
+                const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+                fs_1.default.writeFileSync(path_1.default.join(UPLOADS_DIR, fileName), Buffer.from(matches[2], 'base64'));
+                updateData.logo_url = `/uploads/projects/${fileName}`;
+            }
+        }
+        else if (logo_data === null) {
+            updateData.logo_url = null;
+        }
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ message: 'No valid fields provided' });
+            return;
+        }
+        const updated = yield db_1.default.project.update({
+            where: { id: projectId },
+            data: updateData,
+        });
+        if ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) {
+            try {
+                yield db_1.default.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'project_updated',
+                        resource: 'project',
+                        metadata: { project_id: projectId, updated_fields: Object.keys(updateData) },
+                    },
+                });
+            }
+            catch (error) {
+                console.error('Failed to write project update audit log:', error);
+            }
+        }
+        res.status(200).json(updated);
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.updateProject = updateProject;
+const deleteProject = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const projectId = req.params.id;
+        yield db_1.default.project.update({
+            where: { id: projectId },
+            data: { is_active: false },
+        });
+        if ((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId) {
+            try {
+                yield db_1.default.auditLog.create({
+                    data: {
+                        user_id: req.user.userId,
+                        action: 'project_deleted',
+                        resource: 'project',
+                        metadata: { project_id: projectId },
+                    },
+                });
+            }
+            catch (error) {
+                console.error('Failed to write project deletion audit log:', error);
+            }
+        }
+        res.status(200).json({ message: 'Project deactivated successfully' });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.deleteProject = deleteProject;
