@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment — NEVER commit real keys
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+out/
+
+# Generated audio assets (large binaries — regenerate with npm run voiceover)
+public/voiceover/*.mp3
+public/music/*.mp3

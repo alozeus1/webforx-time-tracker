@@ -1,0 +1,27 @@
+{
+  "name": "webforx-time-tracker-demo",
+  "version": "1.0.0",
+  "description": "Web Forx Time Tracker — product demo video",
+  "private": true,
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render DemoVideo out/demo-video.mp4 --codec h264",
+    "render:hq": "remotion render DemoVideo out/demo-video-hq.mp4 --codec h264 --crf 16",
+    "still": "remotion still DemoVideo out/thumbnail.png --frame 60",
+    "voiceover": "tsx generate-voiceover.ts"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@remotion/google-fonts": "^4.0.0",
+    "@remotion/transitions": "^4.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.5"
+  }
+}

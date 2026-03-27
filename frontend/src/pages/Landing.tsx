@@ -462,6 +462,9 @@ const Landing: React.FC = () => {
           <a href="#!" onClick={(e) => e.preventDefault()}>Terms</a>
         </div>
       </footer>
+      <div className="landing-trademark">
+        Powered by <strong>Maralito Labs</strong> for <strong>Webforx Technology</strong>
+      </div>
     </div>
   );
 };

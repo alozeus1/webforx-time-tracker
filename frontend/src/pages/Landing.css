@@ -651,6 +651,20 @@
   color: var(--text-muted);
 }
 
+.landing-trademark {
+  text-align: center;
+  padding: 1rem 2rem 1.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-color);
+  letter-spacing: 0.01em;
+}
+
+.landing-trademark strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
 /* ── Buttons (landing-specific) ── */
 .btn-lg {
   padding: 0.75rem 1.5rem;
