@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
@@ -12,6 +14,7 @@ import calendarRoutes from './routes/calendarRoutes';
 import mlRoutes from './routes/mlRoutes';
 import adminRoutes from './routes/adminRoutes';
 import cronRoutes from './routes/cronRoutes';
+import tagRoutes from './routes/tagRoutes';
 import { notificationWorker } from './workers/notificationWorker';
 import { startIdleTracker } from './workers/idleTracker';
 import { startBurnoutTracker } from './workers/burnoutTracker';
@@ -45,11 +48,31 @@ app.use(
         },
     }),
 );
+
+app.use(helmet());
+
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many requests, please try again later.' },
+});
+app.use(globalLimiter);
+
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many authentication attempts, please try again later.' },
+});
+
 // Routes
-app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/timers', timeEntryRoutes);
@@ -59,6 +82,7 @@ app.use('/api/v1/calendar', calendarRoutes);
 app.use('/api/v1/ml', mlRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/cron', cronRoutes);
+app.use('/api/v1/tags', tagRoutes);
 
 app.get('/', (_req, res) => {
     res.status(200).json({

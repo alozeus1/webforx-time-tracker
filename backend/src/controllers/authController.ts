@@ -92,11 +92,13 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             data: { user_id: user.id, token, expires_at },
         });
 
-        console.log(`[auth] Password reset code for ${email}: ${token}`);
+        // In production, send token via email service. Never log tokens.
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`[auth:dev] Password reset code generated for ${email}`);
+        }
 
         res.status(200).json({
-            message: 'If that email exists, a reset code has been generated.',
-            reset_code: token,
+            message: 'If that email exists, a reset code has been sent.',
         });
     } catch (error) {
         console.error('Forgot password error:', error);

@@ -14,6 +14,8 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
     try {
         const project_id = typeof req.body?.project_id === 'string' && req.body.project_id.trim() ? req.body.project_id : null;
         const task_description = typeof req.body?.task_description === 'string' ? req.body.task_description.trim() : '';
+        const is_billable = req.body?.is_billable !== false;
+        const tag_ids = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids : [];
         const user_id = requireUserId(req);
 
         if (!task_description) {
@@ -33,6 +35,7 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
                 project_id,
                 task_description,
                 start_time: new Date(),
+                persisted_state: { is_billable, tag_ids },
             },
         });
 
@@ -79,20 +82,36 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
-        const timeEntry = await prisma.timeEntry.create({
-            data: {
-                user_id,
-                project_id: activeTimer.project_id,
-                task_description: activeTimer.task_description,
-                start_time: activeTimer.start_time,
-                end_time,
-                duration,
-                entry_type: 'timer',
-                notes,
-            },
-        });
+        const persistedState = (activeTimer.persisted_state as Record<string, unknown>) || {};
+        const is_billable = persistedState.is_billable !== false;
 
-        await prisma.activeTimer.delete({ where: { user_id } });
+        const timeEntry = await prisma.$transaction(async (tx) => {
+            const entry = await tx.timeEntry.create({
+                data: {
+                    user_id,
+                    project_id: activeTimer.project_id,
+                    task_description: activeTimer.task_description,
+                    start_time: activeTimer.start_time,
+                    end_time,
+                    duration,
+                    entry_type: 'timer',
+                    notes,
+                    is_billable,
+                },
+            });
+
+            await tx.activeTimer.delete({ where: { user_id } });
+
+            if (Array.isArray(persistedState.tag_ids)) {
+                const tagLinks = (persistedState.tag_ids as string[]).map((tag_id: string) => ({
+                    time_entry_id: entry.id,
+                    tag_id,
+                }));
+                await tx.timeEntryTag.createMany({ data: tagLinks, skipDuplicates: true });
+            }
+
+            return entry;
+        });
 
         try {
             await prisma.auditLog.create({
@@ -128,6 +147,8 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             notes,
         } = req.body ?? {};
         const user_id = requireUserId(req);
+        const is_billable = req.body?.is_billable !== false;
+        const tag_ids = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids : [];
 
         const start = new Date(start_time);
         const end = new Date(end_time);
@@ -153,6 +174,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
                 duration,
                 entry_type: 'manual',
                 notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
+                is_billable,
             },
         });
 
@@ -170,6 +192,14 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             },
         });
 
+        if (tag_ids.length > 0) {
+            const tagLinks = tag_ids.map((tag_id: string) => ({
+                time_entry_id: timeEntry.id,
+                tag_id,
+            }));
+            await prisma.timeEntryTag.createMany({ data: tagLinks, skipDuplicates: true });
+        }
+
         res.status(201).json(timeEntry);
     } catch (error) {
         console.error('Failed to create manual entry:', error);
@@ -180,18 +210,33 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
 export const getMyEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
-        const entries = await prisma.timeEntry.findMany({
-            where: { user_id },
-            orderBy: { start_time: 'desc' },
-            include: { project: { select: { name: true } } },
-        });
+        const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+        const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
+        const skip = (page - 1) * limit;
 
-        const activeTimer = await prisma.activeTimer.findUnique({
-            where: { user_id },
-            include: { project: { select: { name: true } } },
-        });
+        const [entries, total, activeTimer] = await Promise.all([
+            prisma.timeEntry.findMany({
+                where: { user_id },
+                orderBy: { start_time: 'desc' },
+                include: {
+                    project: { select: { name: true } },
+                    tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+                },
+                skip,
+                take: limit,
+            }),
+            prisma.timeEntry.count({ where: { user_id } }),
+            prisma.activeTimer.findUnique({
+                where: { user_id },
+                include: { project: { select: { name: true } } },
+            }),
+        ]);
 
-        res.status(200).json({ entries, activeTimer });
+        res.status(200).json({
+            entries,
+            activeTimer,
+            pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        });
     } catch (error) {
         console.error('Failed to fetch timer entries:', error);
         res.status(500).json({ message: 'Internal server error' });

@@ -18,6 +18,12 @@ const Dashboard: React.FC = () => {
     const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [budgets, setBudgets] = useState<{
+        id: string; name: string; budget_hours: number | null;
+        hours_used: number; hours_used_pct: number | null; over_budget: boolean;
+    }[]>([]);
+    const [hoursTrend, setHoursTrend] = useState<string | null>(null);
+    const [overtimeAlerts, setOvertimeAlerts] = useState<NotificationSummary[]>([]);
     const navigate = useNavigate();
     const role = getStoredRole();
 
@@ -40,9 +46,48 @@ const Dashboard: React.FC = () => {
                 setLiveSeconds(0);
             }
 
+            // Fetch dynamic trend data
+            try {
+                const dashResponse = await api.get<{ metrics: { trends: { hours: string } } }>('/reports/dashboard?range=7d');
+                setHoursTrend(dashResponse.data.metrics?.trends?.hours ?? null);
+            } catch {
+                setHoursTrend(null);
+            }
+
             if (role === 'Admin' || role === 'Manager') {
                 const notificationsResponse = await api.get<{ notifications: NotificationSummary[] }>('/admin/notifications');
-                setNotifications((notificationsResponse.data.notifications || []).slice(0, 5));
+                const allNotifications = notificationsResponse.data.notifications || [];
+                setNotifications(allNotifications.slice(0, 5));
+
+                // Filter overtime alerts from the last 7 days
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                const recentOvertimeAlerts = allNotifications.filter(
+                    (n) => n.type === 'overtime_alert' && new Date(n.created_at) >= sevenDaysAgo,
+                );
+                setOvertimeAlerts(recentOvertimeAlerts);
+
+                try {
+                    const budgetResponse = await api.get<{ budgets: typeof budgets }>('/projects/budgets');
+                    setBudgets(budgetResponse.data.budgets || []);
+                } catch {
+                    setBudgets([]);
+                }
+            } else {
+                // Non-admin users: check their own notifications for overtime alerts
+                try {
+                    const userNotifResponse = await api.get<{ notifications: NotificationSummary[] }>('/admin/notifications');
+                    const allUserNotifs = userNotifResponse.data.notifications || [];
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    setOvertimeAlerts(
+                        allUserNotifs.filter(
+                            (n) => n.type === 'overtime_alert' && new Date(n.created_at) >= sevenDaysAgo,
+                        ),
+                    );
+                } catch {
+                    setOvertimeAlerts([]);
+                }
             }
         } catch (error) {
             console.error('Failed to load dashboard data:', error);
@@ -178,6 +223,16 @@ const Dashboard: React.FC = () => {
             <div className="overflow-y-auto">
                 <div className="max-w-6xl mx-auto space-y-6">
 
+                    {/* Overtime Alert Banner */}
+                    {overtimeAlerts.length > 0 && (
+                        <div className="flex items-center gap-3 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-5 py-4 shadow-sm">
+                            <span className="material-symbols-outlined text-amber-600 dark:text-amber-400">warning</span>
+                            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                                ⚠️ You exceeded your weekly hour limit this week. Consider taking a break.
+                            </p>
+                        </div>
+                    )}
+
                     {/* Timer Widget */}
                     <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm transition-colors">
                         <div className="flex flex-col lg:flex-row gap-6 items-center">
@@ -241,7 +296,7 @@ const Dashboard: React.FC = () => {
                             <div className="flex items-center justify-between">
                                 <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Daily Goal</span>
                                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                                    <TrendingUp size={12} /> +5% vs last week
+                                    <TrendingUp size={12} /> {hoursTrend !== null ? `${hoursTrend} vs last week` : '—'}
                                 </span>
                             </div>
                             <div className="text-2xl font-bold mt-3 dark:text-slate-100">
@@ -327,6 +382,42 @@ const Dashboard: React.FC = () => {
                             )}
                         </div>
                     </div>
+
+                    {/* Budget Alerts */}
+                    {budgets.filter(b => b.budget_hours !== null).length > 0 && (
+                        <section className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-family-display)' }}>
+                                    Project Budgets
+                                </h3>
+                                <span className="text-xs font-semibold text-slate-500">Hours Utilization</span>
+                            </div>
+                            <div className="space-y-3">
+                                {budgets.filter(b => b.budget_hours !== null).map(budget => (
+                                    <div key={budget.id} className="space-y-1">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{budget.name}</span>
+                                            <span className={`text-xs font-bold ${budget.over_budget ? 'text-rose-600' : (budget.hours_used_pct ?? 0) > 80 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                {budget.hours_used}h / {budget.budget_hours}h ({budget.hours_used_pct ?? 0}%)
+                                            </span>
+                                        </div>
+                                        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
+                                            <div
+                                                className={`h-full rounded-full transition-all ${budget.over_budget ? 'bg-rose-500' : (budget.hours_used_pct ?? 0) > 80 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                                style={{ width: `${Math.min(budget.hours_used_pct ?? 0, 100)}%` }}
+                                            />
+                                        </div>
+                                        {budget.over_budget && (
+                                            <p className="text-xs font-semibold text-rose-600 flex items-center gap-1">
+                                                <span className="material-symbols-outlined text-xs">warning</span>
+                                                Over budget
+                                            </p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
 
                     {/* Recent Tasks */}
                     <section className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">

@@ -158,6 +158,56 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
     }
 };
 
+export const getProjectBudgets = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const projects = await prisma.project.findMany({
+            where: { is_active: true },
+            select: {
+                id: true,
+                name: true,
+                budget_hours: true,
+                budget_amount: true,
+                time_entries: {
+                    select: { duration: true, user: { select: { hourly_rate: true } } },
+                },
+            },
+        });
+
+        const budgets = projects.map(project => {
+            const totalSeconds = project.time_entries.reduce((sum, e) => sum + e.duration, 0);
+            const totalHours = totalSeconds / 3600;
+            const totalCost = project.time_entries.reduce((sum, e) => {
+                const rate = parseFloat(e.user.hourly_rate?.toString() || '0');
+                return sum + (e.duration / 3600) * rate;
+            }, 0);
+
+            const hoursUsedPct = project.budget_hours
+                ? Math.round((totalHours / project.budget_hours) * 100)
+                : null;
+            const amountUsedPct = project.budget_amount
+                ? Math.round((totalCost / parseFloat(project.budget_amount.toString())) * 100)
+                : null;
+
+            return {
+                id: project.id,
+                name: project.name,
+                budget_hours: project.budget_hours,
+                budget_amount: project.budget_amount ? parseFloat(project.budget_amount.toString()) : null,
+                hours_used: parseFloat(totalHours.toFixed(1)),
+                hours_used_pct: hoursUsedPct,
+                amount_used: parseFloat(totalCost.toFixed(2)),
+                amount_used_pct: amountUsedPct,
+                over_budget: (hoursUsedPct !== null && hoursUsedPct > 100) || (amountUsedPct !== null && amountUsedPct > 100),
+            };
+        });
+
+        res.status(200).json({ budgets });
+    } catch (error) {
+        console.error('Failed to fetch project budgets:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const deleteProject = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const projectId = req.params.id as string;

@@ -47,6 +47,10 @@ const Timer: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [taskError, setTaskError] = useState<string | null>(null);
+    const [isBillable, setIsBillable] = useState(true);
+    const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([]);
+    const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+    const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
 
     const isRunning = timerStartedAt !== null;
     const todaysProgress = completedSeconds + time;
@@ -66,6 +70,8 @@ const Timer: React.FC = () => {
         if (clearDraft) {
             setTask('');
             setSelectedProject('');
+            setIsBillable(true);
+            setSelectedTagIds([]);
         }
     }, []);
 
@@ -93,6 +99,22 @@ const Timer: React.FC = () => {
             setProjects(projectResponse.data || []);
             setCompletedSeconds(getTodaysCompletedSeconds(resolvedTimerPayload.entries || []));
             syncFromActiveTimer(resolvedTimerPayload.activeTimer, clearDraft);
+
+            try {
+                const tagsResponse = await api.get<{ tags: { id: string; name: string; color: string }[] }>('/tags');
+                setAvailableTags(tagsResponse.data.tags || []);
+            } catch {
+                setAvailableTags([]);
+            }
+
+            try {
+                const aiResponse = await api.post<{ suggestions: string[] }>('/ml/categorize', {
+                    description: 'suggest common tasks',
+                });
+                setAiSuggestions(aiResponse.data.suggestions || []);
+            } catch {
+                setAiSuggestions([]);
+            }
 
             try {
                 const statusResponse = await api.get<CalendarStatus>('/calendar/status');
@@ -202,6 +224,8 @@ const Timer: React.FC = () => {
                 const response = await api.post<ActiveTimerSummary>('/timers/start', {
                     project_id: selectedProject || undefined,
                     task_description: task.trim(),
+                    is_billable: isBillable,
+                    tag_ids: selectedTagIds,
                 });
 
                 syncFromActiveTimer(response.data);
@@ -313,6 +337,20 @@ const Timer: React.FC = () => {
                                         Task is locked while recording. Stop timer to edit task/project.
                                     </p>
                                 )}
+                                {!isRunning && aiSuggestions.length > 0 && !task.trim() && (
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {aiSuggestions.slice(0, 5).map((suggestion, i) => (
+                                            <button
+                                                key={i}
+                                                type="button"
+                                                className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                                                onClick={() => setTask(suggestion)}
+                                            >
+                                                {suggestion}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="relative text-left">
@@ -332,6 +370,48 @@ const Timer: React.FC = () => {
                                     <span className="material-symbols-outlined text-sm">keyboard_arrow_down</span>
                                 </div>
                             </div>
+
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Billable</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsBillable(!isBillable)}
+                                        disabled={isRunning || submitting}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isBillable ? 'bg-emerald-500' : 'bg-slate-300'} disabled:opacity-50`}
+                                    >
+                                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isBillable ? 'translate-x-6' : 'translate-x-1'}`} />
+                                    </button>
+                                </div>
+                            </div>
+
+                            {availableTags.length > 0 && (
+                                <div className="relative text-left">
+                                    <label className="mb-1 ml-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Tags</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {availableTags.map((tag) => {
+                                            const isSelected = selectedTagIds.includes(tag.id);
+                                            return (
+                                                <button
+                                                    key={tag.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setSelectedTagIds(prev =>
+                                                            isSelected ? prev.filter(id => id !== tag.id) : [...prev, tag.id]
+                                                        );
+                                                    }}
+                                                    disabled={isRunning || submitting}
+                                                    className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold transition-all disabled:opacity-50 ${isSelected ? 'text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                                    style={isSelected ? { backgroundColor: tag.color } : undefined}
+                                                >
+                                                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: isSelected ? '#fff' : tag.color }} />
+                                                    {tag.name}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             <button
                                 onClick={() => void handleToggle()}

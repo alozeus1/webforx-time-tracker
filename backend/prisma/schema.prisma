@@ -23,6 +23,8 @@ model User {
   created_at    DateTime        @default(now())
   updated_at    DateTime        @updatedAt
 
+  weekly_hour_limit Int?
+
   project_members ProjectMember[]
   time_entries    TimeEntry[]
   active_timers   ActiveTimer[]
@@ -30,6 +32,9 @@ model User {
   audit_logs      AuditLog[]
   calendar_connection CalendarConnection?
   password_reset_tokens PasswordResetToken[]
+  invoices        Invoice[]
+  project_templates ProjectTemplate[]
+  scheduled_reports ScheduledReport[]
 }
 
 model Role {
@@ -52,6 +57,7 @@ model Project {
   members       ProjectMember[]
   time_entries  TimeEntry[]
   active_timers ActiveTimer[]
+  invoices      Invoice[]
 }
 
 model ProjectMember {
@@ -75,12 +81,15 @@ model TimeEntry {
   duration         Int
   entry_type       String   // "timer", "manual", "ai_suggested", "calendar_sync"
   notes            String?
+  is_billable      Boolean  @default(true)
   status           String   @default("pending") // "pending", "approved", "rejected"
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
   user    User    @relation(fields: [user_id], references: [id])
   project Project? @relation(fields: [project_id], references: [id])
+  tags    TimeEntryTag[]
+  invoice_line_items InvoiceLineItem[]
 }
 
 model ActiveTimer {
@@ -156,4 +165,96 @@ model ReportCache {
   data         Json
   generated_at DateTime @default(now())
   expires_at   DateTime
+}
+
+model Tag {
+  id         String       @id @default(uuid())
+  name       String       @unique
+  color      String       @default("#6366f1")
+  created_at DateTime     @default(now())
+
+  time_entries TimeEntryTag[]
+}
+
+model TimeEntryTag {
+  time_entry_id String
+  tag_id        String
+
+  time_entry TimeEntry @relation(fields: [time_entry_id], references: [id], onDelete: Cascade)
+  tag        Tag       @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+
+  @@id([time_entry_id, tag_id])
+}
+
+model Invoice {
+  id             String    @id @default(uuid())
+  invoice_number String    @unique
+  client_name    String
+  client_email   String?
+  project_id     String?
+  user_id        String
+  status         String    @default("draft") // draft, sent, paid
+  subtotal       Decimal   @db.Decimal(10, 2)
+  tax_rate       Decimal?  @db.Decimal(5, 2)
+  total          Decimal   @db.Decimal(10, 2)
+  notes          String?
+  due_date       DateTime?
+  issued_at      DateTime?
+  paid_at        DateTime?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  project    Project?          @relation(fields: [project_id], references: [id])
+  creator    User              @relation(fields: [user_id], references: [id])
+  line_items InvoiceLineItem[]
+}
+
+model InvoiceLineItem {
+  id            String  @id @default(uuid())
+  invoice_id    String
+  time_entry_id String?
+  description   String
+  hours         Decimal @db.Decimal(10, 2)
+  rate          Decimal @db.Decimal(10, 2)
+  amount        Decimal @db.Decimal(10, 2)
+
+  invoice    Invoice    @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
+  time_entry TimeEntry? @relation(fields: [time_entry_id], references: [id])
+}
+
+model ProjectTemplate {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  description     String?
+  default_billable Boolean @default(true)
+  budget_hours    Int?
+  budget_amount   Decimal? @db.Decimal(10, 2)
+  tag_ids         Json     @default("[]")
+  created_by      String
+  created_at      DateTime @default(now())
+
+  creator User @relation(fields: [created_by], references: [id])
+}
+
+model WebhookSubscription {
+  id         String   @id @default(uuid())
+  url        String
+  events     Json     @default("[]")
+  secret     String
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+}
+
+model ScheduledReport {
+  id           String    @id @default(uuid())
+  user_id      String
+  frequency    String    // weekly, monthly
+  day_of_week  Int?
+  recipients   Json      @default("[]")
+  report_type  String    @default("summary")
+  is_active    Boolean   @default(true)
+  last_sent_at DateTime?
+  created_at   DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
 }

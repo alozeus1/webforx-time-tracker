@@ -28,6 +28,9 @@ api.interceptors.response.use(
             localStorage.removeItem('token');
             localStorage.removeItem('user_role');
             localStorage.removeItem('user_profile');
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password') {
+                window.location.href = '/login';
+            }
         }
 
         return Promise.reject(error);

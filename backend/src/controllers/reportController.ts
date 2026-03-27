@@ -121,7 +121,15 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
 
         const totalHours = totalDurationSec / 3600;
         const activeProjectsCount = projectIds.size;
-        const avgProductivity = 88; // Placeholder for now, could be dynamic (billable ratio)
+        let billableSeconds = 0;
+        entries.forEach(entry => {
+            if (entry.is_billable !== false) {
+                billableSeconds += entry.duration;
+            }
+        });
+        const avgProductivity = totalDurationSec > 0
+            ? Math.round((billableSeconds / totalDurationSec) * 100)
+            : 0;
 
         // Compute Project Distribution
         const projectHoursMap = new Map<string, { id: string, name: string, hours: number }>();
@@ -156,6 +164,48 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         });
 
         const hoursTrend = weekBuckets;
+
+        // Compute period-over-period trends
+        const periodDays = Math.max(Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)), 1);
+        const prevStart = new Date(startDate);
+        prevStart.setDate(prevStart.getDate() - periodDays);
+
+        const prevWhereClause: Prisma.TimeEntryWhereInput = {
+            ...whereClause,
+            start_time: { gte: prevStart, lt: startDate },
+        };
+
+        const prevEntries = await prisma.timeEntry.findMany({
+            where: prevWhereClause,
+            include: {
+                user: { select: { hourly_rate: true } },
+                project: { select: { id: true } },
+            },
+        });
+
+        let prevTotalSec = 0;
+        let prevBillable = 0;
+        const prevProjectIds = new Set<string>();
+        let prevBillableSec = 0;
+
+        prevEntries.forEach(entry => {
+            prevTotalSec += entry.duration;
+            if (entry.project_id) prevProjectIds.add(entry.project_id);
+            const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
+            prevBillable += (entry.duration / 3600) * rate;
+            if ((entry as any).is_billable !== false) {
+                prevBillableSec += entry.duration;
+            }
+        });
+
+        const prevHours = prevTotalSec / 3600;
+        const prevAvgProd = prevTotalSec > 0 ? Math.round((prevBillableSec / prevTotalSec) * 100) : 0;
+
+        const pctChange = (current: number, previous: number): string => {
+            if (previous === 0) return current > 0 ? '+100%' : '0%';
+            const change = Math.round(((current - previous) / previous) * 100);
+            return change >= 0 ? `+${change}%` : `${change}%`;
+        };
 
         // Compute User Productivity Breakdown
         const userMap = new Map<string, any>();
@@ -210,10 +260,10 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 avgProductivity,
                 billableAmount: billableAmount.toFixed(2),
                 trends: {
-                    hours: "+5%", // Placeholder trends
-                    projects: "0%",
-                    productivity: "+2%",
-                    billable: "+8%"
+                    hours: pctChange(totalHours, prevHours),
+                    projects: pctChange(activeProjectsCount, prevProjectIds.size),
+                    productivity: pctChange(avgProductivity, prevAvgProd),
+                    billable: pctChange(billableAmount, prevBillable),
                 }
             },
             hoursTrend,

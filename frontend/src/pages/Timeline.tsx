@@ -263,11 +263,26 @@ const Timeline: React.FC = () => {
                                             <p className="text-xs text-slate-500 dark:text-slate-400">
                                                 {entry.project?.name || 'No project'} • {new Date(entry.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(entry.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </p>
+                                            {(() => {
+                                                const tagList = (entry as unknown as Record<string, unknown>).tags as { tag: { name: string; color: string } }[] | undefined;
+                                                return tagList && tagList.length > 0 ? (
+                                                    <div className="flex gap-1 mt-1">
+                                                        {tagList.map((t, i) => (
+                                                            <span key={i} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: t.tag.color }}>
+                                                                {t.tag.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : null;
+                                            })()}
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                                                 {formatDuration(entry.duration || 0)}
                                             </span>
+                                            {(entry as unknown as Record<string, unknown>).is_billable === false && (
+                                                <span className="text-[10px] font-semibold text-slate-400">Non-billable</span>
+                                            )}
                                             <button
                                                 className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
                                                 title="Edit in Timer"
