@@ -120,22 +120,22 @@ export const Scene01Hook: React.FC = () => {
         </div>
 
         {/* Problem statements */}
-        <Problem text="Scattered time tracking across teams." delay={Math.round(0.4 * fps)} />
-        <Problem text="No visibility into project workloads." delay={Math.round(1.2 * fps)} />
-        <Problem text="Inconsistent reporting. Missed hours." delay={Math.round(2.0 * fps)} />
+        <Problem text="Hours vanish across spreadsheets and inboxes." delay={Math.round(0.3 * fps)} />
+        <Problem text="No clear view of where project time goes." delay={Math.round(0.9 * fps)} />
+        <Problem text="Reporting is manual. Timesheets arrive late." delay={Math.round(1.5 * fps)} />
         <Problem
-          text="Management flying blind."
-          delay={Math.round(2.8 * fps)}
+          text="Leaders decide without the data."
+          delay={Math.round(2.1 * fps)}
           accent
         />
 
         {/* Separator + sub-copy */}
         {(() => {
-          const copyOpacity = interpolate(frame, [4.5 * fps, 5.2 * fps], [0, 1], {
+          const copyOpacity = interpolate(frame, [3.5 * fps, 4.2 * fps], [0, 1], {
             extrapolateRight: "clamp",
             extrapolateLeft: "clamp",
           });
-          const copyY = interpolate(frame, [4.5 * fps, 5.2 * fps], [16, 0], {
+          const copyY = interpolate(frame, [3.5 * fps, 4.2 * fps], [16, 0], {
             extrapolateRight: "clamp",
             extrapolateLeft: "clamp",
           });

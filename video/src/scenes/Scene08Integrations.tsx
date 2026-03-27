@@ -104,7 +104,7 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
         <div
           style={{
             fontFamily: FONT,
-            fontSize: 20,
+            fontSize: 24,
             fontWeight: 700,
             color: C.text,
             letterSpacing: "-0.02em",
@@ -149,10 +149,10 @@ const IntegrationCard: React.FC<IntegrationCardProps> = ({
       <div
         style={{
           fontFamily: FONT,
-          fontSize: 15,
+          fontSize: 17,
           color: C.textSub,
-          lineHeight: 1.6,
-          marginBottom: 24,
+          lineHeight: 1.5,
+          marginBottom: 20,
         }}
       >
         {description}
@@ -194,11 +194,11 @@ export const Scene08Integrations: React.FC = () => {
         style={{
           display: "flex",
           flexDirection: "column",
-          padding: "60px 80px",
+          padding: "44px 56px",
         }}
       >
         {/* Page header */}
-        <div style={{ opacity: headerOpacity, marginBottom: 48 }}>
+        <div style={{ opacity: headerOpacity, marginBottom: 32 }}>
           <div
             style={{
               fontFamily: FONT,

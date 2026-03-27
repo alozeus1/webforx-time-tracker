@@ -48,7 +48,7 @@ export const Scene06Reports: React.FC = () => {
       <AbsoluteFill
         style={{
           opacity: panelOpacity,
-          padding: 40,
+          padding: 20,
         }}
       >
         <div
@@ -59,7 +59,7 @@ export const Scene06Reports: React.FC = () => {
             height: "100%",
             display: "flex",
             flexDirection: "column",
-            padding: "36px 44px",
+            padding: "28px 36px",
             overflow: "hidden",
           }}
         >
@@ -186,7 +186,7 @@ export const Scene06Reports: React.FC = () => {
                     <div
                       style={{
                         fontFamily: FONT_MONO,
-                        fontSize: 26,
+                        fontSize: 32,
                         fontWeight: 700,
                         color: m.color,
                         letterSpacing: "-0.03em",
@@ -242,7 +242,7 @@ export const Scene06Reports: React.FC = () => {
                   const barHeight = interpolate(
                     local,
                     [0, 0.7 * fps],
-                    [0, (bar.hours / MAX_HOURS) * 200],
+                    [0, (bar.hours / MAX_HOURS) * 240],
                     {
                       extrapolateRight: "clamp",
                       extrapolateLeft: "clamp",

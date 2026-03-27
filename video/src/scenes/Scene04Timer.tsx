@@ -116,15 +116,14 @@ export const Scene04Timer: React.FC = () => {
           <div
             style={{
               fontFamily: FONT,
-              fontSize: 13,
-              color: C.textMuted,
-              textTransform: "uppercase",
-              letterSpacing: "0.1em",
-              fontWeight: 600,
+              fontSize: 18,
+              color: C.textSub,
+              fontWeight: 700,
+              letterSpacing: "-0.02em",
               marginBottom: 36,
             }}
           >
-            Timer
+            Time Tracker
           </div>
 
           {/* Timer display */}
@@ -156,7 +155,7 @@ export const Scene04Timer: React.FC = () => {
               <div
                 style={{
                   fontFamily: FONT_MONO,
-                  fontSize: 90,
+                  fontSize: 100,
                   fontWeight: 700,
                   color: isRunning ? C.text : C.textSub,
                   letterSpacing: "-0.04em",

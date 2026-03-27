@@ -52,7 +52,7 @@ const StatCard: React.FC<{
       <div
         style={{
           fontFamily: FONT,
-          fontSize: 13,
+          fontSize: 14,
           color: C.textMuted,
           fontWeight: 500,
           textTransform: "uppercase",
@@ -65,7 +65,7 @@ const StatCard: React.FC<{
       <div
         style={{
           fontFamily: FONT_MONO,
-          fontSize: 36,
+          fontSize: 42,
           fontWeight: 700,
           color: C.text,
           letterSpacing: "-0.03em",
@@ -361,7 +361,7 @@ const DashboardMock: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          inset: 40,
+          inset: 20,
           background: C.bgCard,
           border: `1px solid ${C.border}`,
           borderRadius: 16,
@@ -375,8 +375,8 @@ const DashboardMock: React.FC = () => {
           style={{
             display: "flex",
             alignItems: "center",
-            padding: "0 32px",
-            height: 60,
+            padding: "0 40px",
+            height: 72,
             borderBottom: `1px solid ${C.border}`,
             background: C.bgCardAlt,
             flexShrink: 0,
@@ -386,16 +386,16 @@ const DashboardMock: React.FC = () => {
           <Img
             src={staticFile("webforx-logo.png")}
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 7,
+              width: 36,
+              height: 36,
+              borderRadius: 9,
               objectFit: "contain",
             }}
           />
           <span
             style={{
               fontFamily: FONT,
-              fontSize: 14,
+              fontSize: 16,
               fontWeight: 600,
               color: C.text,
             }}
@@ -416,10 +416,10 @@ const DashboardMock: React.FC = () => {
               <div
                 key={nav}
                 style={{
-                  padding: "6px 16px",
+                  padding: "8px 18px",
                   borderRadius: 8,
                   fontFamily: FONT,
-                  fontSize: 13,
+                  fontSize: 14,
                   fontWeight: i === 0 ? 600 : 400,
                   color: i === 0 ? C.text : C.textMuted,
                   background: i === 0 ? C.bgCardAlt : "transparent",
@@ -457,7 +457,7 @@ const DashboardMock: React.FC = () => {
           <div
             style={{
               fontFamily: FONT,
-              fontSize: 22,
+              fontSize: 26,
               fontWeight: 700,
               color: C.text,
               letterSpacing: "-0.03em",
@@ -500,7 +500,7 @@ const DashboardMock: React.FC = () => {
               <div
                 style={{
                   fontFamily: FONT,
-                  fontSize: 13,
+                  fontSize: 14,
                   color: C.accentLt,
                   fontWeight: 500,
                   textTransform: "uppercase",
@@ -525,7 +525,7 @@ const DashboardMock: React.FC = () => {
               <div
                 style={{
                   fontFamily: FONT_MONO,
-                  fontSize: 32,
+                  fontSize: 38,
                   fontWeight: 700,
                   color: C.text,
                   letterSpacing: "-0.03em",

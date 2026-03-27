@@ -48,11 +48,11 @@ export const Scene07TeamAdmin: React.FC = () => {
       <div
         style={{
           position: "absolute",
-          inset: 40,
+          inset: 20,
           background: C.bgCard,
           border: `1px solid ${C.border}`,
           borderRadius: 16,
-          padding: "40px 48px",
+          padding: "32px 40px",
         }}
       >
         {/* Header */}
