@@ -32,7 +32,21 @@ const db_1 = __importDefault(require("./config/db"));
 const env_1 = require("./config/env");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)({ origin: env_1.env.corsOrigin }));
+const allowedOrigins = Array.from(new Set([env_1.env.corsOrigin, env_1.env.frontendUrl]
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim())
+    .filter(Boolean)));
+const allowAnyOrigin = allowedOrigins.includes('*');
+app.use((0, cors_1.default)({
+    origin: (origin, callback) => {
+        // Allow requests without an Origin header (for server-to-server calls, health checks, etc).
+        if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(new Error(`Origin not allowed by CORS: ${origin}`));
+    },
+}));
 app.use(express_1.default.json());
 // Routes
 app.use('/api/v1/auth', authRoutes_1.default);

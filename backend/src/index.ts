@@ -21,7 +21,29 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors({ origin: env.corsOrigin }));
+const allowedOrigins = Array.from(
+    new Set(
+        [env.corsOrigin, env.frontendUrl]
+            .flatMap((value) => value.split(','))
+            .map((value) => value.trim())
+            .filter(Boolean),
+    ),
+);
+const allowAnyOrigin = allowedOrigins.includes('*');
+
+app.use(
+    cors({
+        origin: (origin, callback) => {
+            // Allow requests without an Origin header (for server-to-server calls, health checks, etc).
+            if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+                return;
+            }
+
+            callback(new Error(`Origin not allowed by CORS: ${origin}`));
+        },
+    }),
+);
 app.use(express.json());
 
 // Routes
