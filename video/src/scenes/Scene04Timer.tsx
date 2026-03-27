@@ -48,7 +48,7 @@ export const Scene04Timer: React.FC = () => {
   const taskLen = Math.min(
     taskFull.length,
     Math.floor(
-      interpolate(frame, [3 * fps, 5.2 * fps], [0, taskFull.length], {
+      interpolate(frame, [3 * fps, 4.8 * fps], [0, taskFull.length], {
         extrapolateRight: "clamp",
         extrapolateLeft: "clamp",
       })
@@ -392,7 +392,7 @@ export const Scene04Timer: React.FC = () => {
 
       <LowerThird
         label="Live Timer"
-        sublabel="Select a project, describe the task, and start tracking instantly"
+        sublabel="One click. Every billable minute captured and attributed."
         delay={10}
       />
     </AbsoluteFill>

@@ -293,8 +293,8 @@ export const Scene07TeamAdmin: React.FC = () => {
 
     const TABS = ["Users", "Projects", "Notifications", "Audit Logs"];
     const [activeTab] = [
-      localFrame < 1.5 * fps ? "Users"
-      : localFrame < 3.0 * fps ? "Projects"
+      localFrame < 2.0 * fps ? "Users"
+      : localFrame < 4.0 * fps ? "Projects"
       : "Audit Logs",
     ];
 
@@ -350,9 +350,9 @@ export const Scene07TeamAdmin: React.FC = () => {
           </div>
           {TABS.map((tab) => {
             const isActive =
-              (tab === "Users" && localFrame < 1.5 * fps) ||
-              (tab === "Projects" && localFrame >= 1.5 * fps && localFrame < 3.0 * fps) ||
-              (tab === "Audit Logs" && localFrame >= 3.0 * fps);
+              (tab === "Users" && localFrame < 2.0 * fps) ||
+              (tab === "Projects" && localFrame >= 2.0 * fps && localFrame < 4.0 * fps) ||
+              (tab === "Audit Logs" && localFrame >= 4.0 * fps);
             return (
               <div
                 key={tab}
@@ -390,19 +390,19 @@ export const Scene07TeamAdmin: React.FC = () => {
               marginBottom: 24,
             }}
           >
-            {localFrame < 1.5 * fps
+            {localFrame < 2.0 * fps
               ? "User Management"
-              : localFrame < 3.0 * fps
+              : localFrame < 4.0 * fps
               ? "Project Management"
               : "Audit Log"}
           </div>
 
           {/* Audit log content */}
-          {localFrame >= 3.0 * fps && (
+          {localFrame >= 4.0 * fps && (
             <div>
               {AUDIT_ENTRIES.map((entry, i) => {
                 const entDelay = Math.round(i * 0.2 * fps);
-                const entLocal = Math.max(0, localFrame - 3.0 * fps - entDelay);
+                const entLocal = Math.max(0, localFrame - 4.0 * fps - entDelay);
                 const entOpacity = interpolate(entLocal, [0, 0.4 * fps], [0, 1], {
                   extrapolateRight: "clamp",
                   extrapolateLeft: "clamp",
@@ -477,10 +477,10 @@ export const Scene07TeamAdmin: React.FC = () => {
           )}
 
           {/* Users tab placeholder */}
-          {localFrame < 1.5 * fps && (
+          {localFrame < 2.0 * fps && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {["Alex Chen", "Sarah Osei", "Marcus Adeyemi", "Priya Nair", "Luca Ferreira"].map((name, i) => {
-                const uOpacity = interpolate(Math.max(0, localFrame - i * 0.15 * fps), [0, 0.4 * fps], [0, 1], { extrapolateRight: "clamp", extrapolateLeft: "clamp" });
+                const uOpacity = interpolate(Math.max(0, localFrame - i * 0.12 * fps), [0, 0.4 * fps], [0, 1], { extrapolateRight: "clamp", extrapolateLeft: "clamp" });
                 return (
                   <div key={name} style={{ opacity: uOpacity, display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ width: 32, height: 32, borderRadius: "50%", background: C.proj[i % 7], display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: 12, fontWeight: 700, color: "#fff" }}>
@@ -497,10 +497,10 @@ export const Scene07TeamAdmin: React.FC = () => {
           )}
 
           {/* Projects tab placeholder */}
-          {localFrame >= 1.5 * fps && localFrame < 3.0 * fps && (
+          {localFrame >= 2.0 * fps && localFrame < 4.0 * fps && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {["Platform Engineering","EDUSUC","Yemba","LAFABAH","Webforx Website","BA"].map((proj, i) => {
-                const pOpacity = interpolate(Math.max(0, localFrame - 1.5 * fps - i * 0.15 * fps), [0, 0.4 * fps], [0, 1], { extrapolateRight: "clamp", extrapolateLeft: "clamp" });
+                const pOpacity = interpolate(Math.max(0, localFrame - 2.0 * fps - i * 0.15 * fps), [0, 0.4 * fps], [0, 1], { extrapolateRight: "clamp", extrapolateLeft: "clamp" });
                 return (
                   <div key={proj} style={{ opacity: pOpacity, display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ width: 10, height: 10, borderRadius: "50%", background: C.proj[i % 7] }} />
@@ -532,8 +532,8 @@ export const Scene07TeamAdmin: React.FC = () => {
         label={frame < SWITCH + FADE_DUR ? "Team Overview" : "Admin Control Panel"}
         sublabel={
           frame < SWITCH + FADE_DUR
-            ? "Manager visibility into team activity, workloads, and project allocation"
-            : "Manage users, projects, and review full audit logs — all in one place"
+            ? "Full visibility into your team's weekly output and project allocation"
+            : "Manage users, configure projects, and review every action in the audit log"
         }
         delay={10}
       />

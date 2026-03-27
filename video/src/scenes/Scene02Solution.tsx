@@ -158,7 +158,24 @@ export const Scene02Solution: React.FC = () => {
               letterSpacing: "-0.01em",
             }}
           >
-            One platform. Every hour. Every team.
+            The time tracking platform built for operational teams.
+          </p>
+          <p
+            style={{
+              fontFamily: FONT,
+              fontSize: 20,
+              fontWeight: 400,
+              color: C.textMuted,
+              margin: 0,
+              marginTop: 16,
+              opacity: interpolate(frame, [3.0 * fps, 3.8 * fps], [0, 1], {
+                extrapolateRight: "clamp",
+                extrapolateLeft: "clamp",
+              }),
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Capture work. Report clearly. Manage with confidence.
           </p>
         </div>
 

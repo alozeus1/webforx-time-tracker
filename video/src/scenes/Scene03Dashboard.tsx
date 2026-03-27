@@ -184,7 +184,7 @@ const LoginMock: React.FC = () => {
   // Typing cursor blink on email field
   const emailTyped = Math.min(
     24,
-    Math.floor(interpolate(frame, [0.8 * fps, 2.5 * fps], [0, 24], {
+    Math.floor(interpolate(frame, [0.8 * fps, 1.8 * fps], [0, 24], {
       extrapolateRight: "clamp",
       extrapolateLeft: "clamp",
     }))
@@ -594,8 +594,8 @@ export const Scene03Dashboard: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
 
-  // Show login first 4s, then crossfade to dashboard
-  const SWITCH = Math.round(3.5 * fps);
+  // Show login first 2s, then crossfade to dashboard
+  const SWITCH = Math.round(2.0 * fps);
   const FADE_DUR = Math.round(0.8 * fps);
 
   const loginOpacity = interpolate(frame, [SWITCH, SWITCH + FADE_DUR], [1, 0], {
@@ -641,8 +641,8 @@ export const Scene03Dashboard: React.FC = () => {
         label={frame < SWITCH + FADE_DUR ? "Secure Login" : "Dashboard Overview"}
         sublabel={
           frame < SWITCH + FADE_DUR
-            ? "Role-based access for employees, managers, and admins"
-            : "Today's hours, active timer, and recent task history at a glance"
+            ? "Secure role-based access for every member of your organization"
+            : "See exactly where your team's hours went — at a glance"
         }
         delay={10}
       />

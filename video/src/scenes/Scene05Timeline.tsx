@@ -9,6 +9,7 @@ import {
 import { C, FONT, FONT_MONO, PROJECTS } from "../constants";
 import { GradientBg } from "../components/GradientBg";
 import { LowerThird } from "../components/LowerThird";
+import { CalloutRing } from "../components/CalloutRing";
 
 // ─── Timeline entries for demo day ───────────────────────────────────────────
 const ENTRIES = [
@@ -562,12 +563,23 @@ export const Scene05Timeline: React.FC = () => {
         <TimesheetView />
       </AbsoluteFill>
 
+      {/* Callout ring on the "48h 45m total" badge in timesheet view */}
+      {frame > SWITCH + Math.round(1.5 * fps) && (
+        <CalloutRing
+          x={1700}
+          y={120}
+          size={60}
+          color={C.accentLt}
+          delay={0}
+        />
+      )}
+
       <LowerThird
         label={frame < SWITCH + FADE_DUR ? "Daily Timeline" : "Weekly Timesheet"}
         sublabel={
           frame < SWITCH + FADE_DUR
-            ? "Every work block organized by project, task, and time"
-            : "Aggregated hours by day and project — ready for review or approval"
+            ? "Every work block visible by project, task, and time of day"
+            : "Weekly hours by project — ready for manager review and approval"
         }
         delay={10}
       />

@@ -240,7 +240,7 @@ export const Scene08Integrations: React.FC = () => {
         <div style={{ display: "flex", gap: 24, flex: 1 }}>
           <IntegrationCard
             name="Google Calendar"
-            description="Sync tracked sessions directly to your Google Calendar. Visualize your workday alongside meetings, deadlines, and scheduled events — without manual duplication."
+            description="Auto-import calendar events as time entries. Your workday, unified."
             statusLabel="Connected"
             statusColor={C.success}
             accentColor="#4285F4"
@@ -251,7 +251,7 @@ export const Scene08Integrations: React.FC = () => {
 
           <IntegrationCard
             name="Taiga"
-            description="Pull your Taiga projects and user stories directly into the timer. Attach time entries to tasks as you work — keeping project management and time tracking in sync."
+            description="Pull tasks directly into the timer. Track time against the work that matters."
             statusLabel="Connected"
             statusColor={C.success}
             accentColor="#70B244"
@@ -262,7 +262,7 @@ export const Scene08Integrations: React.FC = () => {
 
           <IntegrationCard
             name="Mattermost"
-            description="Receive automated daily reminders, end-of-week summaries, and admin alerts directly in your Mattermost channels — keeping the team aligned without switching tools."
+            description="Get daily summaries and admin alerts in your team channels. Stay aligned."
             statusLabel="Configure"
             statusColor={C.warning}
             accentColor="#1E5291"
@@ -322,7 +322,7 @@ export const Scene08Integrations: React.FC = () => {
 
       <LowerThird
         label="Integrations"
-        sublabel="Google Calendar, Taiga, and Mattermost — connected workflows, zero double-entry"
+        sublabel="Connect your existing tools — zero double-entry, zero workflow disruption"
         delay={10}
       />
     </AbsoluteFill>

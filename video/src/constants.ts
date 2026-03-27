@@ -86,6 +86,15 @@ export const PROJECTS = [
   'Web Forx Technology',
 ] as const;
 
+// ─── Short cut (6 scenes: Hook, Solution, Dashboard, Timer, Reports, CTA) ─────
+const _shortOrder = [240, 210, 300, 300, 300, 270] as const;
+export const SCENE_STARTS_SHORT: number[] = _shortOrder.reduce<number[]>((acc, dur, i) => {
+  acc.push(i === 0 ? 0 : acc[i - 1] + _shortOrder[i - 1] - TRANSITION_FRAMES);
+  return acc;
+}, []);
+// 5 transitions: 240+210+300+300+300+270 - 5*15 = 1620 - 75 = 1545 frames = 51.5s
+export const TOTAL_FRAMES_SHORT = 1545;
+
 // ─── Demo team members ────────────────────────────────────────────────────────
 export const TEAM = [
   { name: 'Alex Chen',       role: 'Admin',    hours: '41h 20m', status: 'Active'  },

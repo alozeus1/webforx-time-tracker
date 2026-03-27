@@ -1,34 +1,20 @@
 import React from "react";
 import {
   AbsoluteFill,
-  Easing,
+  Img,
   interpolate,
   spring,
+  staticFile,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
 import { C, FONT, FONT_MONO } from "../constants";
 import { GradientBg } from "../components/GradientBg";
 
-const VALUE_PILLARS = [
-  {
-    icon: "◎",
-    title: "Accountability",
-    desc: "Every hour attributed to the right project, person, and purpose.",
-    color: C.accentLt,
-  },
-  {
-    icon: "⬡",
-    title: "Visibility",
-    desc: "Managers and admins see team activity, utilization, and workloads in real time.",
-    color: C.purpleLt,
-  },
-  {
-    icon: "△",
-    title: "Clarity",
-    desc: "Reliable reporting and clean exports — built for operational decisions.",
-    color: C.successLt,
-  },
+const METRICS = [
+  { value: "25K+",   label: "Hours tracked per month" },
+  { value: "150+",   label: "Teams onboarded"         },
+  { value: "< 8hrs", label: "Average approval time"   },
 ];
 
 export const Scene09CTA: React.FC = () => {
@@ -41,33 +27,39 @@ export const Scene09CTA: React.FC = () => {
     extrapolateLeft: "clamp",
   });
 
-  // Value pillars appear sequentially
-  const pillarsStart = Math.round(0.5 * fps);
-
-  // Divider line
-  const lineWidth = interpolate(frame, [2.5 * fps, 3.5 * fps], [0, 400], {
-    extrapolateRight: "clamp",
-    extrapolateLeft: "clamp",
-    easing: Easing.out(Easing.quad),
-  });
-
-  // CTA block
-  const ctaOpacity = interpolate(frame, [3.5 * fps, 4.5 * fps], [0, 1], {
+  // Logo spring entrance
+  const logoScale = spring({ frame, fps, config: { damping: 200 } });
+  const logoOpacity = interpolate(frame, [0, 0.5 * fps], [0, 1], {
     extrapolateRight: "clamp",
     extrapolateLeft: "clamp",
   });
-  const ctaY = interpolate(frame, [3.5 * fps, 4.5 * fps], [20, 0], {
+
+  // Headline appears at 0.6s
+  const headOpacity = interpolate(frame, [0.6 * fps, 1.3 * fps], [0, 1], {
     extrapolateRight: "clamp",
     extrapolateLeft: "clamp",
-    easing: Easing.out(Easing.quad),
+  });
+  const headY = interpolate(frame, [0.6 * fps, 1.3 * fps], [24, 0], {
+    extrapolateRight: "clamp",
+    extrapolateLeft: "clamp",
   });
 
   // URL pulse glow
   const urlGlow = interpolate(
     Math.sin(frame * 0.06),
     [-1, 1],
-    [0.08, 0.22]
+    [0.12, 0.32]
   );
+
+  // CTA buttons appear at 4.0s
+  const ctaOpacity = interpolate(frame, [4.0 * fps, 4.8 * fps], [0, 1], {
+    extrapolateRight: "clamp",
+    extrapolateLeft: "clamp",
+  });
+  const ctaY = interpolate(frame, [4.0 * fps, 4.8 * fps], [16, 0], {
+    extrapolateRight: "clamp",
+    extrapolateLeft: "clamp",
+  });
 
   return (
     <AbsoluteFill style={{ opacity: sceneOpacity }}>
@@ -80,165 +72,180 @@ export const Scene09CTA: React.FC = () => {
           justifyContent: "center",
           alignItems: "center",
           padding: "0 120px",
+          gap: 0,
         }}
       >
-        {/* Eyebrow */}
+        {/* Logo */}
         <div
           style={{
-            fontFamily: FONT,
-            fontSize: 13,
-            fontWeight: 600,
-            color: C.accentLt,
-            letterSpacing: "0.14em",
-            textTransform: "uppercase",
-            marginBottom: 40,
-            opacity: interpolate(frame, [0, 0.5 * fps], [0, 1], {
-              extrapolateRight: "clamp",
-              extrapolateLeft: "clamp",
-            }),
+            opacity: logoOpacity,
+            transform: `scale(${logoScale})`,
+            marginBottom: 32,
           }}
         >
-          Built for teams that value their time
+          <Img
+            src={staticFile("webforx-logo.png")}
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: 18,
+              objectFit: "contain",
+              boxShadow: `0 0 48px ${C.accentGlow}, 0 0 80px rgba(37,99,235,0.2)`,
+            }}
+          />
         </div>
 
-        {/* Three value pillars */}
+        {/* Two-line headline */}
+        <div
+          style={{
+            opacity: headOpacity,
+            transform: `translateY(${headY}px)`,
+            textAlign: "center",
+            marginBottom: 48,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: FONT,
+              fontSize: 64,
+              fontWeight: 800,
+              color: C.text,
+              letterSpacing: "-0.04em",
+              lineHeight: 1.1,
+            }}
+          >
+            Your team&apos;s time.
+          </div>
+          <div
+            style={{
+              fontFamily: FONT,
+              fontSize: 64,
+              fontWeight: 800,
+              letterSpacing: "-0.04em",
+              lineHeight: 1.1,
+              background: `linear-gradient(90deg, ${C.accentLt}, ${C.purpleLt})`,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Finally visible.
+          </div>
+        </div>
+
+        {/* Three metric boxes */}
         <div
           style={{
             display: "flex",
-            gap: 32,
-            marginBottom: 60,
+            gap: 24,
             width: "100%",
+            marginBottom: 48,
           }}
         >
-          {VALUE_PILLARS.map((pillar, i) => {
-            const delay = Math.round((pillarsStart + i * 0.4 * fps));
+          {METRICS.map((m, i) => {
+            const delay = Math.round((1.5 + i * 0.35) * fps);
             const local = Math.max(0, frame - delay);
-            const pScale = spring({ frame: local, fps, config: { damping: 200 } });
-            const pOpacity = interpolate(local, [0, 0.4 * fps], [0, 1], {
+            const mScale = spring({ frame: local, fps, config: { damping: 200 } });
+            const mOpacity = interpolate(local, [0, 0.4 * fps], [0, 1], {
               extrapolateRight: "clamp",
               extrapolateLeft: "clamp",
             });
 
             return (
               <div
-                key={pillar.title}
+                key={m.value}
                 style={{
                   flex: 1,
-                  opacity: pOpacity,
-                  transform: `scale(${pScale})`,
-                  background: C.bgCard,
-                  border: `1px solid ${C.border}`,
+                  opacity: mOpacity,
+                  transform: `scale(${mScale})`,
+                  background: "rgba(12,20,38,0.7)",
+                  border: `1px solid ${C.accentBorder}`,
                   borderRadius: 16,
-                  padding: "32px 36px",
+                  padding: "28px 32px",
                   textAlign: "center",
+                  backdropFilter: "blur(8px)",
                 }}
               >
-                {/* Icon */}
                 <div
                   style={{
-                    fontSize: 32,
-                    color: pillar.color,
-                    marginBottom: 16,
+                    fontFamily: FONT_MONO,
+                    fontSize: 48,
+                    fontWeight: 800,
+                    color: C.accentLt,
+                    letterSpacing: "-0.04em",
                     lineHeight: 1,
+                    marginBottom: 10,
                   }}
                 >
-                  {pillar.icon}
+                  {m.value}
                 </div>
-                {/* Title */}
-                <div
-                  style={{
-                    fontFamily: FONT,
-                    fontSize: 22,
-                    fontWeight: 700,
-                    color: C.text,
-                    letterSpacing: "-0.03em",
-                    marginBottom: 12,
-                  }}
-                >
-                  {pillar.title}
-                </div>
-                {/* Description */}
                 <div
                   style={{
                     fontFamily: FONT,
                     fontSize: 15,
                     color: C.textSub,
-                    lineHeight: 1.6,
+                    fontWeight: 500,
                   }}
                 >
-                  {pillar.desc}
+                  {m.label}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Divider */}
-        <div
-          style={{
-            width: lineWidth,
-            height: 1,
-            background: `linear-gradient(90deg, transparent, ${C.accentBorder}, transparent)`,
-            marginBottom: 48,
-          }}
-        />
-
-        {/* CTA block */}
+        {/* URL chip */}
         <div
           style={{
             opacity: ctaOpacity,
             transform: `translateY(${ctaY}px)`,
-            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 20,
           }}
         >
           <div
             style={{
-              fontFamily: FONT,
-              fontSize: 28,
-              fontWeight: 700,
-              color: C.text,
-              letterSpacing: "-0.03em",
-              marginBottom: 8,
+              padding: "14px 40px",
+              borderRadius: 12,
+              background: "rgba(12,20,38,0.8)",
+              border: `1px solid ${C.accentBorder}`,
+              fontFamily: FONT_MONO,
+              fontSize: 22,
+              fontWeight: 600,
+              color: C.accentLt,
+              letterSpacing: "0.04em",
+              boxShadow: `0 0 40px rgba(37,99,235,${urlGlow}), 0 0 80px rgba(37,99,235,${urlGlow * 0.5})`,
             }}
           >
-            Start tracking. Stop guessing.
-          </div>
-          <div
-            style={{
-              fontFamily: FONT,
-              fontSize: 17,
-              color: C.textSub,
-              marginBottom: 36,
-            }}
-          >
-            Web Forx Time Tracker · Built by Web Forx Technology Limited
+            timer.dev.webforxtech.com
           </div>
 
-          {/* URL chip */}
+          {/* CTA buttons */}
           <div
             style={{
-              display: "inline-flex",
-              alignItems: "center",
+              display: "flex",
               gap: 16,
+              alignItems: "center",
             }}
           >
             <div
               style={{
-                padding: "16px 32px",
+                padding: "16px 36px",
                 borderRadius: 12,
                 background: `linear-gradient(90deg, ${C.accent}, ${C.purple})`,
                 fontFamily: FONT,
                 fontSize: 18,
                 fontWeight: 700,
                 color: "#fff",
-                boxShadow: `0 4px 32px rgba(37,99,235,${urlGlow * 1.5})`,
+                boxShadow: `0 4px 32px rgba(37,99,235,0.4)`,
               }}
             >
               Sign In Now →
             </div>
             <div
               style={{
-                padding: "16px 32px",
+                padding: "16px 36px",
                 borderRadius: 12,
                 background: "transparent",
                 border: `1px solid ${C.border}`,
@@ -250,25 +257,6 @@ export const Scene09CTA: React.FC = () => {
             >
               Schedule a Demo
             </div>
-          </div>
-
-          {/* URL */}
-          <div
-            style={{
-              marginTop: 24,
-              fontFamily: FONT_MONO,
-              fontSize: 16,
-              color: C.textMuted,
-              letterSpacing: "0.02em",
-              background: C.bgCard,
-              border: `1px solid ${C.border}`,
-              borderRadius: 8,
-              padding: "10px 24px",
-              display: "inline-block",
-              boxShadow: `0 0 20px rgba(37,99,235,${urlGlow})`,
-            }}
-          >
-            timer.dev.webforxtech.com
           </div>
         </div>
       </AbsoluteFill>

@@ -38,8 +38,8 @@ export const Scene06Reports: React.FC = () => {
     extrapolateLeft: "clamp",
   });
 
-  // Export button callout appears at 7s
-  const showExportCallout = frame > Math.round(7 * fps);
+  // Export button callout appears at 5.5s
+  const showExportCallout = frame > Math.round(5.5 * fps);
 
   return (
     <AbsoluteFill>
@@ -435,7 +435,7 @@ export const Scene06Reports: React.FC = () => {
 
       <LowerThird
         label="Reports & Analytics"
-        sublabel="Productivity trends, project allocations, and one-click exports"
+        sublabel="Turn time data into decisions — one-click export for billing and payroll"
         delay={10}
       />
     </AbsoluteFill>
