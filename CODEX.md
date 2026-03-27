@@ -15,3 +15,10 @@ Required read order:
 - deployment settings and strategy
 - disaster recovery and rollback
 - troubleshooting and operational checks
+
+## Security Rules
+
+- Never store MCP credentials, API keys, or tokens in this repository (including `CODEX.md`).
+- MCP server configuration must stay in global/user-local files only (for example `~/.codex/config.toml`).
+- If per-project overrides are needed, use a hidden local file (for example `.codex.local.toml`) and keep it gitignored.
+- Use environment variables for secrets; do not inline secret values in docs or tracked config files.

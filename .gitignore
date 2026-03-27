@@ -1,1 +1,8 @@
 .DS_Store
+
+# Local-only agent and MCP configuration
+.factory/
+.mcp.json
+.codex/
+.codex.local.toml
+.codex.local.json
