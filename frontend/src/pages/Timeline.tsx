@@ -59,7 +59,7 @@ const getEntryDurationSeconds = (entry: TimeEntrySummary) => {
 const toLocalInputValue = (value: Date) => {
     const local = new Date(value);
     local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
-    return local.toISOString().slice(0, 16);
+    return local.toISOString().slice(0, 19);
 };
 
 const Timeline: React.FC = () => {
@@ -74,6 +74,7 @@ const Timeline: React.FC = () => {
     const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
     const [editorOpen, setEditorOpen] = useState(false);
     const [editorSaving, setEditorSaving] = useState(false);
+    const [editorError, setEditorError] = useState<string | null>(null);
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [entryForm, setEntryForm] = useState({
         task_description: '',
@@ -103,6 +104,26 @@ const Timeline: React.FC = () => {
 
     useEffect(() => {
         void loadTimeline();
+    }, [loadTimeline]);
+
+    useEffect(() => {
+        const refreshTimeline = () => {
+            void loadTimeline();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                void loadTimeline();
+            }
+        };
+
+        window.addEventListener('wfx:time-entry-changed', refreshTimeline as EventListener);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('wfx:time-entry-changed', refreshTimeline as EventListener);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [loadTimeline]);
 
     const weekStart = useMemo(() => getStartOfWeek(currentDate), [currentDate]);
@@ -197,6 +218,7 @@ const Timeline: React.FC = () => {
             end_time: toLocalInputValue(defaultEnd),
             notes: '',
         });
+        setEditorError(null);
         setEditorOpen(true);
     }, [currentDate]);
 
@@ -209,23 +231,30 @@ const Timeline: React.FC = () => {
             end_time: toLocalInputValue(new Date(entry.end_time)),
             notes: '',
         });
+        setEditorError(null);
         setEditorOpen(true);
+    };
+
+    const closeEditor = () => {
+        setEditorOpen(false);
+        setEditorError(null);
     };
 
     const handleSaveEntry = async () => {
         if (!entryForm.task_description.trim()) {
-            setFeedback({ tone: 'error', message: 'Task description is required.' });
+            setEditorError('Task description is required.');
             return;
         }
 
         const start = new Date(entryForm.start_time);
         const end = new Date(entryForm.end_time);
         if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-            setFeedback({ tone: 'error', message: 'End time must be after start time.' });
+            setEditorError('End time must be after start time.');
             return;
         }
 
         setEditorSaving(true);
+        setEditorError(null);
         try {
             const payload = {
                 task_description: entryForm.task_description.trim(),
@@ -243,11 +272,11 @@ const Timeline: React.FC = () => {
                 setFeedback({ tone: 'success', message: 'Entry added successfully.' });
             }
 
-            setEditorOpen(false);
+            closeEditor();
             await loadTimeline();
             window.dispatchEvent(new CustomEvent('wfx:time-entry-changed'));
         } catch (error) {
-            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to save entry') });
+            setEditorError(getApiErrorMessage(error, 'Failed to save entry'));
         } finally {
             setEditorSaving(false);
         }
@@ -281,22 +310,24 @@ const Timeline: React.FC = () => {
 
     return (
         <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50 dark:bg-slate-900">
-            <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 p-4 backdrop-blur md:p-6">
-                <div className="flex flex-wrap items-center gap-3 md:gap-4">
+            <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 p-4 backdrop-blur md:flex-row md:items-center md:justify-between md:gap-4 md:p-6">
+                <div className="flex w-full items-center gap-2 md:w-auto md:justify-start md:gap-4">
                     <button
+                        type="button"
                         className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                         onClick={() => moveDay(-1)}
                         title="Previous day"
                     >
                         <span className="material-symbols-outlined">chevron_left</span>
                     </button>
-                    <div className="text-center">
-                        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight" style={{ fontFamily: 'var(--font-family-display)' }}>
+                    <div className="min-w-0 flex-1 text-center">
+                        <h2 className="truncate text-lg font-black tracking-tight text-slate-900 dark:text-slate-100 sm:text-xl md:text-2xl" style={{ fontFamily: 'var(--font-family-display)' }}>
                             {toDayLabel(currentDate)}
                         </h2>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">Week {toWeekNumber(currentDate)} of {currentDate.getFullYear()}</p>
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400 sm:text-sm">Week {toWeekNumber(currentDate)} of {currentDate.getFullYear()}</p>
                     </div>
                     <button
+                        type="button"
                         className="flex items-center justify-center p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                         onClick={() => moveDay(1)}
                         title="Next day"
@@ -304,15 +335,17 @@ const Timeline: React.FC = () => {
                         <span className="material-symbols-outlined">chevron_right</span>
                     </button>
                     <button
-                        className="ml-1 rounded-lg bg-slate-100 dark:bg-slate-700 px-4 py-2 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        type="button"
+                        className="shrink-0 rounded-lg bg-slate-100 dark:bg-slate-700 px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors sm:px-4 sm:text-sm"
                         onClick={() => setCurrentDate(today)}
                     >
                         Today
                     </button>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 md:gap-3">
+                <div className="flex w-full flex-wrap items-center justify-end gap-2 md:w-auto md:gap-3">
                     <button
+                        type="button"
                         className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 px-4 py-2 rounded-lg text-sm font-bold text-slate-700 dark:text-slate-300 border border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
                         onClick={() => setShowOnlyCurrentDay((value) => !value)}
                         title={showOnlyCurrentDay ? 'Showing selected day only' : 'Showing full week'}
@@ -321,6 +354,7 @@ const Timeline: React.FC = () => {
                         Filter
                     </button>
                     <button
+                        type="button"
                         className="flex items-center gap-2 bg-primary px-6 py-2 rounded-lg text-sm font-bold text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all"
                         onClick={openCreateEntry}
                     >
@@ -359,6 +393,7 @@ const Timeline: React.FC = () => {
                                 </p>
                             </div>
                             <button
+                                type="button"
                                 className="text-sm font-semibold text-primary hover:underline"
                                 onClick={() => openAnalytics('timeline', displayedEntries)}
                             >
@@ -388,6 +423,7 @@ const Timeline: React.FC = () => {
                                     Start tracking your work to see it appear here.
                                 </p>
                                 <button
+                                    type="button"
                                     className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
                                     onClick={openCreateEntry}
                                 >
@@ -427,6 +463,7 @@ const Timeline: React.FC = () => {
                                                 <span className="text-[10px] font-semibold text-slate-400">Non-billable</span>
                                             )}
                                             <button
+                                                type="button"
                                                 className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
                                                 title="Edit entry"
                                                 onClick={() => openEditEntry(entry)}
@@ -441,6 +478,7 @@ const Timeline: React.FC = () => {
 
                         <div className="border-t border-slate-100 dark:border-slate-700 px-5 py-4">
                             <button
+                                type="button"
                                 className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-600 px-4 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                                 onClick={openCreateEntry}
                             >
@@ -466,6 +504,7 @@ const Timeline: React.FC = () => {
                                 const isSelected = getStartOfDay(day).getTime() === dayStart.getTime();
                                 return (
                                     <button
+                                        type="button"
                                         key={day.toISOString()}
                                         className={`text-xs p-1 rounded-lg transition-colors ${isSelected ? 'bg-primary text-white font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
                                         onClick={() => setCurrentDate(getStartOfDay(day))}
@@ -506,6 +545,7 @@ const Timeline: React.FC = () => {
                                 You&apos;ve logged {formatDuration(weekEntries.reduce((sum, entry) => sum + getEntryDurationSeconds(entry), 0))} this week.
                             </p>
                             <button
+                                type="button"
                                 className="w-full py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary/90 transition-all"
                                 onClick={() => openAnalytics('weekly-summary', weekEntries)}
                             >
@@ -524,6 +564,11 @@ const Timeline: React.FC = () => {
                             <h3 className="text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">{editingEntryId ? 'Edit Entry' : 'Add Entry'}</h3>
                         </div>
                         <div className="space-y-3">
+                            {editorError && (
+                                <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-900/20 dark:text-rose-300">
+                                    {editorError}
+                                </div>
+                            )}
                             <div>
                                 <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Task</label>
                                 <input
@@ -551,6 +596,7 @@ const Timeline: React.FC = () => {
                                     <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Start Time</label>
                                     <input
                                         type="datetime-local"
+                                        step={1}
                                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                                         value={entryForm.start_time}
                                         onChange={(event) => setEntryForm((prev) => ({ ...prev, start_time: event.target.value }))}
@@ -560,6 +606,7 @@ const Timeline: React.FC = () => {
                                     <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">End Time</label>
                                     <input
                                         type="datetime-local"
+                                        step={1}
                                         className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
                                         value={entryForm.end_time}
                                         onChange={(event) => setEntryForm((prev) => ({ ...prev, end_time: event.target.value }))}
@@ -569,13 +616,15 @@ const Timeline: React.FC = () => {
                         </div>
                         <div className="mt-5 flex justify-end gap-2">
                             <button
+                                type="button"
                                 className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-                                onClick={() => setEditorOpen(false)}
+                                onClick={closeEditor}
                                 disabled={editorSaving}
                             >
                                 Cancel
                             </button>
                             <button
+                                type="button"
                                 className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-70"
                                 onClick={() => void handleSaveEntry()}
                                 disabled={editorSaving}

@@ -180,6 +180,7 @@ a {
   border-right: 1px solid #1e293b;
   display: flex;
   flex-direction: column;
+  min-height: 100vh;
   transition: transform var(--transition-medium), background-color 0.3s ease;
 }
 
@@ -506,9 +507,13 @@ html.dark .stat-card:hover {
     left: 0;
     top: 0;
     bottom: 0;
+    height: 100dvh;
+    max-height: 100dvh;
     transform: translateX(-100%);
     z-index: 60;
     box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .sidebar.open {
@@ -521,7 +526,7 @@ html.dark .stat-card:hover {
   }
 
   .page-wrapper {
-    padding: 1rem;
+    padding: 1rem 1rem calc(1rem + 5.5rem);
   }
 }
 

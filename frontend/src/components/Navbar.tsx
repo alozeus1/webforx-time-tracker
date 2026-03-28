@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, Bell, Search } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getStoredRole } from '../utils/session';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import './Navbar.css';
 
 interface NavbarProps {
@@ -42,6 +42,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
     const searchRef = useRef<HTMLDivElement | null>(null);
     const notificationRef = useRef<HTMLDivElement | null>(null);
+    const searchRequestIdRef = useRef(0);
 
     const routeLabelMap: Record<string, string> = {
         '/dashboard': 'Dashboard',
@@ -93,12 +94,17 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
         setSearchLoading(true);
         setSearchError(null);
+        const requestId = searchRequestIdRef.current + 1;
+        searchRequestIdRef.current = requestId;
 
         const timeout = window.setTimeout(async () => {
             try {
                 const response = await api.get<SearchResponse>('/projects/search', {
                     params: { q: query.trim() },
                 });
+                if (requestId !== searchRequestIdRef.current) {
+                    return;
+                }
                 const payload = response.data;
                 const normalized: SearchResultItem[] = [
                     ...(payload.projects || []).map((project) => ({
@@ -119,13 +125,18 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                 setSearchOpen(true);
                 setActiveSearchIndex(normalized.length > 0 ? 0 : -1);
             } catch (error) {
+                if (requestId !== searchRequestIdRef.current) {
+                    return;
+                }
                 console.error('Failed to run global search:', error);
                 setSearchResults([]);
-                setSearchError('Search failed. Please try again.');
+                setSearchError(getApiErrorMessage(error, 'Search is currently unavailable. Try again shortly.'));
                 setSearchOpen(true);
                 setActiveSearchIndex(-1);
             } finally {
-                setSearchLoading(false);
+                if (requestId === searchRequestIdRef.current) {
+                    setSearchLoading(false);
+                }
             }
         }, 250);
 
@@ -146,6 +157,21 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
         document.addEventListener('mousedown', onDocumentClick);
         return () => document.removeEventListener('mousedown', onDocumentClick);
     }, []);
+
+    useEffect(() => {
+        if (!notificationsOpen) {
+            return;
+        }
+
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setNotificationsOpen(false);
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [notificationsOpen]);
 
     const selectSearchResult = (item: SearchResultItem) => {
         if (item.kind === 'project') {
@@ -258,6 +284,9 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                         title={notificationHint}
                         type="button"
                         aria-label="View notifications"
+                        aria-expanded={notificationsOpen}
+                        aria-haspopup="dialog"
+                        aria-controls="top-notifications-panel"
                     >
                         <Bell size={20} />
                         {alertCount > 0 && (
@@ -267,7 +296,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                         )}
                     </button>
                     {notificationsOpen && (
-                        <div className="notification-dropdown">
+                        <div id="top-notifications-panel" className="notification-dropdown" role="dialog" aria-label="Notifications">
                             <div className="notification-dropdown-header">
                                 <p>Notifications</p>
                                 {(role === 'Admin' || role === 'Manager') && (

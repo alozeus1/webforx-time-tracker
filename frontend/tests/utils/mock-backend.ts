@@ -97,6 +97,34 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
       return respond(200, [roleToUser(configuredRole)]);
     }
 
+    if (path.endsWith('/users/roles') && method === 'GET') {
+      return respond(200, {
+        roles: [
+          { id: 'role-admin', name: 'Admin' },
+          { id: 'role-manager', name: 'Manager' },
+          { id: 'role-employee', name: 'Employee' },
+          { id: 'role-intern', name: 'Intern' },
+        ],
+      });
+    }
+
+    if (path.endsWith('/users/import') && method === 'POST') {
+      return respond(200, {
+        summary: { total: 0, created: 0, skipped: 0, failed: 0 },
+        created: [],
+        skipped: [],
+        failed: [],
+      });
+    }
+
+    if (path.endsWith('/users') && method === 'POST') {
+      return respond(201, { id: 'user-new', ...roleToUser(configuredRole) });
+    }
+
+    if (/\/users\/[^/]+$/.test(path) && ['PUT', 'DELETE'].includes(method)) {
+      return respond(200, { success: true });
+    }
+
     if (path.endsWith('/users/me/notifications')) {
       return respond(200, { notifications: [] });
     }

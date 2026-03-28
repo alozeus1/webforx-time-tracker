@@ -8,6 +8,15 @@ import { hasAnyRole } from '../utils/session';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
 
+const formatHoursText = (hours: number) => {
+    if (hours <= 0) return '0.0h';
+    if (hours < 0.1) return `${Math.max(1, Math.round(hours * 60))}m`;
+    if (hours < 1) return `${hours.toFixed(2)}h`;
+    return `${hours.toFixed(1)}h`;
+};
+
+const formatSecondsText = (seconds: number) => formatHoursText(seconds / 3600);
+
 /** Returns Tailwind classes based on a trend string like "+5%", "-3%", "0%" */
 function getTrendClasses(trend: string | undefined): string {
     if (!trend) return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
@@ -267,17 +276,15 @@ const Reports: React.FC = () => {
                             {/* Hours Trend — Recharts Bar */}
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
                                 <h4 className="font-bold text-slate-900 dark:text-white mb-4">Hours Logged Trend</h4>
-                                <div className="h-64 w-full">
-                                    <ResponsiveContainer width="100%" height="100%">
+                                <ResponsiveContainer width="100%" height={256} minWidth={280}>
                                         <BarChart data={analytics?.hoursTrend || []} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-slate-200, #e2e8f0)" />
                                             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                                             <YAxis tick={{ fontSize: 11 }} unit="h" />
-                                            <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}h`, 'Hours']} />
+                                            <Tooltip formatter={(value) => [formatHoursText(Number(value)), 'Hours']} />
                                             <Bar dataKey="hours" fill="#6366f1" radius={[4, 4, 0, 0]} />
                                         </BarChart>
-                                    </ResponsiveContainer>
-                                </div>
+                                </ResponsiveContainer>
                             </div>
 
                             {/* Project Distribution — Recharts Pie */}
@@ -286,8 +293,7 @@ const Reports: React.FC = () => {
                                 {(analytics?.projectDistribution.length ?? 0) === 0 ? (
                                     <p className="text-sm text-slate-500 text-center py-20">No project data for this period.</p>
                                 ) : (
-                                    <div className="h-64 w-full">
-                                        <ResponsiveContainer width="100%" height="100%">
+                                    <ResponsiveContainer width="100%" height={256} minWidth={280}>
                                             <PieChart>
                                                 <Pie
                                                     data={analytics?.projectDistribution.slice(0, 6)}
@@ -304,11 +310,10 @@ const Reports: React.FC = () => {
                                                         <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
                                                     ))}
                                                 </Pie>
-                                                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}h`, 'Hours']} />
+                                                <Tooltip formatter={(value) => [formatHoursText(Number(value)), 'Hours']} />
                                                 <Legend />
                                             </PieChart>
-                                        </ResponsiveContainer>
-                                    </div>
+                                    </ResponsiveContainer>
                                 )}
                             </div>
                         </div>
@@ -358,7 +363,7 @@ const Reports: React.FC = () => {
                                                     <p className="text-xs text-slate-500 mt-0.5">{entry.project?.name || 'Unassigned Project'}</p>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">
-                                                    {(entry.duration / 3600).toFixed(2)}h
+                                                    {formatSecondsText(entry.duration)}
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-500">
                                                     {new Date(entry.start_time).toLocaleDateString()}
@@ -434,7 +439,7 @@ const Reports: React.FC = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.primaryProject}</td>
-                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{u.totalHours}h</td>
+                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{formatHoursText(Number(u.totalHours))}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="h-1.5 w-16 rounded-full bg-slate-100 dark:bg-slate-700">

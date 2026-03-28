@@ -242,7 +242,7 @@ const getMyEntries = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 where: { user_id },
                 orderBy: { start_time: 'desc' },
                 include: {
-                    project: { select: { name: true } },
+                    project: { select: { id: true, name: true } },
                     tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
                 },
                 skip,
@@ -251,7 +251,7 @@ const getMyEntries = (req, res) => __awaiter(void 0, void 0, void 0, function* (
             db_1.default.timeEntry.count({ where: { user_id } }),
             db_1.default.activeTimer.findUnique({
                 where: { user_id },
-                include: { project: { select: { name: true } } },
+                include: { project: { select: { id: true, name: true } } },
             }),
         ]);
         res.status(200).json({

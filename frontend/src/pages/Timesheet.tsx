@@ -21,6 +21,24 @@ const startOfWeek = (date: Date) => {
     return copy;
 };
 
+const formatHoursValue = (hours: number) => {
+    if (hours <= 0) {
+        return '0.0h';
+    }
+
+    if (hours < 0.1) {
+        return `${Math.max(1, Math.round(hours * 60))}m`;
+    }
+
+    if (hours < 1) {
+        return `${hours.toFixed(2)}h`;
+    }
+
+    return `${hours.toFixed(1)}h`;
+};
+
+const formatSecondsValue = (seconds: number) => formatHoursValue(seconds / 3600);
+
 const Timesheet: React.FC = () => {
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
@@ -33,21 +51,41 @@ const Timesheet: React.FC = () => {
     const datePickerRef = useRef<HTMLInputElement | null>(null);
     const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
 
+    const loadEntries = useCallback(async () => {
+        setLoading(true);
+        try {
+            const response = await api.get<{ entries: TimeEntrySummary[] }>('/timers/me');
+            setEntries(response.data.entries || []);
+        } catch (error) {
+            console.error('Failed to load weekly timesheet:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
-        const loadEntries = async () => {
-            setLoading(true);
-            try {
-                const response = await api.get<{ entries: TimeEntrySummary[] }>('/timers/me');
-                setEntries(response.data.entries || []);
-            } catch (error) {
-                console.error('Failed to load weekly timesheet:', error);
-            } finally {
-                setLoading(false);
+        void loadEntries();
+    }, [loadEntries]);
+
+    useEffect(() => {
+        const refreshTimesheet = () => {
+            void loadEntries();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                void loadEntries();
             }
         };
 
-        void loadEntries();
-    }, []);
+        window.addEventListener('wfx:time-entry-changed', refreshTimesheet as EventListener);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('wfx:time-entry-changed', refreshTimesheet as EventListener);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [loadEntries]);
 
     const fetchApprovals = useCallback(async () => {
         if (!canReviewApprovals) {
@@ -265,7 +303,7 @@ const Timesheet: React.FC = () => {
                                             <tr key={entry.id} className="border-b border-slate-100">
                                                 <td className="px-4 py-3 text-sm font-medium text-slate-700">{entry.user.first_name} {entry.user.last_name}</td>
                                                 <td className="px-4 py-3 text-sm text-slate-700">{entry.task_description}</td>
-                                                <td className="px-4 py-3 text-sm font-semibold text-slate-700">{(entry.duration / 3600).toFixed(2)}h</td>
+                                                <td className="px-4 py-3 text-sm font-semibold text-slate-700">{formatSecondsValue(entry.duration)}</td>
                                                 <td className="px-4 py-3 text-sm text-slate-500">{new Date(entry.start_time).toLocaleDateString()}</td>
                                                 <td className="px-4 py-3">
                                                     <div className="flex justify-end gap-2">
@@ -291,7 +329,7 @@ const Timesheet: React.FC = () => {
                 <div className="card-body">
                     <div className="mb-3 flex items-center justify-between">
                         <h3 className="text-base font-bold text-slate-900">Hours Logged Trend</h3>
-                        <span className="text-sm font-medium text-slate-500">Weekly total: {weeklyTotal.toFixed(1)}h</span>
+                        <span className="text-sm font-medium text-slate-500">Weekly total: {formatHoursValue(weeklyTotal)}</span>
                     </div>
                     <div className="grid min-h-[150px] grid-cols-7 items-end gap-3">
                         {dailyTotals.map((hours, index) => {
@@ -301,10 +339,10 @@ const Timesheet: React.FC = () => {
                                     <div
                                         className="mx-auto min-h-[10px] w-full max-w-[52px] rounded-t-lg bg-primary transition-all"
                                         style={{ height: `${ratio}%`, opacity: hours > 0 ? 0.95 : 0.35 }}
-                                        title={`${hours.toFixed(1)}h`}
+                                        title={formatHoursValue(hours)}
                                     />
                                     <div className="mt-2 text-[11px] font-semibold text-slate-500">{dayFormatter.format(weekDays[index])}</div>
-                                    <div className="text-xs font-bold text-slate-700">{hours.toFixed(1)}h</div>
+                                    <div className="text-xs font-bold text-slate-700">{formatHoursValue(hours)}</div>
                                 </div>
                             );
                         })}
@@ -347,17 +385,13 @@ const Timesheet: React.FC = () => {
                                         <td className="px-4 py-3 text-left text-sm font-semibold text-slate-800">{row.project}</td>
                                         {row.totals.map((value, index) => (
                                             <td key={`${row.project}-${index}`} className="px-2 py-3">
-                                                <input
-                                                    type="text"
-                                                    className="form-control mx-auto h-9 w-[74px] text-center font-semibold text-slate-700"
-                                                    value={value.toFixed(1)}
-                                                    disabled
-                                                    readOnly
-                                                />
+                                                <div className="mx-auto flex h-9 w-[74px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-2 text-center text-sm font-semibold text-slate-700">
+                                                    {formatHoursValue(value)}
+                                                </div>
                                             </td>
                                         ))}
                                         <td className="px-4 py-3 text-right text-sm font-bold text-primary">
-                                            {total.toFixed(1)}h
+                                            {formatHoursValue(total)}
                                         </td>
                                     </tr>
                                 );
@@ -368,10 +402,10 @@ const Timesheet: React.FC = () => {
                                     <td className="px-4 py-3 text-left text-sm font-black text-slate-900">Daily Total</td>
                                     {dailyTotals.map((value, index) => (
                                     <td key={`total-${index}`} className={`px-2 py-3 text-sm font-bold ${value > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
-                                            {`${value.toFixed(1)}h`}
+                                            {formatHoursValue(value)}
                                     </td>
                                     ))}
-                                    <td className="px-4 py-3 text-right text-base font-black text-slate-900">{weeklyTotal.toFixed(1)}h</td>
+                                    <td className="px-4 py-3 text-right text-base font-black text-slate-900">{formatHoursValue(weeklyTotal)}</td>
                                 </tr>
                             )}
                         </tbody>

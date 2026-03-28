@@ -3,6 +3,14 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { Prisma } from '@prisma/client';
 
+const formatHoursMetric = (hours: number) => {
+    if (hours > 0 && hours < 0.1) {
+        return hours.toFixed(2);
+    }
+
+    return hours.toFixed(1);
+};
+
 export const exportTimeEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
@@ -250,7 +258,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 role: u.role,
                 initials: u.initials,
                 primaryProject,
-                totalHours: u.totalHours.toFixed(1),
+                totalHours: formatHoursMetric(u.totalHours),
                 efficiency,
                 status: efficiency >= 85 ? 'On Track' : 'Needs Attention'
             };
@@ -258,7 +266,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
 
         res.status(200).json({
             metrics: {
-                totalHours: totalHours.toFixed(1),
+                totalHours: formatHoursMetric(totalHours),
                 activeProjects: activeProjectsCount,
                 avgProductivity,
                 billableAmount: billableAmount.toFixed(2),

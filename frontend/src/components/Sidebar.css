@@ -68,7 +68,9 @@
 .sidebar-nav {
     padding: 0.9rem 0.65rem;
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
@@ -143,6 +145,7 @@ button.sidebar-link {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+    flex-shrink: 0;
 }
 
 .profile-widget {
@@ -194,6 +197,14 @@ button.sidebar-link {
 }
 
 @media (max-width: 768px) {
+    .sidebar-nav {
+        padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+    }
+
+    .sidebar-footer {
+        padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+    }
+
     .sidebar-close {
         display: inline-flex;
     }

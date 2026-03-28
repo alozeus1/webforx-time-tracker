@@ -1,0 +1,178 @@
+name: Release Guards
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release-guards.yml'
+      - 'frontend/**'
+      - 'backend/**'
+      - 'DEPLOYMENT.md'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release-guards.yml'
+      - 'frontend/**'
+      - 'backend/**'
+      - 'DEPLOYMENT.md'
+  workflow_dispatch:
+    inputs:
+      run_login_smoke:
+        description: "Run login smoke check against deployed backend"
+        required: false
+        default: true
+        type: boolean
+  workflow_call:
+    inputs:
+      run_login_smoke:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      DATABASE_URL:
+        required: true
+      RELEASE_SMOKE_BASE_URL:
+        required: false
+      RELEASE_SMOKE_EMAIL:
+        required: false
+      RELEASE_SMOKE_PASSWORD:
+        required: false
+
+jobs:
+  frontend-accessibility-guard:
+    name: Frontend Accessibility Guard
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Start preview server
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/webforx-frontend-preview.log 2>&1 &
+          echo $! > /tmp/webforx-frontend-preview.pid
+
+      - name: Wait for preview server
+        run: |
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:4173 >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend preview server did not become ready."
+          cat /tmp/webforx-frontend-preview.log || true
+          exit 1
+
+      - name: Run release guard E2E coverage
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+        run: npm run test:e2e:release-guards -- --project=chromium --workers=1
+
+      - name: Upload Playwright artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-release-guard-artifacts
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          if-no-files-found: ignore
+
+      - name: Stop preview server
+        if: ${{ always() }}
+        run: |
+          if [ -f /tmp/webforx-frontend-preview.pid ]; then
+            kill "$(cat /tmp/webforx-frontend-preview.pid)" || true
+          fi
+
+  schema-drift-guard:
+    name: Schema Drift Guard
+    runs-on: ubuntu-latest
+    needs: frontend-accessibility-guard
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Verify DATABASE_URL is configured
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "DATABASE_URL secret is required for schema drift guard."
+            exit 1
+          fi
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Block release on schema drift
+        run: npm run release:preflight
+
+  login-smoke:
+    name: Post-Deploy Login Smoke
+    runs-on: ubuntu-latest
+    needs:
+      - frontend-accessibility-guard
+      - schema-drift-guard
+    if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.run_login_smoke }}
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RELEASE_SMOKE_BASE_URL: ${{ secrets.RELEASE_SMOKE_BASE_URL }}
+      RELEASE_SMOKE_EMAIL: ${{ secrets.RELEASE_SMOKE_EMAIL }}
+      RELEASE_SMOKE_PASSWORD: ${{ secrets.RELEASE_SMOKE_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Verify smoke secrets are configured
+        run: |
+          if [ -z "$RELEASE_SMOKE_BASE_URL" ] || [ -z "$RELEASE_SMOKE_EMAIL" ] || [ -z "$RELEASE_SMOKE_PASSWORD" ]; then
+            echo "Set RELEASE_SMOKE_BASE_URL, RELEASE_SMOKE_EMAIL, and RELEASE_SMOKE_PASSWORD secrets before running login smoke."
+            exit 1
+          fi
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Run login smoke check
+        run: npm run release:smoke:login

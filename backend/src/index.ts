@@ -31,11 +31,32 @@ dotenv.config();
 
 const app = express();
 
+const expandOriginAliases = (origin: string) => {
+    const normalized = origin.trim();
+    if (!normalized) {
+        return [];
+    }
+
+    const aliases = [normalized];
+
+    try {
+        const url = new URL(normalized);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+            const counterpart = url.hostname === 'localhost' ? '127.0.0.1' : 'localhost';
+            aliases.push(`${url.protocol}//${counterpart}${url.port ? `:${url.port}` : ''}`);
+        }
+    } catch {
+        // Ignore invalid origins here; the explicit value will still be evaluated as-is.
+    }
+
+    return aliases;
+};
+
 const allowedOrigins = Array.from(
     new Set(
         [env.corsOrigin, env.frontendUrl]
             .flatMap((value) => value.split(','))
-            .map((value) => value.trim())
+            .flatMap((value) => expandOriginAliases(value))
             .filter(Boolean),
     ),
 );

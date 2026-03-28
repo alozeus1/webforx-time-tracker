@@ -100,7 +100,7 @@ const Templates: React.FC = () => {
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight" style={{ fontFamily: 'var(--font-family-display)' }}>Project Templates</h1>
                         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Reusable project configurations for quick setup.</p>
                     </div>
-                    <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start">
+                    <button type="button" onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start">
                         <Plus size={16} /> New Template
                     </button>
                 </div>
@@ -114,13 +114,25 @@ const Templates: React.FC = () => {
                             <input className={inputClass} type="number" step="0.5" placeholder="Budget Hours" value={form.budget_hours} onChange={e => setForm(p => ({ ...p, budget_hours: e.target.value }))} />
                             <input className={inputClass} type="number" step="0.01" placeholder="Budget Amount ($)" value={form.budget_amount} onChange={e => setForm(p => ({ ...p, budget_amount: e.target.value }))} />
                         </div>
-                        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                            <input type="checkbox" checked={form.default_billable} onChange={e => setForm(p => ({ ...p, default_billable: e.target.checked }))} className="rounded border-slate-300" />
-                            Default billable
-                        </label>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+                            <div>
+                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Default billable</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400">New projects from this template default to billable hours.</p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={form.default_billable}
+                                aria-label="Toggle default billable"
+                                onClick={() => setForm((prev) => ({ ...prev, default_billable: !prev.default_billable }))}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${form.default_billable ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-600'}`}
+                            >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${form.default_billable ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
                         <div className="flex gap-2">
-                            <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{creating ? 'Creating...' : 'Create'}</button>
-                            <button onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-70">Cancel</button>
+                            <button type="button" onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{creating ? 'Creating...' : 'Create'}</button>
+                            <button type="button" onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-70">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -138,7 +150,7 @@ const Templates: React.FC = () => {
                                         <h3 className="font-bold text-slate-900 dark:text-white">{t.name}</h3>
                                         {t.description && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t.description}</p>}
                                     </div>
-                                    <button onClick={() => handleDelete(t.id)} disabled={processingTemplateId === t.id} title="Delete template" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
+                                    <button type="button" onClick={() => handleDelete(t.id)} disabled={processingTemplateId === t.id} title="Delete template" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
                                 </div>
                                 <div className="flex gap-4 text-xs text-slate-500 dark:text-slate-400">
                                     {t.budget_hours != null && <span>{t.budget_hours}h budget</span>}
@@ -148,11 +160,11 @@ const Templates: React.FC = () => {
                                 {applyingId === t.id ? (
                                     <div className="flex gap-2">
                                         <input className={inputClass} placeholder="New project name" value={projectName} onChange={e => setProjectName(e.target.value)} />
-                                        <button onClick={() => handleApply(t.id)} disabled={processingTemplateId === t.id} className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-bold whitespace-nowrap disabled:opacity-60">{processingTemplateId === t.id ? 'Creating...' : 'Create'}</button>
-                                        <button onClick={() => { setApplyingId(null); setProjectName(''); }} disabled={processingTemplateId === t.id} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-medium whitespace-nowrap disabled:opacity-60">Cancel</button>
+                                        <button type="button" onClick={() => handleApply(t.id)} disabled={processingTemplateId === t.id} className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-bold whitespace-nowrap disabled:opacity-60">{processingTemplateId === t.id ? 'Creating...' : 'Create'}</button>
+                                        <button type="button" onClick={() => { setApplyingId(null); setProjectName(''); }} disabled={processingTemplateId === t.id} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-medium whitespace-nowrap disabled:opacity-60">Cancel</button>
                                     </div>
                                 ) : (
-                                    <button onClick={() => setApplyingId(t.id)} className="flex items-center gap-1.5 text-sm text-primary font-medium hover:underline">
+                                    <button type="button" onClick={() => setApplyingId(t.id)} className="flex items-center gap-1.5 text-sm text-primary font-medium hover:underline">
                                         <Copy size={14} /> Use Template
                                     </button>
                                 )}

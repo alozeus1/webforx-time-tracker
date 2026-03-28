@@ -12,8 +12,8 @@ JWT_SECRET="<YOUR_SECURE_SECRET>"
 INTEGRATION_SECRET="<A_SECOND_SECURE_SECRET>"
 CRON_SECRET="<A_LONG_RANDOM_SECRET_FOR_CRON_ENDPOINTS>"
 PORT=5005
-CORS_ORIGIN="http://localhost:5173"
-FRONTEND_URL="http://localhost:5173"
+CORS_ORIGIN="http://localhost:5173,http://127.0.0.1:5173"
+FRONTEND_URL="http://localhost:5173,http://127.0.0.1:5173"
 ENABLE_BACKGROUND_WORKERS=true
 GOOGLE_CLIENT_ID="<GOOGLE_OAUTH_CLIENT_ID>"
 GOOGLE_CLIENT_SECRET="<GOOGLE_OAUTH_CLIENT_SECRET>"
@@ -31,6 +31,8 @@ For Google Calendar, add `http://localhost:5005/api/v1/calendar/callback` as an 
 ```bash
 cd backend
 npm install
+# Blocks boot if DB schema does not match prisma/schema.prisma
+npm run schema:check
 # Push Schema to PostgreSQL
 npx prisma db push
 # Seed default roles, Admin accounts, and dummy projects
@@ -100,6 +102,8 @@ Use the returned connection string as `DATABASE_URL` in the backend Vercel proje
 ```bash
 cd backend
 vercel link --yes --project vercel-backend
+# Release preflight: fail fast if schema drift exists
+npm run release:preflight
 ```
 
 Set production backend environment variables:
@@ -126,6 +130,8 @@ After `DATABASE_URL` points to Neon production:
 ```bash
 cd backend
 npx prisma migrate deploy
+# Verify runtime schema exactly matches expected Prisma schema after migration
+npm run release:preflight
 npx prisma db seed
 ```
 
@@ -146,6 +152,22 @@ Set `VITE_API_URL` to your backend deployment URL, e.g.
 
 ### 6.6 Post-Deploy Checks
 - Open `https://<backend-domain>/api/v1/health` and confirm status is `ok`.
+- Run a login smoke check against the deployed backend:
+```bash
+cd backend
+RELEASE_SMOKE_BASE_URL="https://<backend-domain>" \
+RELEASE_SMOKE_EMAIL="<smoke-user-email>" \
+RELEASE_SMOKE_PASSWORD="<smoke-user-password>" \
+npm run release:smoke:login
+```
+Or run the combined guard in one command:
+```bash
+RELEASE_SMOKE_BASE_URL="https://<backend-domain>" \
+RELEASE_SMOKE_EMAIL="<smoke-user-email>" \
+RELEASE_SMOKE_PASSWORD="<smoke-user-password>" \
+npm run release:verify
+```
+If your release pipeline uses GitHub Actions, run `.github/workflows/release-guards.yml` to enforce the schema guard and optional login smoke as release gates.
 - Log in through frontend production URL.
 - Create a timer entry and confirm it persists.
 - Verify reports page loads users and projects filters.

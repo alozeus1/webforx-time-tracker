@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, TrendingUp } from 'lucide-react';
 import api from '../services/api';
@@ -39,6 +39,7 @@ const Dashboard: React.FC = () => {
     }[]>([]);
     const [hoursTrend, setHoursTrend] = useState<string | null>(null);
     const [overtimeAlerts, setOvertimeAlerts] = useState<NotificationSummary[]>([]);
+    const notificationsRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
     const role = getStoredRole();
 
@@ -145,6 +146,32 @@ const Dashboard: React.FC = () => {
         return () => window.clearInterval(interval);
     }, [activeTimerStart]);
 
+    useEffect(() => {
+        if (!notificationsOpen) {
+            return;
+        }
+
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (notificationsRef.current && !notificationsRef.current.contains(target)) {
+                setNotificationsOpen(false);
+            }
+        };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setNotificationsOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [notificationsOpen]);
+
     const completedSeconds = useMemo(
         () => entries.reduce((total, entry) => total + getEntryDurationSeconds(entry), 0),
         [entries]
@@ -209,48 +236,60 @@ const Dashboard: React.FC = () => {
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-3 relative">
+                <div className="flex items-center gap-3">
+                    <div className="relative" ref={notificationsRef}>
+                        <button
+                            type="button"
+                            className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"
+                            onClick={() => setNotificationsOpen((prev) => !prev)}
+                            title="View alerts"
+                            aria-label="View alerts"
+                            aria-expanded={notificationsOpen}
+                            aria-haspopup="dialog"
+                            aria-controls="dashboard-notifications-panel"
+                        >
+                            <span className="material-symbols-outlined">notifications</span>
+                            <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                        </button>
+                        {notificationsOpen && (
+                            <div
+                                id="dashboard-notifications-panel"
+                                role="dialog"
+                                aria-label="Recent alerts"
+                                className="absolute right-0 top-[calc(100%+0.5rem)] z-30 w-80 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                            >
+                                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                    <p className="text-sm font-bold dark:text-slate-100">Recent Alerts</p>
+                                    <button
+                                        type="button"
+                                        className="text-xs font-semibold text-primary hover:underline"
+                                        onClick={() => navigate('/admin?tab=notifications')}
+                                    >
+                                        Open All
+                                    </button>
+                                </div>
+                                <div className="max-h-72 overflow-y-auto">
+                                    {notifications.length === 0 && (
+                                        <p className="px-4 py-6 text-sm text-slate-500">No alerts found.</p>
+                                    )}
+                                    {notifications.map((notification) => (
+                                        <div key={notification.id} className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                                            <p className="text-xs font-semibold text-slate-500">{notification.type}</p>
+                                            <p className="text-sm text-slate-900 dark:text-slate-100">{notification.message}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                     <button
-                        className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative"
-                        onClick={() => setNotificationsOpen((prev) => !prev)}
-                        title="View alerts"
-                        aria-label="View alerts"
-                    >
-                        <span className="material-symbols-outlined">notifications</span>
-                        <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
-                    </button>
-                    <button
+                        type="button"
                         onClick={() => navigate('/timeline?action=new')}
                         className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
                     >
                         <span className="material-symbols-outlined text-sm">add</span>
                         New Entry
                     </button>
-
-                    {notificationsOpen && (
-                        <div className="absolute right-0 top-12 w-80 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                                <p className="text-sm font-bold dark:text-slate-100">Recent Alerts</p>
-                                <button
-                                    className="text-xs font-semibold text-primary hover:underline"
-                                    onClick={() => navigate('/admin?tab=notifications')}
-                                >
-                                    Open All
-                                </button>
-                            </div>
-                            <div className="max-h-72 overflow-y-auto">
-                                {notifications.length === 0 && (
-                                    <p className="px-4 py-6 text-sm text-slate-500">No alerts found.</p>
-                                )}
-                                {notifications.map((notification) => (
-                                    <div key={notification.id} className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-                                        <p className="text-xs font-semibold text-slate-500">{notification.type}</p>
-                                        <p className="text-sm text-slate-900 dark:text-slate-100">{notification.message}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
             </header>
 
@@ -408,6 +447,7 @@ const Dashboard: React.FC = () => {
                                         </p>
                                     )}
                                     <button
+                                        type="button"
                                         onClick={() => navigate('/timeline?action=new')}
                                         className="mt-2 text-xs font-bold text-primary hover:underline"
                                     >
@@ -461,6 +501,7 @@ const Dashboard: React.FC = () => {
                                 Recent Tasks
                             </h3>
                             <button
+                                type="button"
                                 onClick={() => navigate('/timer')}
                                 className="text-xs font-semibold text-primary hover:underline"
                             >

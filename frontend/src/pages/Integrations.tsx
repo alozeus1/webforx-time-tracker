@@ -168,7 +168,7 @@ const Integrations: React.FC = () => {
                                 <h4 className="text-2xl font-bold">Calendar-Based Work Suggestions</h4>
                                 <p className="text-slate-600 dark:text-slate-400 max-w-2xl">Connect a Google account to pull real meetings and focus blocks into the timer flow.</p>
                                 {!calendarStatus?.configured && (
-                                    <p className="text-sm font-medium text-amber-600">The backend still needs Google OAuth credentials before this can be connected.</p>
+                                    <p className="text-sm font-medium text-amber-600">Workspace calendar access has not been enabled yet. You can keep tracking time normally until it is available.</p>
                                 )}
                                 {calendarStatus?.connected && (
                                     <p className="text-sm text-slate-500">Connected account: {calendarStatus.email || 'Google account'}</p>
@@ -225,47 +225,60 @@ const Integrations: React.FC = () => {
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Taiga Username or Email</label>
-                                    <input
-                                        type="text"
-                                        value={taigaUsername}
-                                        onChange={(event) => setTaigaUsername(event.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                        placeholder="name@company.com"
-                                    />
+                            <form
+                                className="space-y-8"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    void handleSave('taiga', { username: taigaUsername, password: taigaPassword });
+                                }}
+                            >
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div>
+                                        <label htmlFor="taiga-username" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Taiga Username or Email</label>
+                                        <input
+                                            id="taiga-username"
+                                            type="text"
+                                            value={taigaUsername}
+                                            onChange={(event) => setTaigaUsername(event.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                            placeholder="name@company.com"
+                                            autoComplete="username"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="taiga-password" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Taiga Password</label>
+                                        <input
+                                            id="taiga-password"
+                                            type="password"
+                                            value={taigaPassword}
+                                            onChange={(event) => setTaigaPassword(event.target.value)}
+                                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                            placeholder="Enter Taiga password"
+                                            autoComplete="current-password"
+                                        />
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Taiga Password</label>
-                                    <input
-                                        type="password"
-                                        value={taigaPassword}
-                                        onChange={(event) => setTaigaPassword(event.target.value)}
-                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                        placeholder="Enter Taiga password"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="flex flex-wrap gap-3">
-                                <button
-                                    onClick={() => void handleSave('taiga', { username: taigaUsername, password: taigaPassword })}
-                                    disabled={savingType === 'taiga' || !taigaUsername.trim() || !taigaPassword.trim()}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <Save size={16} />
-                                    {savingType === 'taiga' ? 'Saving...' : 'Save Taiga Config'}
-                                </button>
-                                <button
-                                    onClick={() => void handleTest('taiga')}
-                                    disabled={testingType === 'taiga' || !integrationMap.get('taiga')?.is_active}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
-                                >
-                                    <BadgeCheck size={16} />
-                                    {testingType === 'taiga' ? 'Testing...' : 'Test Taiga'}
-                                </button>
-                            </div>
+                                <div className="flex flex-wrap gap-3">
+                                    <button
+                                        type="submit"
+                                        disabled={savingType === 'taiga' || !taigaUsername.trim() || !taigaPassword.trim()}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Save size={16} />
+                                        {savingType === 'taiga' ? 'Saving...' : 'Save Taiga Config'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleTest('taiga')}
+                                        disabled={testingType === 'taiga' || !integrationMap.get('taiga')?.is_active}
+                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                                    >
+                                        <BadgeCheck size={16} />
+                                        {testingType === 'taiga' ? 'Testing...' : 'Test Taiga'}
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </section>
@@ -296,35 +309,45 @@ const Integrations: React.FC = () => {
                                 )}
                             </div>
 
-                            <div>
-                                <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Webhook URL</label>
-                                <input
-                                    type="url"
-                                    value={mattermostWebhookUrl}
-                                    onChange={(event) => setMattermostWebhookUrl(event.target.value)}
-                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                                    placeholder="https://mattermost.example.com/hooks/..."
-                                />
-                            </div>
+                            <form
+                                className="space-y-8"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    void handleSave('mattermost', { webhookUrl: mattermostWebhookUrl });
+                                }}
+                            >
+                                <div>
+                                    <label htmlFor="mattermost-webhook" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Webhook URL</label>
+                                    <input
+                                        id="mattermost-webhook"
+                                        type="url"
+                                        value={mattermostWebhookUrl}
+                                        onChange={(event) => setMattermostWebhookUrl(event.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        placeholder="https://mattermost.example.com/hooks/..."
+                                    />
+                                </div>
 
-                            <div className="flex flex-wrap gap-3">
-                                <button
-                                    onClick={() => void handleSave('mattermost', { webhookUrl: mattermostWebhookUrl })}
-                                    disabled={savingType === 'mattermost' || !mattermostWebhookUrl.trim()}
-                                    className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
-                                >
-                                    <Save size={16} />
-                                    {savingType === 'mattermost' ? 'Saving...' : 'Save Mattermost Config'}
-                                </button>
-                                <button
-                                    onClick={() => void handleTest('mattermost')}
-                                    disabled={testingType === 'mattermost' || !integrationMap.get('mattermost')?.is_active}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
-                                >
-                                    <BadgeCheck size={16} />
-                                    {testingType === 'mattermost' ? 'Testing...' : 'Test Mattermost'}
-                                </button>
-                            </div>
+                                <div className="flex flex-wrap gap-3">
+                                    <button
+                                        type="submit"
+                                        disabled={savingType === 'mattermost' || !mattermostWebhookUrl.trim()}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/25 transition-transform hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+                                    >
+                                        <Save size={16} />
+                                        {savingType === 'mattermost' ? 'Saving...' : 'Save Mattermost Config'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleTest('mattermost')}
+                                        disabled={testingType === 'mattermost' || !integrationMap.get('mattermost')?.is_active}
+                                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-6 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                                    >
+                                        <BadgeCheck size={16} />
+                                        {testingType === 'mattermost' ? 'Testing...' : 'Test Mattermost'}
+                                    </button>
+                                </div>
+                            </form>
                         </div>
                     </div>
                 </section>

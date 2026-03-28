@@ -3,8 +3,10 @@ import { Plus, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary } from '../types/api';
+import { resolveApiOrigin } from '../utils/apiConfig';
 
 const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'audit'] as const;
+const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
 
 const Admin: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -130,7 +132,7 @@ const Admin: React.FC = () => {
         setNewProjectDesc(project.description || '');
         setNewProjectBudgetHours(project.budget_hours?.toString() || '');
         setNewProjectBudgetAmount(project.budget_amount?.toString() || '');
-        setProjectLogoPreview(project.logo_url ? `${import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5005'}${project.logo_url}` : null);
+        setProjectLogoPreview(project.logo_url ? `${apiOrigin}${project.logo_url}` : null);
         setProjectLogoData(null);
         setIsProjectModalOpen(true);
         setProjectMenuOpen(null);
@@ -181,6 +183,7 @@ const Admin: React.FC = () => {
                     </div>
                     {activeTab === 'projects' && (
                         <button
+                            type="button"
                             onClick={() => setIsProjectModalOpen(true)}
                             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
                         >
@@ -195,6 +198,7 @@ const Admin: React.FC = () => {
                         {['projects', 'users', 'integrations', 'notifications', 'audit'].map(tab => (
                             <button
                                 key={tab}
+                                type="button"
                                 onClick={() => handleTabChange(tab)}
                                 className={`flex flex-col items-center justify-center border-b-2 pb-3 transition-all whitespace-nowrap ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                             >
@@ -263,13 +267,12 @@ const Admin: React.FC = () => {
                                     const costBurned = p.cost_burned ?? 0;
                                     const timePct = p.budget_hours ? (hoursBurned / p.budget_hours) * 100 : 0;
                                     const costPct = p.budget_amount ? (costBurned / p.budget_amount) * 100 : 0;
-                                    const apiBase = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || 'http://localhost:5005';
                                     return (
                                         <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                             <td className="px-6 py-4 text-sm font-semibold">
                                                 <div className="flex items-center gap-3">
                                                     {p.logo_url ? (
-                                                        <img src={`${apiBase}${p.logo_url}`} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
+                                                        <img src={`${apiOrigin}${p.logo_url}`} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
                                                     ) : (
                                                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">{p.name.slice(0, 2).toUpperCase()}</div>
                                                     )}
@@ -301,15 +304,15 @@ const Admin: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 text-right relative">
-                                                <button className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setProjectMenuOpen(prev => prev === p.id ? null : p.id)}>
+                                                <button type="button" className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800" onClick={() => setProjectMenuOpen(prev => prev === p.id ? null : p.id)}>
                                                     <span className="material-symbols-outlined text-sm">more_vert</span>
                                                 </button>
                                                 {projectMenuOpen === p.id && (
                                                     <div className="absolute right-6 top-12 z-20 min-w-36 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                                                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => openEditProject(p)}>
+                                                        <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800" onClick={() => openEditProject(p)}>
                                                             <span className="material-symbols-outlined text-base">edit</span> Edit
                                                         </button>
-                                                        <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20" onClick={() => void handleDeleteProject(p)}>
+                                                        <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20" onClick={() => void handleDeleteProject(p)}>
                                                             <span className="material-symbols-outlined text-base">archive</span> Archive
                                                         </button>
                                                     </div>
@@ -318,6 +321,26 @@ const Admin: React.FC = () => {
                                         </tr>
                                     );
                                 })}
+                                {activeTab === 'projects' && projects.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-10">
+                                            <div className="mx-auto max-w-md rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center dark:border-slate-600 dark:bg-slate-900/40">
+                                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">No projects yet</h4>
+                                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                    Create your first project to start assigning work, tracking budgets, and reporting team hours.
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsProjectModalOpen(true)}
+                                                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primary/90"
+                                                >
+                                                    <Plus size={14} />
+                                                    Create Project
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
                                 {activeTab === 'users' && users.map((u) => (
                                     <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -391,7 +414,7 @@ const Admin: React.FC = () => {
                         <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-xl shadow-xl overflow-hidden border border-slate-200 dark:border-slate-800">
                             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
                                 <span className="font-bold text-lg dark:text-white">{editingProject ? 'Edit Project' : 'Create New Project'}</span>
-                                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={resetProjectForm}>
+                                <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" onClick={resetProjectForm}>
                                     <X size={20} />
                                 </button>
                             </div>

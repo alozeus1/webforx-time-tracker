@@ -255,7 +255,7 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
                 where: { user_id },
                 orderBy: { start_time: 'desc' },
                 include: {
-                    project: { select: { name: true } },
+                    project: { select: { id: true, name: true } },
                     tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
                 },
                 skip,
@@ -264,7 +264,7 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
             prisma.timeEntry.count({ where: { user_id } }),
             prisma.activeTimer.findUnique({
                 where: { user_id },
-                include: { project: { select: { name: true } } },
+                include: { project: { select: { id: true, name: true } } },
             }),
         ]);
 

@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node dist/index.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "schema:check": "node scripts/schema-drift-check.cjs",
+    "release:preflight": "npm run schema:check",
+    "release:smoke:login": "node scripts/release-smoke-login.cjs",
+    "release:verify": "npm run release:preflight && npm run release:smoke:login",
+    "start": "npm run schema:check && node dist/index.js",
+    "dev": "npm run schema:check && ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
     "test": "jest",
     "postinstall": "prisma generate"

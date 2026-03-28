@@ -14,6 +14,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAnalyticsDashboard = exports.exportTimeEntries = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const formatHoursMetric = (hours) => {
+    if (hours > 0 && hours < 0.1) {
+        return hours.toFixed(2);
+    }
+    return hours.toFixed(1);
+};
 const exportTimeEntries = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     try {
@@ -236,14 +242,14 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 role: u.role,
                 initials: u.initials,
                 primaryProject,
-                totalHours: u.totalHours.toFixed(1),
+                totalHours: formatHoursMetric(u.totalHours),
                 efficiency,
                 status: efficiency >= 85 ? 'On Track' : 'Needs Attention'
             };
         }).sort((a, b) => parseFloat(b.totalHours) - parseFloat(a.totalHours));
         res.status(200).json({
             metrics: {
-                totalHours: totalHours.toFixed(1),
+                totalHours: formatHoursMetric(totalHours),
                 activeProjects: activeProjectsCount,
                 avgProductivity,
                 billableAmount: billableAmount.toFixed(2),

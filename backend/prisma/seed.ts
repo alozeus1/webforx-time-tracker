@@ -88,13 +88,17 @@ async function main() {
 
     const adminUser = await prisma.user.upsert({
         where: { email: 'admin@webforxtech.com' },
-        update: adminPassword.rotateExisting
-            ? { password_hash: await bcrypt.hash(adminPassword.value, 10) }
-            : {},
+        update: {
+            first_name: 'Amina',
+            last_name: 'Bello',
+            role_id: adminRole.id,
+            is_active: true,
+            ...(adminPassword.rotateExisting ? { password_hash: await bcrypt.hash(adminPassword.value, 10) } : {}),
+        },
         create: {
             email: 'admin@webforxtech.com',
-            first_name: 'System',
-            last_name: 'Administrator',
+            first_name: 'Amina',
+            last_name: 'Bello',
             password_hash: await bcrypt.hash(adminPassword.value, 10),
             role_id: adminRole.id,
             is_active: true,
@@ -106,13 +110,18 @@ async function main() {
     if (managerRole) {
         const managerUser = await prisma.user.upsert({
             where: { email: 'manager@webforxtech.com' },
-            update: managerPassword.rotateExisting
-                ? { password_hash: await bcrypt.hash(managerPassword.value, 10) }
-                : {},
+            update: {
+                first_name: 'Maya',
+                last_name: 'Okafor',
+                role_id: managerRole.id,
+                is_active: true,
+                hourly_rate: 85,
+                ...(managerPassword.rotateExisting ? { password_hash: await bcrypt.hash(managerPassword.value, 10) } : {}),
+            },
             create: {
                 email: 'manager@webforxtech.com',
-                first_name: 'Team',
-                last_name: 'Manager',
+                first_name: 'Maya',
+                last_name: 'Okafor',
                 password_hash: await bcrypt.hash(managerPassword.value, 10),
                 role_id: managerRole.id,
                 is_active: true,
@@ -120,51 +129,80 @@ async function main() {
             },
         });
 
-        console.log(`✅ Manager test user seeded: ${managerUser.email}`);
+        console.log(`✅ Manager user seeded: ${managerUser.email}`);
     }
 
     if (employeeRole) {
         const employeeUser = await prisma.user.upsert({
             where: { email: 'employee@webforxtech.com' },
-            update: employeePassword.rotateExisting
-                ? { password_hash: await bcrypt.hash(employeePassword.value, 10) }
-                : {},
+            update: {
+                first_name: 'Chris',
+                last_name: 'Adewale',
+                role_id: employeeRole.id,
+                is_active: true,
+                hourly_rate: 55,
+                ...(employeePassword.rotateExisting ? { password_hash: await bcrypt.hash(employeePassword.value, 10) } : {}),
+            },
             create: {
                 email: 'employee@webforxtech.com',
-                first_name: 'Test',
-                last_name: 'Employee',
+                first_name: 'Chris',
+                last_name: 'Adewale',
                 password_hash: await bcrypt.hash(employeePassword.value, 10),
                 role_id: employeeRole.id,
                 is_active: true,
                 hourly_rate: 55,
             },
         });
-        console.log(`✅ Employee test user seeded: ${employeeUser.email}`);
+        console.log(`✅ Employee user seeded: ${employeeUser.email}`);
     }
 
     const initialProjects = [
-        'EDUSUC',
-        'LAFABAH',
-        'Yemba',
-        'Platform Engineering',
-        'BA',
-        'Webforx Website',
-        'Web Forx Technology',
+        {
+            name: 'EDUSUC',
+            description: 'Education partnership delivery and product support for the EDUSUC client account.',
+        },
+        {
+            name: 'LAFABAH',
+            description: 'Implementation and time tracking for the LAFABAH program rollout.',
+        },
+        {
+            name: 'Yemba',
+            description: 'Cross-functional execution for the Yemba platform and client onboarding work.',
+        },
+        {
+            name: 'Platform Engineering',
+            description: 'Shared infrastructure, developer experience, and internal tooling for Web Forx teams.',
+        },
+        {
+            name: 'Business Analytics (BA)',
+            description: 'Reporting, operational analytics, and performance insights for leadership stakeholders.',
+        },
+        {
+            name: 'Web Forx Website',
+            description: 'Marketing site improvements, content updates, and conversion-focused web operations.',
+        },
+        {
+            name: 'Web Forx Technology',
+            description: 'Internal company initiatives, enablement, and strategic delivery across the organization.',
+        },
     ];
 
-    for (const projectName of initialProjects) {
+    for (const project of initialProjects) {
         await prisma.project.upsert({
-            where: { name: projectName },
-            update: { is_active: true },
+            where: { name: project.name },
+            update: {
+                description: project.description,
+                is_active: true,
+            },
             create: {
-                name: projectName,
-                description: `${projectName} seeded from MVP specification`,
+                name: project.name,
+                description: project.description,
                 is_active: true,
             },
         });
     }
 
-    console.log(`✅ Initial projects seeded: ${initialProjects.join(', ')}`);
+    console.log(`✅ Initial projects seeded: ${initialProjects.map((project) => project.name).join(', ')}`);
 
     if (adminPassword.source === 'generated') {
         console.log('[seed] Admin password was generated. Persist it now or set SEED_ADMIN_PASSWORD for stable credentials.');

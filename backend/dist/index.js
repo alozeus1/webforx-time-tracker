@@ -42,9 +42,27 @@ const db_1 = __importDefault(require("./config/db"));
 const env_1 = require("./config/env");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
+const expandOriginAliases = (origin) => {
+    const normalized = origin.trim();
+    if (!normalized) {
+        return [];
+    }
+    const aliases = [normalized];
+    try {
+        const url = new URL(normalized);
+        if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+            const counterpart = url.hostname === 'localhost' ? '127.0.0.1' : 'localhost';
+            aliases.push(`${url.protocol}//${counterpart}${url.port ? `:${url.port}` : ''}`);
+        }
+    }
+    catch (_a) {
+        // Ignore invalid origins here; the explicit value will still be evaluated as-is.
+    }
+    return aliases;
+};
 const allowedOrigins = Array.from(new Set([env_1.env.corsOrigin, env_1.env.frontendUrl]
     .flatMap((value) => value.split(','))
-    .map((value) => value.trim())
+    .flatMap((value) => expandOriginAliases(value))
     .filter(Boolean)));
 const allowAnyOrigin = allowedOrigins.includes('*');
 app.use((0, cors_1.default)({

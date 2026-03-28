@@ -156,3 +156,24 @@
     align-items: center;
     justify-content: center;
 }
+
+@media (max-width: 768px) {
+    .chatbot-fab {
+        width: 52px;
+        height: 52px;
+        right: max(0.9rem, env(safe-area-inset-right));
+        bottom: calc(0.9rem + env(safe-area-inset-bottom));
+    }
+
+    .chatbot-panel {
+        left: max(0.75rem, env(safe-area-inset-left));
+        right: max(0.75rem, env(safe-area-inset-right));
+        width: auto;
+        max-height: min(70vh, 520px);
+        bottom: calc(4.8rem + env(safe-area-inset-bottom));
+    }
+
+    .chatbot-body {
+        padding: 0.85rem;
+    }
+}

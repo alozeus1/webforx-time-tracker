@@ -42,6 +42,12 @@ const ProtectedRoute = ({
   return <>{children}</>;
 };
 
+const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
+  const token = getStoredToken();
+  if (token) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+};
+
 const RootRedirect: React.FC = () => {
   const token = getStoredToken();
   if (token) return <Navigate to="/dashboard" replace />;
@@ -55,9 +61,9 @@ const App: React.FC = () => {
         {/* Public routes */}
         <Route path="/" element={<RootRedirect />} />
         <Route path="/landing" element={<Navigate to="/" replace />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/request-access" element={<RequestAccess />} />
+        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
+        <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
+        <Route path="/request-access" element={<PublicOnlyRoute><RequestAccess /></PublicOnlyRoute>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
 

@@ -148,7 +148,7 @@ const Invoices: React.FC = () => {
                         <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight" style={{ fontFamily: 'var(--font-family-display)' }}>Invoices</h1>
                         <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Create, manage and track client invoices.</p>
                     </div>
-                    <button onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start">
+                    <button type="button" onClick={() => setShowCreate(!showCreate)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start">
                         <Plus size={16} /> New Invoice
                     </button>
                 </div>
@@ -161,7 +161,10 @@ const Invoices: React.FC = () => {
                         { label: 'Outstanding', value: totalStats.outstanding, icon: <DollarSign size={18} /> },
                     ].map(stat => (
                         <div key={stat.label} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
-                            <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">{stat.icon}{stat.label}</div>
+                            <div className="flex items-start gap-2 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                                <span className="mt-0.5 shrink-0">{stat.icon}</span>
+                                <span className="leading-tight break-words">{stat.label}</span>
+                            </div>
                             <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">${stat.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                         </div>
                     ))}
@@ -172,32 +175,115 @@ const Invoices: React.FC = () => {
                     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm space-y-4">
                         <h2 className="text-lg font-bold text-slate-900 dark:text-white">Create Invoice</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <input className={inputClass} placeholder="Client Name *" value={form.client_name} onChange={e => setForm(p => ({ ...p, client_name: e.target.value }))} />
-                            <select className={inputClass} value={form.project_id} onChange={e => setForm(p => ({ ...p, project_id: e.target.value }))}>
-                                <option value="">No project</option>
-                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
+                            <div>
+                                <label htmlFor="invoice-client-name" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Client Name</label>
+                                <input
+                                    id="invoice-client-name"
+                                    name="clientName"
+                                    className={`${inputClass} mt-1`}
+                                    placeholder="Client Name *"
+                                    value={form.client_name}
+                                    onChange={e => setForm(p => ({ ...p, client_name: e.target.value }))}
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="invoice-project" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Project</label>
+                                <select
+                                    id="invoice-project"
+                                    name="projectId"
+                                    className={`${inputClass} mt-1`}
+                                    value={form.project_id}
+                                    onChange={e => setForm(p => ({ ...p, project_id: e.target.value }))}
+                                >
+                                    <option value="">No project</option>
+                                    {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                </select>
+                            </div>
                             <div>
                                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tax Rate (%)</label>
-                                <input className={`${inputClass} mt-1`} type="number" step="0.01" placeholder="0.00" value={form.tax_rate} onChange={e => setForm(p => ({ ...p, tax_rate: e.target.value }))} />
+                                <input
+                                    id="invoice-tax-rate"
+                                    name="taxRate"
+                                    className={`${inputClass} mt-1`}
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="0.00"
+                                    value={form.tax_rate}
+                                    onChange={e => setForm(p => ({ ...p, tax_rate: e.target.value }))}
+                                />
                             </div>
-                            <input className={inputClass} type="date" placeholder="Due Date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
+                            <div>
+                                <label htmlFor="invoice-due-date" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Due Date</label>
+                                <input
+                                    id="invoice-due-date"
+                                    name="dueDate"
+                                    className={`${inputClass} mt-1`}
+                                    type="date"
+                                    value={form.due_date}
+                                    onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
+                                />
+                            </div>
                         </div>
-                        <textarea className={inputClass} rows={2} placeholder="Notes (optional)" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
+                        <div>
+                            <label htmlFor="invoice-notes" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Notes</label>
+                            <textarea
+                                id="invoice-notes"
+                                name="notes"
+                                className={`${inputClass} mt-1`}
+                                rows={2}
+                                placeholder="Notes (optional)"
+                                value={form.notes}
+                                onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                            />
+                        </div>
                         <div className="space-y-2">
                             <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Line Items</p>
                             {form.line_items.map((li, idx) => (
                                 <div key={idx} className="grid grid-cols-3 gap-2">
-                                    <input className={inputClass} placeholder="Description" value={li.description} onChange={e => updateLineItem(idx, 'description', e.target.value)} />
-                                    <input className={inputClass} type="number" step="0.01" placeholder="Hours" value={li.hours} onChange={e => updateLineItem(idx, 'hours', e.target.value)} />
-                                    <input className={inputClass} type="number" step="0.01" placeholder="Rate ($/hr)" value={li.rate} onChange={e => updateLineItem(idx, 'rate', e.target.value)} />
+                                    <div>
+                                        <label htmlFor={`line-item-description-${idx}`} className="sr-only">Line item description</label>
+                                        <input
+                                            id={`line-item-description-${idx}`}
+                                            name={`lineItems.${idx}.description`}
+                                            className={inputClass}
+                                            placeholder="Description"
+                                            value={li.description}
+                                            onChange={e => updateLineItem(idx, 'description', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor={`line-item-hours-${idx}`} className="sr-only">Line item hours</label>
+                                        <input
+                                            id={`line-item-hours-${idx}`}
+                                            name={`lineItems.${idx}.hours`}
+                                            className={inputClass}
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="Hours"
+                                            value={li.hours}
+                                            onChange={e => updateLineItem(idx, 'hours', e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor={`line-item-rate-${idx}`} className="sr-only">Line item rate</label>
+                                        <input
+                                            id={`line-item-rate-${idx}`}
+                                            name={`lineItems.${idx}.rate`}
+                                            className={inputClass}
+                                            type="number"
+                                            step="0.01"
+                                            placeholder="Rate ($/hr)"
+                                            value={li.rate}
+                                            onChange={e => updateLineItem(idx, 'rate', e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                             ))}
-                            <button onClick={addLineItem} className="text-sm text-primary font-medium hover:underline">+ Add line item</button>
+                            <button type="button" onClick={addLineItem} className="text-sm text-primary font-medium hover:underline">+ Add line item</button>
                         </div>
                         <div className="flex gap-2 pt-2">
-                            <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{creating ? 'Creating...' : 'Create'}</button>
-                            <button onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-70">Cancel</button>
+                            <button type="button" onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{creating ? 'Creating...' : 'Create'}</button>
+                            <button type="button" onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-70">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -234,12 +320,12 @@ const Invoices: React.FC = () => {
                                     <div className="flex gap-1">
                                         {inv.status === 'draft' && (
                                             <>
-                                                <button onClick={() => updateStatus(inv.id, 'sent')} disabled={statusUpdatingId === inv.id} title="Mark as Sent" className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 transition-colors disabled:opacity-50"><Send size={16} /></button>
-                                                <button onClick={() => deleteInvoice(inv.id)} disabled={deletingId === inv.id} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
+                                                <button type="button" onClick={() => updateStatus(inv.id, 'sent')} disabled={statusUpdatingId === inv.id} title="Mark as Sent" className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 transition-colors disabled:opacity-50"><Send size={16} /></button>
+                                                <button type="button" onClick={() => deleteInvoice(inv.id)} disabled={deletingId === inv.id} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
                                             </>
                                         )}
                                         {inv.status === 'sent' && (
-                                            <button onClick={() => updateStatus(inv.id, 'paid')} disabled={statusUpdatingId === inv.id} title="Mark as Paid" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600 transition-colors disabled:opacity-50"><CheckCircle size={16} /></button>
+                                            <button type="button" onClick={() => updateStatus(inv.id, 'paid')} disabled={statusUpdatingId === inv.id} title="Mark as Paid" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600 transition-colors disabled:opacity-50"><CheckCircle size={16} /></button>
                                         )}
                                     </div>
                                 </div>

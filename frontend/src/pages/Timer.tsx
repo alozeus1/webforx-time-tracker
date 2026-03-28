@@ -34,6 +34,15 @@ const extractErrorMessage = (error: unknown, fallback: string) =>
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const emitTimerStateChange = () => window.dispatchEvent(new CustomEvent('wfx:time-entry-changed'));
+const buildTaskSuggestions = (entries: TimeEntrySummary[]) => (
+    Array.from(
+        new Set(
+            entries
+                .map((entry) => (typeof entry.task_description === 'string' ? entry.task_description.trim() : ''))
+                .filter(Boolean),
+        ),
+    ).slice(0, 5)
+);
 
 const Timer: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -99,6 +108,7 @@ const Timer: React.FC = () => {
 
             setProjects(projectResponse.data || []);
             setCompletedSeconds(getTodaysCompletedSeconds(resolvedTimerPayload.entries || []));
+            setAiSuggestions(buildTaskSuggestions(resolvedTimerPayload.entries || []));
             syncFromActiveTimer(resolvedTimerPayload.activeTimer, clearDraft);
 
             try {
@@ -106,15 +116,6 @@ const Timer: React.FC = () => {
                 setAvailableTags(tagsResponse.data.tags || []);
             } catch {
                 setAvailableTags([]);
-            }
-
-            try {
-                const aiResponse = await api.post<{ suggestions: string[] }>('/ml/categorize', {
-                    description: 'suggest common tasks',
-                });
-                setAiSuggestions(aiResponse.data.suggestions || []);
-            } catch {
-                setAiSuggestions([]);
             }
 
             try {
@@ -488,9 +489,9 @@ const Timer: React.FC = () => {
                 )}
 
                 {calendarStatus?.configured === false && (
-                    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-                        <h2 className="text-sm font-bold tracking-wide text-amber-900">Google Calendar Not Configured</h2>
-                        <p className="mt-2 text-sm text-amber-700">Add Google OAuth credentials to the backend env before users can connect calendars.</p>
+                <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+                        <h2 className="text-sm font-bold tracking-wide text-amber-900">Google Calendar Unavailable</h2>
+                        <p className="mt-2 text-sm text-amber-700">Calendar suggestions are not enabled for this workspace yet. You can still track time normally.</p>
                     </section>
                 )}
 

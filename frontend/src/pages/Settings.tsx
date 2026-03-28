@@ -3,11 +3,11 @@ import React, { useState } from 'react';
 const devSettings = [
     {
         title: 'API Endpoint',
-        description: 'Configured through `VITE_API_URL` for local, staging, or live-test environments.',
+        description: 'Defines which backend environment this workspace connects to (local, staging, or production).',
     },
     {
         title: 'Background Workers',
-        description: 'Controlled by backend `ENABLE_BACKGROUND_WORKERS` for reminders, idle checks, and burnout alerts.',
+        description: 'Controls automated reminders, idle checks, and workload monitoring jobs.',
     },
     {
         title: 'Session Security',
@@ -15,7 +15,7 @@ const devSettings = [
     },
     {
         title: 'Google Calendar OAuth',
-        description: 'Requires backend `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`, plus a matching redirect URI in Google Cloud Console.',
+        description: 'Requires a configured OAuth client and approved redirect URL in the Google Cloud project.',
     },
 ];
 

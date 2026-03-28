@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { inferLocalApiOrigin, resolveApiBaseUrl, resolveApiOrigin } from '../utils/apiConfig';
 // We test the interceptor logic directly without importing the api module,
 // because api.ts uses import.meta.env which requires Vite. Instead we
 // replicate the interceptor behaviour and test it against axios internals.
@@ -117,23 +118,25 @@ describe('API response interceptor — 401 handling', () => {
 // ─── BaseURL config ──────────────────────────────────────────────────────────
 
 describe('API instance base URL', () => {
-    it('falls back to localhost:5005/api/v1 when VITE_API_URL is not set', () => {
-        const defaultBaseUrl = 'http://localhost:5005/api/v1';
-        // In test env, import.meta.env.VITE_API_URL is undefined
-        const configuredBaseUrl = (undefined as string | undefined)?.trim() || defaultBaseUrl;
-        expect(configuredBaseUrl).toBe('http://localhost:5005/api/v1');
+    it('falls back to the current browser host when VITE_API_URL is not set', () => {
+        expect(resolveApiBaseUrl(undefined, { protocol: 'http:', hostname: '127.0.0.1' })).toBe('http://127.0.0.1:5005/api/v1');
+        expect(resolveApiBaseUrl(undefined, { protocol: 'http:', hostname: 'localhost' })).toBe('http://localhost:5005/api/v1');
     });
 
     it('uses VITE_API_URL when configured', () => {
-        const defaultBaseUrl = 'http://localhost:5005/api/v1';
         const envUrl = 'https://api.example.com/api/v1';
-        const configuredBaseUrl = envUrl?.trim() || defaultBaseUrl;
-        expect(configuredBaseUrl).toBe('https://api.example.com/api/v1');
+        expect(resolveApiBaseUrl(envUrl, { protocol: 'http:', hostname: 'localhost' })).toBe('https://api.example.com/api/v1');
     });
 
     it('strips trailing slashes from base URL', () => {
-        const rawUrl = 'http://localhost:5005/api/v1/';
-        const cleaned = rawUrl.replace(/\/+$/, '');
-        expect(cleaned).toBe('http://localhost:5005/api/v1');
+        expect(resolveApiBaseUrl('http://localhost:5005/api/v1/', { protocol: 'http:', hostname: 'localhost' })).toBe('http://localhost:5005/api/v1');
+    });
+
+    it('derives the API origin from the resolved base URL', () => {
+        expect(resolveApiOrigin('http://127.0.0.1:5005/api/v1/', { protocol: 'http:', hostname: '127.0.0.1' })).toBe('http://127.0.0.1:5005');
+    });
+
+    it('infers a local API origin from the active browser location', () => {
+        expect(inferLocalApiOrigin({ protocol: 'http:', hostname: '127.0.0.1' })).toBe('http://127.0.0.1:5005');
     });
 });
