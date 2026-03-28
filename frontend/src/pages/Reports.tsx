@@ -277,7 +277,7 @@ const Reports: React.FC = () => {
                                                     outerRadius={80}
                                                     innerRadius={45}
                                                     paddingAngle={2}
-                                                    label={({ name, percent }: { name: string; percent: number }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                                                    label={({ name, percent }: { name?: string; percent: number }) => `${name ?? ''} (${(percent * 100).toFixed(0)}%)`}
                                                 >
                                                     {analytics?.projectDistribution.slice(0, 6).map((_entry, idx) => (
                                                         <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
