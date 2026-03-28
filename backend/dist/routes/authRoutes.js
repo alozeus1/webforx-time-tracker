@@ -7,4 +7,5 @@ router.post('/login', authController_1.login);
 router.post('/logout', authController_1.logout);
 router.post('/forgot-password', authController_1.forgotPassword);
 router.post('/reset-password', authController_1.resetPassword);
+router.post('/refresh', authController_1.refreshAccessToken);
 exports.default = router;

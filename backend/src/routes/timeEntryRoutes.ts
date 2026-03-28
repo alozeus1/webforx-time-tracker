@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, manualEntry, getMyEntries, pingTimer, getPendingTimesheets, reviewTimesheet } from '../controllers/timeEntryController';
+import { startTimer, stopTimer, manualEntry, getMyEntries, pingTimer, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry } from '../controllers/timeEntryController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -11,6 +11,9 @@ router.post('/stop', stopTimer);
 router.post('/manual', manualEntry);
 router.get('/me', getMyEntries);
 router.post('/ping', pingTimer);
+router.put('/:id', updateEntry);
+router.delete('/:id', deleteEntry);
+router.post('/:id/duplicate', duplicateEntry);
 
 // Manager/Admin endpoints
 router.get('/approvals', requireRole(['Manager', 'Admin']), getPendingTimesheets);

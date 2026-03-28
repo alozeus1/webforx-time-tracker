@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
+import { emitWebhookEvent } from '../services/webhookService';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -131,6 +132,41 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
         }
 
         res.status(200).json(timeEntry);
+
+        // Fire-and-forget: webhook + overtime check
+        emitWebhookEvent('timer.stopped', {
+            time_entry_id: timeEntry.id, user_id, duration: timeEntry.duration, project_id: timeEntry.project_id,
+        }).catch(() => {});
+
+        // Overtime weekly limit check
+        try {
+            const user = await prisma.user.findUnique({ where: { id: user_id }, select: { weekly_hour_limit: true } });
+            if (user?.weekly_hour_limit) {
+                const now = new Date();
+                const dayOfWeek = now.getDay();
+                const monday = new Date(now);
+                monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+                monday.setHours(0, 0, 0, 0);
+
+                const weekEntries = await prisma.timeEntry.findMany({
+                    where: { user_id, start_time: { gte: monday } },
+                    select: { duration: true },
+                });
+                const totalWeekHours = weekEntries.reduce((s, e) => s + e.duration, 0) / 3600;
+
+                if (totalWeekHours > user.weekly_hour_limit) {
+                    await prisma.notification.create({
+                        data: {
+                            user_id,
+                            message: `You have logged ${totalWeekHours.toFixed(1)}h this week, exceeding your ${user.weekly_hour_limit}h weekly limit.`,
+                            type: 'overtime_alert',
+                        },
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('Overtime check failed:', err);
+        }
     } catch (error) {
         console.error('Failed to stop timer:', error);
         res.status(500).json({ message: 'Internal server error while stopping timer' });
@@ -334,6 +370,128 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
         res.status(200).json(updatedEntry);
     } catch (error) {
         console.error('Failed to review timesheet:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const updateEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const role = req.user?.role;
+        const entryId = req.params.id as string;
+
+        const entry = await prisma.timeEntry.findUnique({ where: { id: entryId } });
+        if (!entry) { res.status(404).json({ message: 'Time entry not found' }); return; }
+        if (entry.user_id !== user_id && role !== 'Admin' && role !== 'Manager') {
+            res.status(403).json({ message: 'Not authorized to edit this entry' }); return;
+        }
+
+        const data: Record<string, unknown> = {};
+        const { task_description, project_id, start_time, end_time, notes, is_billable, tag_ids } = req.body ?? {};
+
+        if (typeof task_description === 'string' && task_description.trim()) data.task_description = task_description.trim();
+        if (project_id !== undefined) data.project_id = project_id || null;
+        if (typeof notes === 'string') data.notes = notes.trim() || null;
+        if (typeof is_billable === 'boolean') data.is_billable = is_billable;
+
+        if (start_time && end_time) {
+            const s = new Date(start_time);
+            const e = new Date(end_time);
+            const dur = Math.floor((e.getTime() - s.getTime()) / 1000);
+            if (dur > 0) {
+                data.start_time = s;
+                data.end_time = e;
+                data.duration = dur;
+            }
+        }
+
+        const updated = await prisma.$transaction(async (tx) => {
+            const result = await tx.timeEntry.update({ where: { id: entryId }, data });
+
+            if (Array.isArray(tag_ids)) {
+                await tx.timeEntryTag.deleteMany({ where: { time_entry_id: entryId } });
+                if (tag_ids.length > 0) {
+                    await tx.timeEntryTag.createMany({
+                        data: tag_ids.map((tag_id: string) => ({ time_entry_id: entryId, tag_id })),
+                        skipDuplicates: true,
+                    });
+                }
+            }
+
+            return result;
+        });
+
+        res.status(200).json(updated);
+    } catch (error) {
+        console.error('Failed to update entry:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const deleteEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const role = req.user?.role;
+        const entryId = req.params.id as string;
+
+        const entry = await prisma.timeEntry.findUnique({ where: { id: entryId } });
+        if (!entry) { res.status(404).json({ message: 'Time entry not found' }); return; }
+        if (entry.user_id !== user_id && role !== 'Admin') {
+            res.status(403).json({ message: 'Not authorized to delete this entry' }); return;
+        }
+
+        await prisma.timeEntry.delete({ where: { id: entryId } });
+        res.status(200).json({ message: 'Time entry deleted' });
+    } catch (error) {
+        console.error('Failed to delete entry:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const duplicateEntry = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const entryId = req.params.id as string;
+
+        const entry = await prisma.timeEntry.findUnique({
+            where: { id: entryId },
+            include: { tags: { select: { tag_id: true } } },
+        });
+        if (!entry) { res.status(404).json({ message: 'Time entry not found' }); return; }
+
+        const now = new Date();
+        const startOfDay = new Date(now);
+        startOfDay.setHours(9, 0, 0, 0);
+        const endTime = new Date(startOfDay.getTime() + entry.duration * 1000);
+
+        const newEntry = await prisma.$transaction(async (tx) => {
+            const created = await tx.timeEntry.create({
+                data: {
+                    user_id,
+                    project_id: entry.project_id,
+                    task_description: entry.task_description,
+                    start_time: startOfDay,
+                    end_time: endTime,
+                    duration: entry.duration,
+                    entry_type: 'manual',
+                    notes: entry.notes,
+                    is_billable: entry.is_billable,
+                },
+            });
+
+            if (entry.tags.length > 0) {
+                await tx.timeEntryTag.createMany({
+                    data: entry.tags.map(t => ({ time_entry_id: created.id, tag_id: t.tag_id })),
+                    skipDuplicates: true,
+                });
+            }
+
+            return created;
+        });
+
+        res.status(201).json(newEntry);
+    } catch (error) {
+        console.error('Failed to duplicate entry:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

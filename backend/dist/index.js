@@ -15,6 +15,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const path_1 = __importDefault(require("path"));
 const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
+const swagger_ui_express_1 = __importDefault(require("swagger-ui-express"));
+const swagger_jsdoc_1 = __importDefault(require("swagger-jsdoc"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
@@ -26,6 +30,11 @@ const calendarRoutes_1 = __importDefault(require("./routes/calendarRoutes"));
 const mlRoutes_1 = __importDefault(require("./routes/mlRoutes"));
 const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 const cronRoutes_1 = __importDefault(require("./routes/cronRoutes"));
+const tagRoutes_1 = __importDefault(require("./routes/tagRoutes"));
+const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
+const invoiceRoutes_1 = __importDefault(require("./routes/invoiceRoutes"));
+const templateRoutes_1 = __importDefault(require("./routes/templateRoutes"));
+const scheduledReportRoutes_1 = __importDefault(require("./routes/scheduledReportRoutes"));
 const notificationWorker_1 = require("./workers/notificationWorker");
 const idleTracker_1 = require("./workers/idleTracker");
 const burnoutTracker_1 = require("./workers/burnoutTracker");
@@ -48,10 +57,26 @@ app.use((0, cors_1.default)({
         callback(new Error(`Origin not allowed by CORS: ${origin}`));
     },
 }));
+app.use((0, helmet_1.default)());
+const globalLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many requests, please try again later.' },
+});
+app.use(globalLimiter);
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads')));
+const authLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many authentication attempts, please try again later.' },
+});
 // Routes
-app.use('/api/v1/auth', authRoutes_1.default);
+app.use('/api/v1/auth', authLimiter, authRoutes_1.default);
 app.use('/api/v1/users', userRoutes_1.default);
 app.use('/api/v1/projects', projectRoutes_1.default);
 app.use('/api/v1/timers', timeEntryRoutes_1.default);
@@ -61,6 +86,26 @@ app.use('/api/v1/calendar', calendarRoutes_1.default);
 app.use('/api/v1/ml', mlRoutes_1.default);
 app.use('/api/v1/admin', adminRoutes_1.default);
 app.use('/api/v1/cron', cronRoutes_1.default);
+app.use('/api/v1/tags', tagRoutes_1.default);
+app.use('/api/v1/webhooks', webhookRoutes_1.default);
+app.use('/api/v1/invoices', invoiceRoutes_1.default);
+app.use('/api/v1/templates', templateRoutes_1.default);
+app.use('/api/v1/scheduled-reports', scheduledReportRoutes_1.default);
+const swaggerSpec = (0, swagger_jsdoc_1.default)({
+    definition: {
+        openapi: '3.0.0',
+        info: { title: 'Web Forx Time Tracker API', version: '1.0.0', description: 'API documentation for the Web Forx Time Tracker' },
+        servers: [{ url: '/api/v1' }],
+        components: {
+            securitySchemes: {
+                bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+            },
+        },
+        security: [{ bearerAuth: [] }],
+    },
+    apis: ['./src/routes/*.ts'],
+});
+app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swaggerSpec));
 app.get('/', (_req, res) => {
     res.status(200).json({
         name: 'Web Forx Time Tracker API',

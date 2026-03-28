@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_1 = require("../middlewares/auth");
+const tagController_1 = require("../controllers/tagController");
+const router = (0, express_1.Router)();
+router.get('/', auth_1.authenticateToken, tagController_1.listTags);
+router.post('/', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Manager']), tagController_1.createTag);
+router.delete('/:id', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin']), tagController_1.deleteTag);
+exports.default = router;

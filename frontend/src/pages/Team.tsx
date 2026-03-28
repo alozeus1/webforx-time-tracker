@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import api from '../services/api';
 import type { RoleOption, UserSummary } from '../types/api';
 import { getStoredRole } from '../utils/session';
+
+interface TeamHoursEntry { name: string; hours: number; }
 
 interface TeamFormState {
     first_name: string;
@@ -34,6 +37,8 @@ const Team: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
+    const [teamHours, setTeamHours] = useState<TeamHoursEntry[]>([]);
+
     const role = getStoredRole();
     const canManageTeam = role === 'Admin' || role === 'Manager';
 
@@ -60,15 +65,27 @@ const Team: React.FC = () => {
         }
     }, [canManageTeam]);
 
+    const loadTeamHours = useCallback(async () => {
+        if (!canManageTeam) return;
+        try {
+            const res = await api.get<{ metrics: { totalHours: string }; userBreakdown: { name: string; totalHours: string }[] }>('/reports/dashboard?range=7d');
+            setTeamHours(
+                (res.data.userBreakdown || []).map(u => ({ name: u.name, hours: parseFloat(u.totalHours) || 0 }))
+            );
+        } catch {
+            setTeamHours([]);
+        }
+    }, [canManageTeam]);
+
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            await Promise.all([loadTeam(), loadRoles()]);
+            await Promise.all([loadTeam(), loadRoles(), loadTeamHours()]);
             setLoading(false);
         };
 
         void load();
-    }, [loadRoles, loadTeam]);
+    }, [loadRoles, loadTeam, loadTeamHours]);
 
     const activeCount = team.filter((user) => user.is_active).length;
     const adminsCount = team.filter((user) => user.role?.name === 'Admin').length;
@@ -292,6 +309,24 @@ const Team: React.FC = () => {
                     <div className="text-3xl font-bold mt-3">{loading ? '...' : adminsCount}</div>
                 </div>
             </div>
+
+            {/* Team Hours Overview */}
+            {canManageTeam && teamHours.length > 0 && (
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 mb-8">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Team Hours This Week</h3>
+                    <div className="h-52">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={teamHours} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                                <XAxis type="number" unit="h" tick={{ fontSize: 11 }} />
+                                <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={100} />
+                                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}h`, 'Hours']} />
+                                <Bar dataKey="hours" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={18} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">

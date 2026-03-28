@@ -39,6 +39,7 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             last_name: user.last_name,
             role: user.role.name,
             is_active: user.is_active,
+            weekly_hour_limit: user.weekly_hour_limit,
         });
     }
     catch (error) {
@@ -272,7 +273,7 @@ exports.deleteUser = deleteUser;
 const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = requireUserId(req);
-        const { first_name, last_name, password } = req.body;
+        const { first_name, last_name, password, weekly_hour_limit } = req.body;
         const updateData = {};
         if (typeof first_name === 'string' && first_name.trim()) {
             updateData.first_name = first_name.trim();
@@ -283,6 +284,9 @@ const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         if (typeof password === 'string' && password.trim()) {
             const salt = yield bcryptjs_1.default.genSalt(10);
             updateData.password_hash = yield bcryptjs_1.default.hash(password.trim(), salt);
+        }
+        if (weekly_hour_limit !== undefined) {
+            updateData.weekly_hour_limit = weekly_hour_limit === null ? null : parseInt(String(weekly_hour_limit), 10) || null;
         }
         if (Object.keys(updateData).length === 0) {
             res.status(400).json({ message: 'No valid fields provided for update' });
@@ -315,6 +319,7 @@ const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             last_name: updatedUser.last_name,
             role: updatedUser.role.name,
             is_active: updatedUser.is_active,
+            weekly_hour_limit: updatedUser.weekly_hour_limit,
         });
     }
     catch (error) {

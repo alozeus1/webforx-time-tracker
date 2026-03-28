@@ -21,11 +21,64 @@ api.interceptors.request.use(
     }
 );
 
+let isRefreshing = false;
+let failedQueue: { resolve: (token: string) => void; reject: (err: unknown) => void }[] = [];
+
+const processQueue = (error: unknown, token: string | null) => {
+    failedQueue.forEach(p => (token ? p.resolve(token) : p.reject(error)));
+    failedQueue = [];
+};
+
 api.interceptors.response.use(
     (response) => response,
-    (error) => {
-        if (error.response?.status === 401) {
+    async (error) => {
+        const originalRequest = error.config;
+
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            const refreshToken = localStorage.getItem('refreshToken');
+
+            if (refreshToken && window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password') {
+                if (isRefreshing) {
+                    return new Promise((resolve, reject) => {
+                        failedQueue.push({
+                            resolve: (token: string) => {
+                                originalRequest.headers.Authorization = `Bearer ${token}`;
+                                resolve(api(originalRequest));
+                            },
+                            reject,
+                        });
+                    });
+                }
+
+                originalRequest._retry = true;
+                isRefreshing = true;
+
+                try {
+                    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, { refreshToken });
+                    const newToken = res.data.token;
+                    const newRefresh = res.data.refreshToken;
+
+                    localStorage.setItem('token', newToken);
+                    if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+
+                    originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                    processQueue(null, newToken);
+                    return api(originalRequest);
+                } catch (refreshError) {
+                    processQueue(refreshError, null);
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('user_role');
+                    localStorage.removeItem('user_profile');
+                    window.location.href = '/login';
+                    return Promise.reject(refreshError);
+                } finally {
+                    isRefreshing = false;
+                }
+            }
+
             localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
             localStorage.removeItem('user_role');
             localStorage.removeItem('user_profile');
             if (window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password') {

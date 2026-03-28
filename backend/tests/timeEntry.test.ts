@@ -3,6 +3,11 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import timeEntryRoutes from '../src/routes/timeEntryRoutes';
 
+// Mock webhookService before prisma so imports resolve cleanly
+jest.mock('../src/services/webhookService', () => ({
+    emitWebhookEvent: jest.fn().mockResolvedValue(undefined),
+}));
+
 // Mock prisma
 jest.mock('../src/config/db', () => ({
     __esModule: true,
@@ -27,6 +32,12 @@ jest.mock('../src/config/db', () => ({
         },
         notification: {
             create: jest.fn(),
+        },
+        webhookSubscription: {
+            findMany: jest.fn().mockResolvedValue([]),
+        },
+        user: {
+            findUnique: jest.fn(),
         },
         // $transaction executes the callback synchronously with a tx object
         $transaction: jest.fn(),

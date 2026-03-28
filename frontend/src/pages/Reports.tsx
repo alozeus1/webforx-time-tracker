@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
+
+const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
 
 /** Returns Tailwind classes based on a trend string like "+5%", "-3%", "0%" */
 function getTrendClasses(trend: string | undefined): string {
@@ -104,7 +107,6 @@ const Reports: React.FC = () => {
         }
     };
 
-    const maxHours = Math.max(...(analytics?.hoursTrend || []).map(t => t.hours), 1);
     const filteredBreakdown = useMemo(() => {
         const source = analytics?.userBreakdown || [];
         if (productivityFilter === 'top') {
@@ -115,10 +117,6 @@ const Reports: React.FC = () => {
         }
         return source;
     }, [analytics?.userBreakdown, productivityFilter]);
-
-    const colorClasses = [
-        'bg-primary', 'bg-indigo-400', 'bg-slate-400', 'bg-emerald-400', 'bg-amber-400', 'bg-rose-400'
-    ];
 
     const pillSelectClass = 'px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all cursor-pointer hover:border-slate-300 dark:hover:border-slate-600';
 
@@ -245,65 +243,52 @@ const Reports: React.FC = () => {
 
                         {/* Charts Section */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Hours Trend */}
+                            {/* Hours Trend — Recharts Bar */}
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h4 className="font-bold text-slate-900 dark:text-white">Hours Logged Trend</h4>
-                                    <button className="text-slate-400 hover:text-primary transition-colors">
-                                        <span className="material-symbols-outlined">more_vert</span>
-                                    </button>
-                                </div>
-                                <div className="h-64 flex items-end gap-2 px-2 relative flex-1">
-                                    <div className="absolute left-0 top-0 h-full w-full flex flex-col justify-between text-[10px] text-slate-400 pointer-events-none">
-                                        <div className="border-t border-slate-100 dark:border-slate-700 w-full pt-1">{maxHours}h</div>
-                                        <div className="border-t border-slate-100 dark:border-slate-700 w-full pt-1">{Math.round(maxHours * 0.75)}h</div>
-                                        <div className="border-t border-slate-100 dark:border-slate-700 w-full pt-1">{Math.round(maxHours * 0.50)}h</div>
-                                        <div className="border-t border-slate-100 dark:border-slate-700 w-full pt-1">{Math.round(maxHours * 0.25)}h</div>
-                                        <div className="base-line w-full pt-1">0h</div>
-                                    </div>
-                                    {analytics?.hoursTrend.map((t, idx) => {
-                                        const hPercent = Math.max((t.hours / maxHours) * 100, 2);
-                                        return (
-                                            <div key={idx} style={{ height: `${hPercent}%` }} className="flex-1 bg-primary/40 rounded-t group relative cursor-pointer hover:bg-primary/90 transition-all">
-                                                <div className="hidden group-hover:block absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] px-2 py-1 rounded z-10 whitespace-nowrap">
-                                                    {t.hours.toFixed(1)}h
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                <div className="flex justify-between mt-4 text-[10px] font-medium text-slate-400 px-4">
-                                    {analytics?.hoursTrend.map((t, idx) => (
-                                        <span key={idx} className="w-12 text-center overflow-hidden text-ellipsis">{t.name}</span>
-                                    ))}
+                                <h4 className="font-bold text-slate-900 dark:text-white mb-4">Hours Logged Trend</h4>
+                                <div className="h-64 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={analytics?.hoursTrend || []} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-slate-200, #e2e8f0)" />
+                                            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                            <YAxis tick={{ fontSize: 11 }} unit="h" />
+                                            <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}h`, 'Hours']} />
+                                            <Bar dataKey="hours" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 </div>
                             </div>
 
-                            {/* Project Distribution */}
-                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                                <div className="flex items-center justify-between mb-6">
-                                    <h4 className="font-bold text-slate-900 dark:text-white">Project Distribution</h4>
-                                    <select className="bg-transparent border-none text-xs font-medium text-slate-500 focus:ring-0 cursor-pointer outline-none">
-                                        <option>Hours</option>
-                                    </select>
-                                </div>
-                                <div className="flex flex-col gap-5 mt-4">
-                                    {analytics?.projectDistribution.length === 0 ? (
-                                        <p className="text-sm text-slate-500 text-center py-10">No project data for this period.</p>
-                                    ) : (
-                                        analytics?.projectDistribution.slice(0, 5).map((p, idx) => (
-                                            <div key={p.id} className="space-y-2">
-                                                <div className="flex justify-between text-xs font-medium">
-                                                    <span className="text-slate-700 dark:text-slate-300 truncate w-3/5">{p.name}</span>
-                                                    <span className="text-slate-500 dark:text-slate-400">{p.hours.toFixed(1)}h ({p.percentage}%)</span>
-                                                </div>
-                                                <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                                                    <div className={`${colorClasses[idx % colorClasses.length]} h-full`} style={{ width: `${p.percentage}%` }}></div>
-                                                </div>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
+                            {/* Project Distribution — Recharts Pie */}
+                            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+                                <h4 className="font-bold text-slate-900 dark:text-white mb-4">Project Distribution</h4>
+                                {(analytics?.projectDistribution.length ?? 0) === 0 ? (
+                                    <p className="text-sm text-slate-500 text-center py-20">No project data for this period.</p>
+                                ) : (
+                                    <div className="h-64 w-full">
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <PieChart>
+                                                <Pie
+                                                    data={analytics?.projectDistribution.slice(0, 6)}
+                                                    dataKey="hours"
+                                                    nameKey="name"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    outerRadius={80}
+                                                    innerRadius={45}
+                                                    paddingAngle={2}
+                                                    label={({ name, percent }: { name: string; percent: number }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                                                >
+                                                    {analytics?.projectDistribution.slice(0, 6).map((_entry, idx) => (
+                                                        <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip formatter={(value) => [`${Number(value).toFixed(1)}h`, 'Hours']} />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

@@ -50,6 +50,7 @@ export const clearStoredSession = () => {
     }
 
     window.localStorage.removeItem('token');
+    window.localStorage.removeItem('refreshToken');
     window.localStorage.removeItem('user_role');
     window.localStorage.removeItem('user_profile');
 };

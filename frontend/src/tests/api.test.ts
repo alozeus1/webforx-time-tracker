@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import axios from 'axios';
-
 // We test the interceptor logic directly without importing the api module,
 // because api.ts uses import.meta.env which requires Vite. Instead we
 // replicate the interceptor behaviour and test it against axios internals.

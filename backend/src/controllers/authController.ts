@@ -39,11 +39,18 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const token = jwt.sign(
             { userId: user.id, email: user.email, role: user.role.name },
             env.jwtSecret,
-            { expiresIn: '24h' }
+            { expiresIn: '1h' }
+        );
+
+        const refreshToken = jwt.sign(
+            { userId: user.id, type: 'refresh' },
+            env.jwtSecret,
+            { expiresIn: '7d' }
         );
 
         res.status(200).json({
             token,
+            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -148,5 +155,47 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     } catch (error) {
         console.error('Reset password error:', error);
         res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const refreshAccessToken = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { refreshToken } = req.body ?? {};
+        if (typeof refreshToken !== 'string' || !refreshToken) {
+            res.status(400).json({ message: 'Refresh token is required' });
+            return;
+        }
+
+        const decoded = jwt.verify(refreshToken, env.jwtSecret) as { userId: string; type?: string };
+        if (decoded.type !== 'refresh') {
+            res.status(401).json({ message: 'Invalid token type' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            include: { role: true },
+        });
+
+        if (!user || !user.is_active) {
+            res.status(401).json({ message: 'User not found or inactive' });
+            return;
+        }
+
+        const newAccessToken = jwt.sign(
+            { userId: user.id, email: user.email, role: user.role.name },
+            env.jwtSecret,
+            { expiresIn: '1h' }
+        );
+
+        const newRefreshToken = jwt.sign(
+            { userId: user.id, type: 'refresh' },
+            env.jwtSecret,
+            { expiresIn: '7d' }
+        );
+
+        res.status(200).json({ token: newAccessToken, refreshToken: newRefreshToken });
+    } catch {
+        res.status(401).json({ message: 'Invalid or expired refresh token' });
     }
 };

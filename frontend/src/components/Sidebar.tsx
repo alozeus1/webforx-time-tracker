@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Clock, Calendar, FileText, BarChart2,
     Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle,
-    Sun, Moon,
+    Sun, Moon, Receipt, FolderCog, Globe, CalendarClock,
 } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
@@ -43,10 +43,19 @@ const NAV_GROUPS: NavGroup[] = [
         ],
     },
     {
+        label: 'BILLING',
+        items: [
+            { name: 'Invoices', path: '/invoices', icon: <Receipt size={20} />, allowedRoles: ['Manager', 'Admin'] },
+            { name: 'Templates', path: '/templates', icon: <FolderCog size={20} />, allowedRoles: ['Manager', 'Admin'] },
+            { name: 'Scheduled Reports', path: '/scheduled-reports', icon: <CalendarClock size={20} />, allowedRoles: ['Manager', 'Admin'] },
+        ],
+    },
+    {
         label: 'WORKSPACE',
         items: [
             { name: 'Team', path: '/team', icon: <Users size={20} />, allowedRoles: ['Manager', 'Admin'] },
             { name: 'Admin', path: '/admin', icon: <ShieldCheck size={20} />, allowedRoles: ['Admin'] },
+            { name: 'Webhooks', path: '/webhooks', icon: <Globe size={20} />, allowedRoles: ['Admin'] },
             { name: 'Integrations', path: '/integrations', icon: <Box size={20} /> },
             { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },
         ],

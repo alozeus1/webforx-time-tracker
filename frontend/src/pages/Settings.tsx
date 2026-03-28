@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 const devSettings = [
     {
@@ -21,6 +21,28 @@ const devSettings = [
 
 const Settings: React.FC = () => {
     const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+    const [notifPrefs, setNotifPrefs] = useState({
+        overtime_alerts: true,
+        budget_warnings: true,
+        approval_requests: true,
+        weekly_summary: false,
+    });
+
+    useEffect(() => {
+        const stored = localStorage.getItem('wfx-notification-prefs');
+        if (stored) {
+            try { setNotifPrefs(JSON.parse(stored)); } catch { /* ignore */ }
+        }
+    }, []);
+
+    const toggleNotifPref = (key: keyof typeof notifPrefs) => {
+        setNotifPrefs(prev => {
+            const next = { ...prev, [key]: !prev[key] };
+            localStorage.setItem('wfx-notification-prefs', JSON.stringify(next));
+            return next;
+        });
+    };
 
     const toggleTheme = () => {
         const next = !isDark;
@@ -74,6 +96,37 @@ const Settings: React.FC = () => {
                                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}`}
                             />
                         </button>
+                    </div>
+                </div>
+
+                {/* Notification Preferences */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-4" style={{ fontFamily: 'var(--font-family-display)' }}>
+                        Notifications
+                    </h2>
+                    <div className="space-y-1">
+                        {([
+                            { key: 'overtime_alerts' as const, label: 'Overtime Alerts', desc: 'Get notified when you exceed your weekly hour limit' },
+                            { key: 'budget_warnings' as const, label: 'Budget Warnings', desc: 'Alert when projects approach their budget limit' },
+                            { key: 'approval_requests' as const, label: 'Approval Requests', desc: 'Notifications for pending timesheet approvals' },
+                            { key: 'weekly_summary' as const, label: 'Weekly Summary Email', desc: 'Receive a weekly hours summary via email' },
+                        ]).map(item => (
+                            <div key={item.key} className="flex items-center justify-between py-3 border-b border-slate-100 dark:border-slate-700 last:border-0">
+                                <div>
+                                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{item.label}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{item.desc}</p>
+                                </div>
+                                <button
+                                    role="switch"
+                                    aria-checked={notifPrefs[item.key]}
+                                    aria-label={`Toggle ${item.label}`}
+                                    onClick={() => toggleNotifPref(item.key)}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ${notifPrefs[item.key] ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-600'}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${notifPrefs[item.key] ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+                        ))}
                     </div>
                 </div>
 

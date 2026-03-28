@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const templateController_1 = require("../controllers/templateController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticateToken);
+router.get('/', templateController_1.listTemplates);
+router.post('/', (0, auth_1.requireRole)(['Admin', 'Manager']), templateController_1.createTemplate);
+router.post('/:id/apply', (0, auth_1.requireRole)(['Admin', 'Manager']), templateController_1.createProjectFromTemplate);
+router.delete('/:id', (0, auth_1.requireRole)(['Admin']), templateController_1.deleteTemplate);
+exports.default = router;

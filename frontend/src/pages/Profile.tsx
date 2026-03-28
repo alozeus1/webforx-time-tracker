@@ -9,6 +9,7 @@ interface CurrentUser {
     last_name: string;
     role: string;
     is_active: boolean;
+    weekly_hour_limit?: number | null;
 }
 
 const Profile: React.FC = () => {
@@ -16,6 +17,7 @@ const Profile: React.FC = () => {
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
     const [password, setPassword] = useState('');
+    const [weeklyHourLimit, setWeeklyHourLimit] = useState('');
     const [saving, setSaving] = useState(false);
     const [feedback, setFeedback] = useState<string | null>(null);
     const [avatarKey, setAvatarKey] = useState(0);
@@ -26,6 +28,7 @@ const Profile: React.FC = () => {
             setUser(response.data);
             setFirstName(response.data.first_name);
             setLastName(response.data.last_name);
+            setWeeklyHourLimit(response.data.weekly_hour_limit != null ? String(response.data.weekly_hour_limit) : '');
         } catch (error) {
             console.error('Failed to load profile:', error);
         }
@@ -40,7 +43,7 @@ const Profile: React.FC = () => {
         setFeedback(null);
 
         try {
-            const payload: { first_name?: string; last_name?: string; password?: string } = {};
+            const payload: { first_name?: string; last_name?: string; password?: string; weekly_hour_limit?: number | null } = {};
 
             if (firstName.trim()) {
                 payload.first_name = firstName.trim();
@@ -53,6 +56,9 @@ const Profile: React.FC = () => {
             if (password.trim()) {
                 payload.password = password.trim();
             }
+
+            const parsedLimit = weeklyHourLimit.trim() ? parseInt(weeklyHourLimit, 10) : null;
+            payload.weekly_hour_limit = !isNaN(parsedLimit as number) ? parsedLimit : null;
 
             const response = await api.put<CurrentUser>('/users/me', payload);
             setUser(response.data);
@@ -138,6 +144,19 @@ const Profile: React.FC = () => {
                                     className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
                                     value={password}
                                     onChange={(event) => setPassword(event.target.value)}
+                                />
+                            </div>
+                            <div className="md:col-span-2">
+                                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Weekly Hour Limit</p>
+                                <p className="text-xs text-slate-500 mt-0.5 mb-1">Get overtime alerts when you exceed this limit. Leave blank for no limit.</p>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="168"
+                                    placeholder="e.g. 40"
+                                    className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900"
+                                    value={weeklyHourLimit}
+                                    onChange={(event) => setWeeklyHourLimit(event.target.value)}
                                 />
                             </div>
                         </div>

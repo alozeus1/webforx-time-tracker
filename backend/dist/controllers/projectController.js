@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteProject = exports.updateProject = exports.createProject = exports.getAllProjects = void 0;
+exports.deleteProject = exports.getProjectBudgets = exports.updateProject = exports.createProject = exports.getAllProjects = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const db_1 = __importDefault(require("../config/db"));
@@ -164,6 +164,54 @@ const updateProject = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.updateProject = updateProject;
+const getProjectBudgets = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const projects = yield db_1.default.project.findMany({
+            where: { is_active: true },
+            select: {
+                id: true,
+                name: true,
+                budget_hours: true,
+                budget_amount: true,
+                time_entries: {
+                    select: { duration: true, user: { select: { hourly_rate: true } } },
+                },
+            },
+        });
+        const budgets = projects.map(project => {
+            const totalSeconds = project.time_entries.reduce((sum, e) => sum + e.duration, 0);
+            const totalHours = totalSeconds / 3600;
+            const totalCost = project.time_entries.reduce((sum, e) => {
+                var _a;
+                const rate = parseFloat(((_a = e.user.hourly_rate) === null || _a === void 0 ? void 0 : _a.toString()) || '0');
+                return sum + (e.duration / 3600) * rate;
+            }, 0);
+            const hoursUsedPct = project.budget_hours
+                ? Math.round((totalHours / project.budget_hours) * 100)
+                : null;
+            const amountUsedPct = project.budget_amount
+                ? Math.round((totalCost / parseFloat(project.budget_amount.toString())) * 100)
+                : null;
+            return {
+                id: project.id,
+                name: project.name,
+                budget_hours: project.budget_hours,
+                budget_amount: project.budget_amount ? parseFloat(project.budget_amount.toString()) : null,
+                hours_used: parseFloat(totalHours.toFixed(1)),
+                hours_used_pct: hoursUsedPct,
+                amount_used: parseFloat(totalCost.toFixed(2)),
+                amount_used_pct: amountUsedPct,
+                over_budget: (hoursUsedPct !== null && hoursUsedPct > 100) || (amountUsedPct !== null && amountUsedPct > 100),
+            };
+        });
+        res.status(200).json({ budgets });
+    }
+    catch (error) {
+        console.error('Failed to fetch project budgets:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.getProjectBudgets = getProjectBudgets;
 const deleteProject = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     try {

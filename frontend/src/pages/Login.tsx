@@ -20,6 +20,9 @@ const Login: React.FC = () => {
         try {
             const response = await api.post('/auth/login', { email, password });
             setStoredSession(response.data.token, response.data.user.role, response.data.user);
+            if (response.data.refreshToken) {
+                localStorage.setItem('refreshToken', response.data.refreshToken);
+            }
             navigate('/dashboard');
         } catch (error) {
             console.error('Login failed:', error);

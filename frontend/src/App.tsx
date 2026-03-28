@@ -14,6 +14,10 @@ import Timesheet from './pages/Timesheet';
 import Integrations from './pages/Integrations';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import Invoices from './pages/Invoices';
+import Templates from './pages/Templates';
+import Webhooks from './pages/Webhooks';
+import ScheduledReports from './pages/ScheduledReports';
 import { getStoredRole, getStoredToken } from './utils/session';
 
 // Auth Guard
@@ -62,6 +66,10 @@ const App: React.FC = () => {
           <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin', 'Manager']}><Admin /></ProtectedRoute>} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/invoices" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Invoices /></ProtectedRoute>} />
+          <Route path="/templates" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Templates /></ProtectedRoute>} />
+          <Route path="/webhooks" element={<ProtectedRoute allowedRoles={['Admin']}><Webhooks /></ProtectedRoute>} />
+          <Route path="/scheduled-reports" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><ScheduledReports /></ProtectedRoute>} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/integrations/taiga" element={<Integrations />} />
           <Route path="/integrations/mattermost" element={<Integrations />} />

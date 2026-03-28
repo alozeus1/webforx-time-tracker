@@ -3,6 +3,8 @@ import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
@@ -15,6 +17,10 @@ import mlRoutes from './routes/mlRoutes';
 import adminRoutes from './routes/adminRoutes';
 import cronRoutes from './routes/cronRoutes';
 import tagRoutes from './routes/tagRoutes';
+import webhookRoutes from './routes/webhookRoutes';
+import invoiceRoutes from './routes/invoiceRoutes';
+import templateRoutes from './routes/templateRoutes';
+import scheduledReportRoutes from './routes/scheduledReportRoutes';
 import { notificationWorker } from './workers/notificationWorker';
 import { startIdleTracker } from './workers/idleTracker';
 import { startBurnoutTracker } from './workers/burnoutTracker';
@@ -83,6 +89,26 @@ app.use('/api/v1/ml', mlRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/cron', cronRoutes);
 app.use('/api/v1/tags', tagRoutes);
+app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/v1/invoices', invoiceRoutes);
+app.use('/api/v1/templates', templateRoutes);
+app.use('/api/v1/scheduled-reports', scheduledReportRoutes);
+
+const swaggerSpec = swaggerJsdoc({
+    definition: {
+        openapi: '3.0.0',
+        info: { title: 'Web Forx Time Tracker API', version: '1.0.0', description: 'API documentation for the Web Forx Time Tracker' },
+        servers: [{ url: '/api/v1' }],
+        components: {
+            securitySchemes: {
+                bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+            },
+        },
+        security: [{ bearerAuth: [] }],
+    },
+    apis: ['./src/routes/*.ts'],
+});
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get('/', (_req, res) => {
     res.status(200).json({

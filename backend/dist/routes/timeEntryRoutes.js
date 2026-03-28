@@ -10,6 +10,9 @@ router.post('/stop', timeEntryController_1.stopTimer);
 router.post('/manual', timeEntryController_1.manualEntry);
 router.get('/me', timeEntryController_1.getMyEntries);
 router.post('/ping', timeEntryController_1.pingTimer);
+router.put('/:id', timeEntryController_1.updateEntry);
+router.delete('/:id', timeEntryController_1.deleteEntry);
+router.post('/:id/duplicate', timeEntryController_1.duplicateEntry);
 // Manager/Admin endpoints
 router.get('/approvals', (0, auth_1.requireRole)(['Manager', 'Admin']), timeEntryController_1.getPendingTimesheets);
 router.post('/approvals/:entryId', (0, auth_1.requireRole)(['Manager', 'Admin']), timeEntryController_1.reviewTimesheet);

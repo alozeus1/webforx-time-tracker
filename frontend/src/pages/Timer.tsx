@@ -194,6 +194,18 @@ const Timer: React.FC = () => {
         };
     }, [timerStartedAt]);
 
+    // Keyboard shortcut: Ctrl+Enter to start/stop timer
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitting) {
+                e.preventDefault();
+                void handleToggle();
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    });
+
     const formatTime = (seconds: number) => {
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
         const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');

@@ -6,7 +6,7 @@ import {
     setStoredSession,
     clearStoredSession,
     hasAnyRole,
-    StoredUserProfile,
+    type StoredUserProfile,
 } from '../utils/session';
 
 // happy-dom provides localStorage; clear before each test

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetPassword = exports.forgotPassword = exports.logout = exports.login = void 0;
+exports.refreshAccessToken = exports.resetPassword = exports.forgotPassword = exports.logout = exports.login = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -44,9 +44,11 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
-        const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email, role: user.role.name }, env_1.env.jwtSecret, { expiresIn: '24h' });
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email, role: user.role.name }, env_1.env.jwtSecret, { expiresIn: '1h' });
+        const refreshToken = jsonwebtoken_1.default.sign({ userId: user.id, type: 'refresh' }, env_1.env.jwtSecret, { expiresIn: '7d' });
         res.status(200).json({
             token,
+            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -90,10 +92,12 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
         yield db_1.default.passwordResetToken.create({
             data: { user_id: user.id, token, expires_at },
         });
-        console.log(`[auth] Password reset code for ${email}: ${token}`);
+        // In production, send token via email service. Never log tokens.
+        if (process.env.NODE_ENV === 'development') {
+            console.log(`[auth:dev] Password reset code generated for ${email}`);
+        }
         res.status(200).json({
-            message: 'If that email exists, a reset code has been generated.',
-            reset_code: token,
+            message: 'If that email exists, a reset code has been sent.',
         });
     }
     catch (error) {
@@ -141,3 +145,33 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.resetPassword = resetPassword;
+const refreshAccessToken = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const { refreshToken } = (_a = req.body) !== null && _a !== void 0 ? _a : {};
+        if (typeof refreshToken !== 'string' || !refreshToken) {
+            res.status(400).json({ message: 'Refresh token is required' });
+            return;
+        }
+        const decoded = jsonwebtoken_1.default.verify(refreshToken, env_1.env.jwtSecret);
+        if (decoded.type !== 'refresh') {
+            res.status(401).json({ message: 'Invalid token type' });
+            return;
+        }
+        const user = yield db_1.default.user.findUnique({
+            where: { id: decoded.userId },
+            include: { role: true },
+        });
+        if (!user || !user.is_active) {
+            res.status(401).json({ message: 'User not found or inactive' });
+            return;
+        }
+        const newAccessToken = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email, role: user.role.name }, env_1.env.jwtSecret, { expiresIn: '1h' });
+        const newRefreshToken = jsonwebtoken_1.default.sign({ userId: user.id, type: 'refresh' }, env_1.env.jwtSecret, { expiresIn: '7d' });
+        res.status(200).json({ token: newAccessToken, refreshToken: newRefreshToken });
+    }
+    catch (_b) {
+        res.status(401).json({ message: 'Invalid or expired refresh token' });
+    }
+});
+exports.refreshAccessToken = refreshAccessToken;

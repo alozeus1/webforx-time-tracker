@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const webhookController_1 = require("../controllers/webhookController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticateToken);
+router.use((0, auth_1.requireRole)(['Admin']));
+router.get('/', webhookController_1.listWebhooks);
+router.post('/', webhookController_1.createWebhook);
+router.delete('/:id', webhookController_1.deleteWebhook);
+exports.default = router;

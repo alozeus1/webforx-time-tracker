@@ -138,3 +138,49 @@ export interface NotificationSummary {
     created_at: string;
     user: { email: string; first_name: string; last_name: string };
 }
+
+export interface InvoiceLineItem {
+    id: string;
+    description: string;
+    hours: number;
+    rate: number;
+    amount: number;
+}
+
+export interface InvoiceSummary {
+    id: string;
+    invoice_number: string;
+    client_name: string;
+    status: string;
+    subtotal: number;
+    tax_rate: number;
+    total: number;
+    notes?: string | null;
+    due_date?: string | null;
+    issued_at?: string | null;
+    paid_at?: string | null;
+    created_at: string;
+    project?: ProjectReference | null;
+    creator?: { first_name: string; last_name: string };
+    line_items: InvoiceLineItem[];
+}
+
+export interface ProjectTemplateSummary {
+    id: string;
+    name: string;
+    description?: string | null;
+    default_billable: boolean;
+    budget_hours?: number | null;
+    budget_amount?: number | null;
+    tag_ids: string[];
+    created_at: string;
+    creator?: { first_name: string; last_name: string };
+}
+
+export interface WebhookSummary {
+    id: string;
+    url: string;
+    events: string[];
+    is_active: boolean;
+    created_at: string;
+}

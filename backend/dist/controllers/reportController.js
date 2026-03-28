@@ -124,7 +124,15 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
         });
         const totalHours = totalDurationSec / 3600;
         const activeProjectsCount = projectIds.size;
-        const avgProductivity = 88; // Placeholder for now, could be dynamic (billable ratio)
+        let billableSeconds = 0;
+        entries.forEach(entry => {
+            if (entry.is_billable !== false) {
+                billableSeconds += entry.duration;
+            }
+        });
+        const avgProductivity = totalDurationSec > 0
+            ? Math.round((billableSeconds / totalDurationSec) * 100)
+            : 0;
         // Compute Project Distribution
         const projectHoursMap = new Map();
         entries.forEach(entry => {
@@ -152,6 +160,41 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
             weekBuckets[weekIndex].hours += (entry.duration / 3600);
         });
         const hoursTrend = weekBuckets;
+        // Compute period-over-period trends
+        const periodDays = Math.max(Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)), 1);
+        const prevStart = new Date(startDate);
+        prevStart.setDate(prevStart.getDate() - periodDays);
+        const prevWhereClause = Object.assign(Object.assign({}, whereClause), { start_time: { gte: prevStart, lt: startDate } });
+        const prevEntries = yield db_1.default.timeEntry.findMany({
+            where: prevWhereClause,
+            include: {
+                user: { select: { hourly_rate: true } },
+                project: { select: { id: true } },
+            },
+        });
+        let prevTotalSec = 0;
+        let prevBillable = 0;
+        const prevProjectIds = new Set();
+        let prevBillableSec = 0;
+        prevEntries.forEach(entry => {
+            var _a;
+            prevTotalSec += entry.duration;
+            if (entry.project_id)
+                prevProjectIds.add(entry.project_id);
+            const rate = parseFloat(((_a = entry.user.hourly_rate) === null || _a === void 0 ? void 0 : _a.toString()) || '0');
+            prevBillable += (entry.duration / 3600) * rate;
+            if (entry.is_billable !== false) {
+                prevBillableSec += entry.duration;
+            }
+        });
+        const prevHours = prevTotalSec / 3600;
+        const prevAvgProd = prevTotalSec > 0 ? Math.round((prevBillableSec / prevTotalSec) * 100) : 0;
+        const pctChange = (current, previous) => {
+            if (previous === 0)
+                return current > 0 ? '+100%' : '0%';
+            const change = Math.round(((current - previous) / previous) * 100);
+            return change >= 0 ? `+${change}%` : `${change}%`;
+        };
         // Compute User Productivity Breakdown
         const userMap = new Map();
         entries.forEach(entry => {
@@ -203,10 +246,10 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
                 avgProductivity,
                 billableAmount: billableAmount.toFixed(2),
                 trends: {
-                    hours: "+5%", // Placeholder trends
-                    projects: "0%",
-                    productivity: "+2%",
-                    billable: "+8%"
+                    hours: pctChange(totalHours, prevHours),
+                    projects: pctChange(activeProjectsCount, prevProjectIds.size),
+                    productivity: pctChange(avgProductivity, prevAvgProd),
+                    billable: pctChange(billableAmount, prevBillable),
                 }
             },
             hoursTrend,

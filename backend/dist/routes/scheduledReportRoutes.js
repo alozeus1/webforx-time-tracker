@@ -1,0 +1,12 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const scheduledReportController_1 = require("../controllers/scheduledReportController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticateToken);
+router.get('/', scheduledReportController_1.listScheduledReports);
+router.post('/', (0, auth_1.requireRole)(['Admin', 'Manager']), scheduledReportController_1.createScheduledReport);
+router.put('/:id', (0, auth_1.requireRole)(['Admin', 'Manager']), scheduledReportController_1.updateScheduledReport);
+router.delete('/:id', (0, auth_1.requireRole)(['Admin', 'Manager']), scheduledReportController_1.deleteScheduledReport);
+exports.default = router;

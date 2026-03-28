@@ -30,6 +30,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
             last_name: user.last_name,
             role: user.role.name,
             is_active: user.is_active,
+            weekly_hour_limit: user.weekly_hour_limit,
         });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
@@ -282,7 +283,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = requireUserId(req);
-        const { first_name, last_name, password } = req.body;
+        const { first_name, last_name, password, weekly_hour_limit } = req.body;
 
         const updateData: Record<string, unknown> = {};
 
@@ -297,6 +298,10 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
         if (typeof password === 'string' && password.trim()) {
             const salt = await bcrypt.genSalt(10);
             updateData.password_hash = await bcrypt.hash(password.trim(), salt);
+        }
+
+        if (weekly_hour_limit !== undefined) {
+            updateData.weekly_hour_limit = weekly_hour_limit === null ? null : parseInt(String(weekly_hour_limit), 10) || null;
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -332,6 +337,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
             last_name: updatedUser.last_name,
             role: updatedUser.role.name,
             is_active: updatedUser.is_active,
+            weekly_hour_limit: updatedUser.weekly_hour_limit,
         });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
