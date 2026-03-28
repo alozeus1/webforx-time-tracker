@@ -109,16 +109,18 @@ const ForgotPassword: React.FC = () => {
 
                         {error && <div className="login-error">{error}</div>}
 
-                        <form onSubmit={handleRequestReset} className="login-form">
+                        <form method="post" onSubmit={handleRequestReset} className="login-form">
                             <div className="form-group icon-input">
                                 <label className="form-label" htmlFor="reset-email">Work Email</label>
                                 <div className="input-wrapper">
                                     <Mail className="input-icon" size={18} />
                                     <input
                                         id="reset-email"
+                                        name="email"
                                         type="email"
                                         className="form-control"
                                         placeholder="name@webforx.com"
+                                        autoComplete="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
@@ -150,16 +152,18 @@ const ForgotPassword: React.FC = () => {
 
                         {error && <div className="login-error">{error}</div>}
 
-                        <form onSubmit={handleResetPassword} className="login-form">
+                        <form method="post" onSubmit={handleResetPassword} className="login-form">
                             <div className="form-group icon-input">
                                 <label className="form-label" htmlFor="reset-code">Reset Code</label>
                                 <div className="input-wrapper">
                                     <KeyRound className="input-icon" size={18} />
                                     <input
                                         id="reset-code"
+                                        name="code"
                                         type="text"
                                         className="form-control"
                                         placeholder="Enter 8-character code"
+                                        autoComplete="one-time-code"
                                         value={code}
                                         onChange={(e) => setCode(e.target.value.toUpperCase())}
                                         maxLength={8}
@@ -174,9 +178,11 @@ const ForgotPassword: React.FC = () => {
                                     <KeyRound className="input-icon" size={18} />
                                     <input
                                         id="new-password"
+                                        name="newPassword"
                                         type="password"
                                         className="form-control"
                                         placeholder="Min 6 characters"
+                                        autoComplete="new-password"
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
                                         required
@@ -189,9 +195,11 @@ const ForgotPassword: React.FC = () => {
                                     <KeyRound className="input-icon" size={18} />
                                     <input
                                         id="confirm-password"
+                                        name="confirmPassword"
                                         type="password"
                                         className="form-control"
                                         placeholder="Re-enter password"
+                                        autoComplete="new-password"
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                         required
@@ -214,7 +222,7 @@ const ForgotPassword: React.FC = () => {
                             <h1>Password Reset!</h1>
                             <p>Your password has been updated successfully. You can now sign in with your new password.</p>
                         </div>
-                        <button className="btn btn-primary login-btn" onClick={() => navigate('/login')}>
+                        <button type="button" className="btn btn-primary login-btn" onClick={() => navigate('/login')}>
                             Go to Sign In
                         </button>
                     </>

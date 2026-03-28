@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import api from '../services/api';
-import type { RoleOption, UserSummary } from '../types/api';
+import type { BulkUserImportResponse, ProjectSummary, RoleOption, UserSummary } from '../types/api';
 import { getStoredRole } from '../utils/session';
+import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
 
 interface TeamHoursEntry { name: string; hours: number; }
 
@@ -15,6 +16,14 @@ interface TeamFormState {
     is_active: boolean;
 }
 
+interface ImportFormState {
+    default_role: string;
+    role_in_project: string;
+    default_project_ids: string[];
+    use_email_as_password: boolean;
+    skip_existing: boolean;
+}
+
 const emptyForm: TeamFormState = {
     first_name: '',
     last_name: '',
@@ -24,16 +33,32 @@ const emptyForm: TeamFormState = {
     is_active: true,
 };
 
+const buildImportFormDefaults = (roleName: string): ImportFormState => ({
+    default_role: roleName,
+    role_in_project: 'Team Member',
+    default_project_ids: [],
+    use_email_as_password: true,
+    skip_existing: true,
+});
+
 const Team: React.FC = () => {
     const [team, setTeam] = useState<UserSummary[]>([]);
     const [roles, setRoles] = useState<RoleOption[]>([]);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [importing, setImporting] = useState(false);
     const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
     const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
     const [modalMode, setModalMode] = useState<'create' | 'edit' | null>(null);
+    const [importModalOpen, setImportModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
     const [form, setForm] = useState<TeamFormState>(emptyForm);
+    const [importForm, setImportForm] = useState<ImportFormState>(buildImportFormDefaults('Employee'));
+    const [importRows, setImportRows] = useState<UserImportCsvRow[]>([]);
+    const [importErrors, setImportErrors] = useState<string[]>([]);
+    const [importFileName, setImportFileName] = useState('');
+    const [lastImportResult, setLastImportResult] = useState<BulkUserImportResponse | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
@@ -65,6 +90,19 @@ const Team: React.FC = () => {
         }
     }, [canManageTeam]);
 
+    const loadProjects = useCallback(async () => {
+        if (!canManageTeam) {
+            return;
+        }
+
+        try {
+            const response = await api.get<ProjectSummary[]>('/projects');
+            setProjects((response.data || []).filter((project) => project.is_active !== false));
+        } catch (error) {
+            console.error('Failed to load projects', error);
+        }
+    }, [canManageTeam]);
+
     const loadTeamHours = useCallback(async () => {
         if (!canManageTeam) return;
         try {
@@ -80,22 +118,37 @@ const Team: React.FC = () => {
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            await Promise.all([loadTeam(), loadRoles(), loadTeamHours()]);
+            await Promise.all([loadTeam(), loadRoles(), loadProjects(), loadTeamHours()]);
             setLoading(false);
         };
 
         void load();
-    }, [loadRoles, loadTeam, loadTeamHours]);
+    }, [loadProjects, loadRoles, loadTeam, loadTeamHours]);
 
     const activeCount = team.filter((user) => user.is_active).length;
     const adminsCount = team.filter((user) => user.role?.name === 'Admin').length;
+    const defaultEmployeeRole = roles.find((item) => item.name === 'Employee')?.name || roles[0]?.name || 'Employee';
+
+    useEffect(() => {
+        setImportForm((previous) => {
+            if (previous.default_role) {
+                return previous;
+            }
+
+            return {
+                ...previous,
+                default_role: defaultEmployeeRole,
+            };
+        });
+    }, [defaultEmployeeRole]);
 
     const openCreateModal = () => {
         setSelectedUser(null);
         setForm({
             ...emptyForm,
-            role: roles.find((item) => item.name === 'Employee')?.name || roles[0]?.name || 'Employee',
+            role: defaultEmployeeRole,
         });
+        setImportModalOpen(false);
         setModalMode('create');
         setMenuOpenFor(null);
         setFeedback(null);
@@ -111,6 +164,7 @@ const Team: React.FC = () => {
             role: user.role?.name || 'Employee',
             is_active: user.is_active,
         });
+        setImportModalOpen(false);
         setModalMode('edit');
         setMenuOpenFor(null);
         setFeedback(null);
@@ -120,6 +174,138 @@ const Team: React.FC = () => {
         setModalMode(null);
         setSelectedUser(null);
         setForm(emptyForm);
+    };
+
+    const openImportModal = () => {
+        setModalMode(null);
+        setSelectedUser(null);
+        setImportRows([]);
+        setImportErrors([]);
+        setImportFileName('');
+        setImportForm(buildImportFormDefaults(defaultEmployeeRole));
+        setImportModalOpen(true);
+        setMenuOpenFor(null);
+        setFeedback(null);
+    };
+
+    const closeImportModal = () => {
+        setImportModalOpen(false);
+        setImportRows([]);
+        setImportErrors([]);
+        setImportFileName('');
+    };
+
+    const handleImportFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            setImportRows([]);
+            setImportErrors(['Only CSV files are supported right now. Please export your spreadsheet as CSV and upload again.']);
+            setImportFileName(file.name);
+            event.target.value = '';
+            return;
+        }
+
+        try {
+            const fileText = await file.text();
+            const parsed = parseUserImportCsv(fileText);
+            setImportRows(parsed.rows);
+            setImportErrors(parsed.errors);
+            setImportFileName(file.name);
+        } catch (error) {
+            console.error('Failed to parse import CSV', error);
+            setImportRows([]);
+            setImportErrors(['Unable to read this CSV file. Please verify the file and try again.']);
+            setImportFileName(file.name);
+        } finally {
+            event.target.value = '';
+        }
+    };
+
+    const toggleDefaultProject = (projectId: string) => {
+        setImportForm((previous) => {
+            const nextSet = new Set(previous.default_project_ids);
+            if (nextSet.has(projectId)) {
+                nextSet.delete(projectId);
+            } else {
+                nextSet.add(projectId);
+            }
+
+            return {
+                ...previous,
+                default_project_ids: Array.from(nextSet),
+            };
+        });
+    };
+
+    const handleImportTemplateDownload = () => {
+        const templateRows = [
+            'email,first_name,last_name,user_type,projects',
+            'ada@example.com,Ada,Lovelace,manager,"Platform Engineering"',
+            'sam@example.com,Sam,Lee,employee,"EDUSUC;Web Forx Technology"',
+            'lea@example.com,Lea,Khan,intern,"LAFABAH"',
+        ];
+
+        const csv = `${templateRows.join('\n')}\n`;
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'team-import-template.csv');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        window.URL.revokeObjectURL(url);
+    };
+
+    const handleImportUsers = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!canManageTeam) {
+            return;
+        }
+
+        if (importRows.length === 0) {
+            setFeedback({ message: 'Upload a CSV with valid user rows before importing.', tone: 'error' });
+            return;
+        }
+
+        setImporting(true);
+        setFeedback(null);
+
+        try {
+            const response = await api.post<BulkUserImportResponse>('/users/import', {
+                users: importRows,
+                options: {
+                    default_role: importForm.default_role,
+                    role_in_project: importForm.role_in_project.trim() || 'Team Member',
+                    default_project_ids: importForm.default_project_ids,
+                    use_email_as_password: importForm.use_email_as_password,
+                    skip_existing: importForm.skip_existing,
+                },
+            });
+
+            const result = response.data;
+            setLastImportResult(result);
+            setFeedback({
+                message: `Import complete: ${result.summary.created} created, ${result.summary.skipped} skipped, ${result.summary.failed} failed.`,
+                tone: result.summary.failed > 0 ? 'error' : 'success',
+            });
+
+            await Promise.all([loadTeam(), loadTeamHours()]);
+            closeImportModal();
+        } catch (error) {
+            console.error('Failed to import users', error);
+            const message =
+                typeof (error as { response?: { data?: { message?: string } } })?.response?.data?.message === 'string'
+                    ? (error as { response: { data: { message: string } } }).response.data.message
+                    : 'Failed to import users';
+            setFeedback({ message, tone: 'error' });
+        } finally {
+            setImporting(false);
+        }
     };
 
     const handleSaveMember = async (event: React.FormEvent) => {
@@ -275,13 +461,24 @@ const Team: React.FC = () => {
                     <p className="text-slate-500 dark:text-slate-400 mt-1">Manage members, roles, and status for your organization.</p>
                 </div>
                 {canManageTeam && (
-                    <button
-                        onClick={openCreateModal}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
-                    >
-                        <span className="material-symbols-outlined text-base">group_add</span>
-                        Add Team Member
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={openImportModal}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                        >
+                            <span className="material-symbols-outlined text-base">upload_file</span>
+                            Import CSV
+                        </button>
+                        <button
+                            type="button"
+                            onClick={openCreateModal}
+                            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90"
+                        >
+                            <span className="material-symbols-outlined text-base">group_add</span>
+                            Add Team Member
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -292,6 +489,52 @@ const Team: React.FC = () => {
                         : 'border border-rose-200 bg-rose-50 text-rose-800'
                 }`}>
                     {feedback.message}
+                </div>
+            )}
+
+            {lastImportResult && (
+                <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Last Import Summary</h3>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Total rows: {lastImportResult.summary.total}
+                        </span>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                        <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700">
+                            <p className="font-semibold">Created</p>
+                            <p className="text-base font-bold">{lastImportResult.summary.created}</p>
+                        </div>
+                        <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-700">
+                            <p className="font-semibold">Skipped</p>
+                            <p className="text-base font-bold">{lastImportResult.summary.skipped}</p>
+                        </div>
+                        <div className="rounded-lg bg-rose-50 px-3 py-2 text-rose-700">
+                            <p className="font-semibold">Failed</p>
+                            <p className="text-base font-bold">{lastImportResult.summary.failed}</p>
+                        </div>
+                        <div className="rounded-lg bg-slate-100 px-3 py-2 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                            <p className="font-semibold">Team Assignments</p>
+                            <p className="text-base font-bold">
+                                {lastImportResult.created.reduce((count, entry) => count + entry.assigned_projects, 0)}
+                            </p>
+                        </div>
+                    </div>
+                    {(lastImportResult.failed.length > 0 || lastImportResult.skipped.length > 0) && (
+                        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            {lastImportResult.failed.slice(0, 3).map((entry, index) => (
+                                <p key={`failed-${entry.email}-${index}`}>Failed: {entry.email} - {entry.reason}</p>
+                            ))}
+                            {lastImportResult.skipped.slice(0, 3).map((entry, index) => (
+                                <p key={`skipped-${entry.email}-${index}`}>Skipped: {entry.email} - {entry.reason}</p>
+                            ))}
+                            {(lastImportResult.failed.length > 3 || lastImportResult.skipped.length > 3) && (
+                                <p className="mt-1 text-slate-500 dark:text-slate-400">
+                                    Additional rows were skipped or failed. Review the CSV and retry those entries.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -350,12 +593,14 @@ const Team: React.FC = () => {
                                 <option value="inactive">Inactive</option>
                             </select>
                             <button
+                                type="button"
                                 className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                                 onClick={() => void loadTeam()}
                             >
                                 Refresh
                             </button>
                             <button
+                                type="button"
                                 className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                                 onClick={handleExportTeam}
                             >
@@ -397,6 +642,7 @@ const Team: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4 text-right relative">
                                             <button
+                                                type="button"
                                                 className="text-slate-400 hover:text-slate-600 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800"
                                                 onClick={() => setMenuOpenFor((prev) => prev === user.id ? null : user.id)}
                                             >
@@ -406,6 +652,7 @@ const Team: React.FC = () => {
                                             {menuOpenFor === user.id && (
                                                 <div className="absolute right-6 top-12 z-20 min-w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
                                                     <button
+                                                        type="button"
                                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                                         onClick={() => openEditModal(user)}
                                                         disabled={!canManageTeam}
@@ -414,6 +661,7 @@ const Team: React.FC = () => {
                                                         Edit Member
                                                     </button>
                                                     <button
+                                                        type="button"
                                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                                         onClick={() => void toggleUserActive(user)}
                                                         disabled={!canManageTeam || saving}
@@ -422,6 +670,7 @@ const Team: React.FC = () => {
                                                         {user.is_active ? 'Deactivate' : 'Activate'}
                                                     </button>
                                                     <button
+                                                        type="button"
                                                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:cursor-not-allowed disabled:opacity-50"
                                                         onClick={() => void handleDeleteUser(user)}
                                                         disabled={!canManageTeam || saving}
@@ -475,6 +724,7 @@ const Team: React.FC = () => {
                                 {modalMode === 'create' ? 'Add Team Member' : 'Edit Team Member'}
                             </h3>
                             <button
+                                type="button"
                                 className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                                 onClick={closeModal}
                             >
@@ -571,6 +821,192 @@ const Team: React.FC = () => {
                                     className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
                                     {saving ? 'Saving...' : (modalMode === 'create' ? 'Add Member' : 'Save Changes')}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {importModalOpen && (
+                <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm p-4 flex items-center justify-center">
+                    <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+                        <div className="mb-4 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">Bulk Import Team Members</h3>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    Upload a CSV to create users in bulk and assign them to teams/projects automatically.
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                className="rounded-md p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                                onClick={closeImportModal}
+                            >
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        <form className="space-y-5" onSubmit={(event) => void handleImportUsers(event)}>
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                <p className="font-semibold">Supported columns</p>
+                                <p className="mt-1">
+                                    Required: <code>email</code>. Optional: <code>first_name</code>, <code>last_name</code>, <code>full_name</code>,
+                                    <code> user_type</code>/<code>role</code>, <code>projects</code>/<code>team</code>, <code>project_ids</code>.
+                                </p>
+                                <p className="mt-1">User types accepted: employee, intern, manager.</p>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={handleImportTemplateDownload}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                                >
+                                    <span className="material-symbols-outlined text-base">download</span>
+                                    Download CSV Template
+                                </button>
+                                <label
+                                    htmlFor="team-import-csv"
+                                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+                                >
+                                    <span className="material-symbols-outlined text-base">upload_file</span>
+                                    Upload CSV
+                                </label>
+                                <input
+                                    id="team-import-csv"
+                                    type="file"
+                                    accept=".csv,text/csv"
+                                    className="hidden"
+                                    onChange={(event) => void handleImportFileSelected(event)}
+                                />
+                                {importFileName && (
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                        File: {importFileName}
+                                    </span>
+                                )}
+                            </div>
+
+                            {importErrors.length > 0 && (
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                                    {importErrors.slice(0, 6).map((error, index) => (
+                                        <p key={`${error}-${index}`}>{error}</p>
+                                    ))}
+                                    {importErrors.length > 6 && (
+                                        <p>Additional CSV warnings detected. Please fix and re-upload if needed.</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {importRows.length > 0 && (
+                                <div className="rounded-xl border border-slate-200 dark:border-slate-700">
+                                    <div className="border-b border-slate-200 px-4 py-2 text-sm font-semibold dark:border-slate-700">
+                                        Parsed rows ready for import: {importRows.length}
+                                    </div>
+                                    <div className="max-h-48 overflow-auto">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                                                <tr>
+                                                    <th className="px-4 py-2 font-semibold">Email</th>
+                                                    <th className="px-4 py-2 font-semibold">Name</th>
+                                                    <th className="px-4 py-2 font-semibold">Type/Role</th>
+                                                    <th className="px-4 py-2 font-semibold">Team/Projects</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {importRows.slice(0, 5).map((row, index) => (
+                                                    <tr key={`${row.email}-${index}`} className="border-t border-slate-100 dark:border-slate-800">
+                                                        <td className="px-4 py-2">{row.email}</td>
+                                                        <td className="px-4 py-2">{row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || '--'}</td>
+                                                        <td className="px-4 py-2">{row.user_type || row.role || row.type || importForm.default_role}</td>
+                                                        <td className="px-4 py-2">{row.projects || row.project || row.team || '--'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Default User Type</label>
+                                    <select
+                                        value={importForm.default_role}
+                                        onChange={(event) => setImportForm((previous) => ({ ...previous, default_role: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                    >
+                                        {(roles.length > 0 ? roles : [{ id: 'fallback-employee', name: 'Employee' }, { id: 'fallback-intern', name: 'Intern' }, { id: 'fallback-manager', name: 'Manager' }]).map((option) => (
+                                            <option key={option.id} value={option.name}>
+                                                {option.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Default Team Role</label>
+                                    <input
+                                        type="text"
+                                        value={importForm.role_in_project}
+                                        onChange={(event) => setImportForm((previous) => ({ ...previous, role_in_project: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                        placeholder="Team Member"
+                                    />
+                                </div>
+                            </div>
+
+                            {projects.length > 0 && (
+                                <div>
+                                    <p className="mb-2 text-sm font-bold text-slate-700 dark:text-slate-200">Default Team Assignments (optional)</p>
+                                    <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 dark:border-slate-700 dark:bg-slate-800">
+                                        {projects.map((project) => (
+                                            <label key={project.id} className="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={importForm.default_project_ids.includes(project.id)}
+                                                    onChange={() => toggleDefaultProject(project.id)}
+                                                />
+                                                {project.name}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+                                <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                    <input
+                                        type="checkbox"
+                                        checked={importForm.use_email_as_password}
+                                        onChange={(event) => setImportForm((previous) => ({ ...previous, use_email_as_password: event.target.checked }))}
+                                    />
+                                    Use each email as the temporary password
+                                </label>
+                                <label className="inline-flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                                    <input
+                                        type="checkbox"
+                                        checked={importForm.skip_existing}
+                                        onChange={(event) => setImportForm((previous) => ({ ...previous, skip_existing: event.target.checked }))}
+                                    />
+                                    Skip users that already exist
+                                </label>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                    onClick={closeImportModal}
+                                    disabled={importing}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={importing || importRows.length === 0}
+                                    className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {importing ? 'Importing...' : importRows.length > 0 ? `Import ${importRows.length} Users` : 'Import Users'}
                                 </button>
                             </div>
                         </form>

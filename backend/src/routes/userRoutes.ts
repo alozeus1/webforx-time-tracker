@@ -1,5 +1,15 @@
 import { Router } from 'express';
-import { getMe, getAllUsers, createUser, updateUser, deleteUser, updateMe, getRoles, getMyNotifications } from '../controllers/userController';
+import {
+    getMe,
+    getAllUsers,
+    createUser,
+    updateUser,
+    deleteUser,
+    updateMe,
+    getRoles,
+    getMyNotifications,
+    importUsers,
+} from '../controllers/userController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -10,6 +20,7 @@ router.put('/me', authenticateToken, updateMe);
 router.get('/', authenticateToken, requireRole(['Admin', 'Manager']), getAllUsers);
 router.get('/roles', authenticateToken, requireRole(['Admin', 'Manager']), getRoles);
 router.post('/', authenticateToken, requireRole(['Admin', 'Manager']), createUser);
+router.post('/import', authenticateToken, requireRole(['Admin', 'Manager']), importUsers);
 router.put('/:id', authenticateToken, requireRole(['Admin', 'Manager']), updateUser);
 router.delete('/:id', authenticateToken, requireRole(['Admin', 'Manager']), deleteUser);
 

@@ -28,6 +28,39 @@ export interface ProjectSummary {
     is_active?: boolean;
 }
 
+export interface UserImportResultSummary {
+    total: number;
+    created: number;
+    skipped: number;
+    failed: number;
+}
+
+export interface CreatedImportedUser {
+    id: string;
+    email: string;
+    first_name: string;
+    last_name: string;
+    role: string;
+    assigned_projects: number;
+}
+
+export interface SkippedImportedUser {
+    email: string;
+    reason: string;
+}
+
+export interface FailedImportedUser {
+    email: string;
+    reason: string;
+}
+
+export interface BulkUserImportResponse {
+    summary: UserImportResultSummary;
+    created: CreatedImportedUser[];
+    skipped: SkippedImportedUser[];
+    failed: FailedImportedUser[];
+}
+
 export interface ProjectReference {
     id?: string;
     name: string;

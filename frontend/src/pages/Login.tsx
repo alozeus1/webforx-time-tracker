@@ -91,16 +91,18 @@ const Login: React.FC = () => {
                     </div>
                 )}
 
-                <form onSubmit={handleLogin} className="login-form">
+                <form method="post" onSubmit={handleLogin} className="login-form">
                     <div className="form-group icon-input">
                         <label className="form-label" htmlFor="email">Work Email</label>
                         <div className="input-wrapper">
                             <Mail className="input-icon" size={18} />
                             <input
                                 id="email"
+                                name="email"
                                 type="email"
                                 className="form-control"
                                 placeholder="name@webforx.com"
+                                autoComplete="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -114,9 +116,11 @@ const Login: React.FC = () => {
                             <Lock className="input-icon" size={18} />
                             <input
                                 id="password"
+                                name="password"
                                 type="password"
                                 className="form-control"
                                 placeholder="••••••••"
+                                autoComplete="current-password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
@@ -136,7 +140,7 @@ const Login: React.FC = () => {
                         <Link to="/privacy">Privacy</Link>
                         <Link to="/terms">Terms</Link>
                     </div>
-                    <Link to="/landing">Back to product overview</Link>
+                    <Link to="/">Back to product overview</Link>
                 </div>
             </div>
         </main>

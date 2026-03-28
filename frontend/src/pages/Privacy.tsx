@@ -16,12 +16,12 @@ const Privacy: React.FC = () => {
     <div className="public-page-shell">
       <header className="public-page-header">
         <div className="public-page-header-inner">
-          <Link to="/landing" className="public-page-brand">
+          <Link to="/" className="public-page-brand">
             <img src="/webforx-logo.png" alt="Web Forx logo" />
             <span>Web Forx Time Tracker</span>
           </Link>
           <nav className="public-page-links" aria-label="Public navigation">
-            <Link to="/landing">Product</Link>
+            <Link to="/">Product</Link>
             <Link to="/request-access">Request Access</Link>
             <Link to="/terms">Terms</Link>
             <Link to="/login">Sign In</Link>

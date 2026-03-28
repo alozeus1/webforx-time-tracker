@@ -90,16 +90,18 @@ const RequestAccess: React.FC = () => {
               <p>Tell us about your organization and we will coordinate workspace access.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="login-form">
+            <form method="post" onSubmit={handleSubmit} className="login-form">
               <div className="form-group icon-input">
                 <label className="form-label" htmlFor="request-full-name">Full Name</label>
                 <div className="input-wrapper">
                   <Users className="input-icon" size={18} />
                   <input
                     id="request-full-name"
+                    name="fullName"
                     className="form-control"
                     type="text"
                     placeholder="Your full name"
+                    autoComplete="name"
                     value={form.fullName}
                     onChange={(event) => handleFieldChange('fullName', event.target.value)}
                     required
@@ -113,9 +115,11 @@ const RequestAccess: React.FC = () => {
                   <Mail className="input-icon" size={18} />
                   <input
                     id="request-work-email"
+                    name="email"
                     className="form-control"
                     type="email"
                     placeholder="name@company.com"
+                    autoComplete="email"
                     value={form.workEmail}
                     onChange={(event) => handleFieldChange('workEmail', event.target.value)}
                     required
@@ -129,9 +133,11 @@ const RequestAccess: React.FC = () => {
                   <Building2 className="input-icon" size={18} />
                   <input
                     id="request-company"
+                    name="company"
                     className="form-control"
                     type="text"
                     placeholder="Web Forx Technology"
+                    autoComplete="organization"
                     value={form.company}
                     onChange={(event) => handleFieldChange('company', event.target.value)}
                     required
@@ -143,6 +149,7 @@ const RequestAccess: React.FC = () => {
                 <label className="form-label" htmlFor="request-team-size">Team Size</label>
                 <select
                   id="request-team-size"
+                  name="teamSize"
                   className="form-control"
                   value={form.teamSize}
                   onChange={(event) => handleFieldChange('teamSize', event.target.value)}
@@ -158,6 +165,7 @@ const RequestAccess: React.FC = () => {
                 <label className="form-label" htmlFor="request-details">Additional Details</label>
                 <textarea
                   id="request-details"
+                  name="details"
                   className="form-control"
                   placeholder="Share rollout timeline, role needs, or any onboarding requirements."
                   rows={4}

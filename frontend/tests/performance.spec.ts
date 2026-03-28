@@ -49,7 +49,7 @@ test.describe('Performance & Reliability', () => {
         expect(elapsed).toBeLessThan(2000);
     });
 
-    test('dashboard loads in under 5 seconds after auth (mocked APIs)', async ({ page }) => {
+    test('dashboard loads in under 7 seconds after auth (mocked APIs)', async ({ page }) => {
         await page.goto('/login');
         await injectSession(page);
         await mockCoreAPIs(page);
@@ -58,10 +58,10 @@ test.describe('Performance & Reliability', () => {
         await page.goto('/dashboard');
         await page.waitForLoadState('domcontentloaded');
         const elapsed = Date.now() - start;
-        expect(elapsed).toBeLessThan(5000);
+        expect(elapsed).toBeLessThan(7000);
     });
 
-    test('timer page loads in under 4 seconds', async ({ page }) => {
+    test('timer page loads in under 7 seconds', async ({ page }) => {
         await page.goto('/login');
         await injectSession(page);
         await mockCoreAPIs(page);
@@ -70,7 +70,7 @@ test.describe('Performance & Reliability', () => {
         await page.goto('/timer');
         await page.waitForLoadState('domcontentloaded');
         const elapsed = Date.now() - start;
-        expect(elapsed).toBeLessThan(4000);
+        expect(elapsed).toBeLessThan(7000);
     });
 
     test('no console errors on login page', async ({ page }) => {

@@ -1,9 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users,
-  ShieldCheck, Box, CheckCircle2, ArrowRight,
-  Eye, Briefcase, UserCheck, Zap,
+  ShieldCheck, Plug, CheckCircle2, ArrowRight,
+  Eye, Briefcase, UserCheck, LockKeyhole,
 } from 'lucide-react';
 import { usePageMetadata } from '../hooks/usePageMetadata';
 import './Landing.css';
@@ -79,13 +79,13 @@ const features = [
     ops: 'Organization config, audit visibility, and approval workflows.',
   },
   {
-    icon: <Box size={20} />,
+    icon: <Plug size={20} />,
     title: 'Integrations',
     biz: 'Connect your existing tools for a seamless workflow.',
     ops: 'Sync with Google Calendar, Taiga, and more.',
   },
   {
-    icon: <Zap size={20} />,
+    icon: <LockKeyhole size={20} />,
     title: 'Session Security',
     biz: 'Protect sensitive time and billing data.',
     ops: 'JWT-based auth, role enforcement, and secure session handling.',
@@ -116,7 +116,7 @@ const demoTabs: DemoTab[] = [
       rows: [
         { label: 'Platform Engineering', value: '2h 10m', tone: 'primary', trend: '+12%' },
         { label: 'Webforx Website', value: '1h 45m', tone: 'info', trend: '+4%' },
-        { label: 'BA', value: '1h 22m', tone: 'success', trend: 'On target' },
+        { label: 'Business Analysis', value: '1h 22m', tone: 'success', trend: 'On target' },
       ],
       footer: 'Utilization: 84% of target hours',
     },
@@ -238,7 +238,7 @@ const demoTabs: DemoTab[] = [
   {
     key: 'integrations',
     label: 'Integrations',
-    icon: <Box size={16} />,
+    icon: <Plug size={16} />,
     title: 'Integrations',
     desc: 'Connect Google Calendar to auto-import events as time entries. Sync with Taiga for task-level tracking. More integrations coming soon.',
     highlights: ['Google Calendar sync', 'Taiga project sync', 'Automated imports', 'Connected workflows'],
@@ -297,18 +297,47 @@ const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose
   const [hasVideoError, setHasVideoError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+
+      if (e.key !== 'Tab') return;
+
+      const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+
+      if (!focusable || focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
 
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
+    closeButtonRef.current?.focus();
 
     return () => {
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
+      previouslyFocused?.focus();
     };
   }, [onClose]);
 
@@ -320,14 +349,24 @@ const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose
   return (
     <div className="video-modal-backdrop" onClick={onClose}>
       <div
+        ref={modalRef}
         className="video-modal-container"
         role="dialog"
         aria-modal="true"
+        aria-label="Demo video"
         aria-labelledby="demo-video-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="demo-video-modal-title" className="visually-hidden">Web Forx Time Tracker demo video</h2>
-        <button className="video-modal-close" onClick={onClose} aria-label="Close demo video">✕</button>
+        <button
+          ref={closeButtonRef}
+          type="button"
+          className="video-modal-close"
+          onClick={onClose}
+          aria-label="Close demo video"
+        >
+          ✕
+        </button>
 
         {hasVideoError ? (
           <div className="video-modal-fallback" role="status" aria-live="polite">
@@ -361,7 +400,6 @@ const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose
 /* ───────────────────── component ───────────────────── */
 
 const Landing: React.FC = () => {
-  const navigate = useNavigate();
   const [activeDemo, setActiveDemo] = useState('dashboard');
   const [showVideo, setShowVideo] = useState(false);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -374,11 +412,9 @@ const Landing: React.FC = () => {
     ogTitle: 'Web Forx Time Tracker',
     ogDescription: 'Track team hours, approvals, and project delivery with one enterprise-ready time tracking platform.',
     ogImage: '/webforx-logo.png',
-    canonical: '/landing',
+    canonical: '/',
   });
 
-  const goLogin = () => navigate('/login');
-  const goRequestAccess = () => navigate('/request-access');
   const openVideo = useCallback(() => setShowVideo(true), []);
   const closeVideo = useCallback(() => setShowVideo(false), []);
 
@@ -404,15 +440,15 @@ const Landing: React.FC = () => {
   return (
     <div className="landing-page">
       {/* ── Nav ── */}
-      <nav className="landing-nav">
-        <Link to="/landing" className="landing-nav-brand">
+      <nav className="landing-nav" aria-label="Main navigation">
+        <Link to="/" className="landing-nav-brand">
           <img src="/webforx-logo.png" alt="Web Forx" className="logo-mark-img" />
           <span>Web Forx Time Tracker</span>
         </Link>
         <div className="landing-nav-actions">
-          <button className="btn btn-outline" onClick={() => scrollTo('features')}>Features</button>
-          <button className="btn btn-outline" onClick={() => scrollTo('demo')}>Demo</button>
-          <button className="btn btn-primary" onClick={goLogin}>Sign In</button>
+          <button type="button" className="btn btn-outline" onClick={() => scrollTo('features')}>Features</button>
+          <button type="button" className="btn btn-outline" onClick={() => scrollTo('demo')}>Demo</button>
+          <Link to="/login" className="btn btn-primary">Sign In</Link>
         </div>
       </nav>
 
@@ -429,10 +465,10 @@ const Landing: React.FC = () => {
             where every hour goes.
           </p>
           <div className="hero-actions">
-            <button className="btn btn-primary btn-lg" onClick={goLogin}>
+            <Link className="btn btn-primary btn-lg" to="/login">
               Get Started <ArrowRight size={18} style={{ marginLeft: 6 }} />
-            </button>
-            <button className="btn btn-secondary btn-lg" onClick={() => scrollTo('demo')}>
+            </Link>
+            <button type="button" className="btn btn-secondary btn-lg" onClick={() => scrollTo('how-it-works')}>
               See How It Works
             </button>
           </div>
@@ -545,6 +581,7 @@ const Landing: React.FC = () => {
             <div className="demo-tabs" role="tablist" aria-label="Product walkthrough tabs">
               {demoTabs.map((tab, index) => (
                 <button
+                  type="button"
                   key={tab.key}
                   ref={(element) => { tabRefs.current[index] = element; }}
                   className={`demo-tab ${activeDemo === tab.key ? 'active' : ''}`}
@@ -652,12 +689,12 @@ const Landing: React.FC = () => {
             to improve visibility, accountability, and productivity.
           </p>
           <div className="cta-actions">
-            <button className="btn btn-lg btn-white" onClick={goLogin}>
+            <Link className="btn btn-lg btn-white" to="/login">
               Sign In <ArrowRight size={18} style={{ marginLeft: 6 }} />
-            </button>
-            <button className="btn btn-lg btn-ghost" onClick={goRequestAccess}>
+            </Link>
+            <Link className="btn btn-lg btn-ghost" to="/request-access">
               Request Access
-            </button>
+            </Link>
           </div>
         </section>
 

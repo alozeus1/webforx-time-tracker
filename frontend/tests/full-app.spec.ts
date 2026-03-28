@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { installStableApiMocks, loginWithMockedBackend, type AppRole } from './utils/mock-backend';
 
 const EMPLOYEE_EMAIL = 'employee@webforxtech.com';
 const EMPLOYEE_PASSWORD = 'password123';
@@ -11,7 +12,7 @@ const ADMIN_PASSWORD = 'webforxtechng@';
 
 test.describe('Landing Page', () => {
     test('renders all key sections', async ({ page }) => {
-        await page.goto('/landing');
+        await page.goto('/');
 
         // Nav
         await expect(page.locator('.landing-nav')).toBeVisible();
@@ -19,7 +20,7 @@ test.describe('Landing Page', () => {
 
         // Hero
         await expect(page.locator('text=Track Time. Improve Accountability. Deliver Results.')).toBeVisible();
-        await expect(page.getByRole('button', { name: /Get Started/i })).toBeVisible();
+        await expect(page.getByRole('link', { name: /Get Started/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /See How It Works/i })).toBeVisible();
 
         // Features section
@@ -37,7 +38,7 @@ test.describe('Landing Page', () => {
     });
 
     test('demo walkthrough tabs are interactive', async ({ page }) => {
-        await page.goto('/landing');
+        await page.goto('/');
 
         await page.locator('#demo').scrollIntoViewIfNeeded();
 
@@ -50,15 +51,21 @@ test.describe('Landing Page', () => {
         await expect(page.locator('.demo-panel-text h3', { hasText: 'Reports' })).toBeVisible();
     });
 
-    test('"Get Started" button navigates to login', async ({ page }) => {
-        await page.goto('/landing');
-        await page.getByRole('button', { name: /Get Started/i }).click();
+    test('"Get Started" link navigates to login', async ({ page }) => {
+        await page.goto('/');
+        await page.getByRole('link', { name: /Get Started/i }).click();
         await expect(page).toHaveURL(/.*login/);
     });
 
-    test('unauthenticated root redirects to landing', async ({ page }) => {
+    test('legacy /landing redirects to canonical root landing', async ({ page }) => {
+        await page.goto('/landing');
+        await expect(page).toHaveURL(/.*\/$/);
+        await expect(page.locator('text=Track Time. Improve Accountability. Deliver Results.')).toBeVisible();
+    });
+
+    test('unauthenticated root renders landing content', async ({ page }) => {
         await page.goto('/');
-        // Should see the landing page content (not a login redirect)
+        await expect(page).toHaveURL(/.*\/$/);
         await expect(page.locator('text=Track Time. Improve Accountability. Deliver Results.')).toBeVisible();
     });
 });
@@ -77,6 +84,7 @@ test.describe('Login Page', () => {
     });
 
     test('successful login redirects to dashboard', async ({ page }) => {
+        await installStableApiMocks(page, { role: 'Employee' });
         await page.goto('/login');
         await page.getByLabel('Work Email').fill(EMPLOYEE_EMAIL);
         await page.getByLabel('Password').fill(EMPLOYEE_PASSWORD);
@@ -84,13 +92,14 @@ test.describe('Login Page', () => {
         await expect(page).toHaveURL(/.*dashboard/);
     });
 
-    test('failed login shows alert', async ({ page }) => {
+    test('failed login shows inline error', async ({ page }) => {
+        await installStableApiMocks(page, { loginMode: 'failure' });
         await page.goto('/login');
         await page.getByLabel('Work Email').fill('bad@email.com');
         await page.getByLabel('Password').fill('wrongpassword');
-
-        page.once('dialog', (dialog) => void dialog.accept());
         await page.getByRole('button', { name: 'Sign In' }).click();
+        await expect(page.locator('.login-error')).toContainText('Login failed');
+        await expect(page).toHaveURL(/.*login/);
     });
 });
 
@@ -100,11 +109,12 @@ test.describe('Login Page', () => {
 
 test.describe('Onboarding Tour', () => {
     test('appears on first login and can be skipped', async ({ page }) => {
-        await page.goto('/login');
-        await page.getByLabel('Work Email').fill(EMPLOYEE_EMAIL);
-        await page.getByLabel('Password').fill(EMPLOYEE_PASSWORD);
-        await page.getByRole('button', { name: 'Sign In' }).click();
-        await expect(page).toHaveURL(/.*dashboard/);
+        await loginWithMockedBackend(page, {
+            email: EMPLOYEE_EMAIL,
+            password: EMPLOYEE_PASSWORD,
+            role: 'Employee',
+            dismissTour: false,
+        });
 
         // Tour should appear
         const tourDialog = page.locator('[role="dialog"][aria-label="Product tour"]');
@@ -117,11 +127,12 @@ test.describe('Onboarding Tour', () => {
     });
 
     test('can navigate through tour steps', async ({ page }) => {
-        await page.goto('/login');
-        await page.getByLabel('Work Email').fill(EMPLOYEE_EMAIL);
-        await page.getByLabel('Password').fill(EMPLOYEE_PASSWORD);
-        await page.getByRole('button', { name: 'Sign In' }).click();
-        await expect(page).toHaveURL(/.*dashboard/);
+        await loginWithMockedBackend(page, {
+            email: EMPLOYEE_EMAIL,
+            password: EMPLOYEE_PASSWORD,
+            role: 'Employee',
+            dismissTour: false,
+        });
 
         const tourDialog = page.locator('[role="dialog"][aria-label="Product tour"]');
         await expect(tourDialog).toBeVisible({ timeout: 5000 });
@@ -156,19 +167,14 @@ const loginAndDismissTour = async (
     page: import('@playwright/test').Page,
     email: string,
     password: string,
+    role: AppRole,
 ) => {
-    await page.goto('/login');
-    await page.getByLabel('Work Email').fill(email);
-    await page.getByLabel('Password').fill(password);
-    await page.getByRole('button', { name: 'Sign In' }).click();
-    await expect(page).toHaveURL(/.*dashboard/);
-
-    const tourOverlay = page.locator('[role="dialog"][aria-label="Product tour"]');
-    const skipBtn = page.getByRole('button', { name: 'Skip tour' });
-    if (await skipBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-        await skipBtn.click();
-        await expect(tourOverlay).not.toBeVisible({ timeout: 3000 });
-    }
+    await loginWithMockedBackend(page, {
+        email,
+        password,
+        role,
+        dismissTour: true,
+    });
 };
 
 /* ────────────────────────────────────────────
@@ -177,7 +183,7 @@ const loginAndDismissTour = async (
 
 test.describe('Employee - Core Pages', () => {
     test.beforeEach(async ({ page }) => {
-        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD);
+        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD, 'Employee');
     });
 
     test('Dashboard loads with key elements', async ({ page }) => {
@@ -265,7 +271,7 @@ test.describe('Employee - Core Pages', () => {
 
 test.describe('Avatar Picker', () => {
     test.beforeEach(async ({ page }) => {
-        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD);
+        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD, 'Employee');
         await page.goto('/profile');
     });
 
@@ -300,7 +306,7 @@ test.describe('Avatar Picker', () => {
 
 test.describe('Admin - Elevated Pages', () => {
     test.beforeEach(async ({ page }) => {
-        await loginAndDismissTour(page, ADMIN_EMAIL, ADMIN_PASSWORD);
+        await loginAndDismissTour(page, ADMIN_EMAIL, ADMIN_PASSWORD, 'Admin');
     });
 
     test('Admin page loads', async ({ page }) => {
@@ -323,7 +329,7 @@ test.describe('Admin - Elevated Pages', () => {
         await expect(page).toHaveURL(/.*login/);
 
         // Login as employee
-        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD);
+        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD, 'Employee');
         await page.goto('/admin');
         // Should be redirected away
         await expect(page).not.toHaveURL(/.*admin/);
@@ -346,7 +352,7 @@ test.describe('Route Guards', () => {
     });
 
     test('authenticated root redirects to dashboard', async ({ page }) => {
-        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD);
+        await loginAndDismissTour(page, EMPLOYEE_EMAIL, EMPLOYEE_PASSWORD, 'Employee');
         await page.goto('/');
         await expect(page).toHaveURL(/.*dashboard/);
     });
