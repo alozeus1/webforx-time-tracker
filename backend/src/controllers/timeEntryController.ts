@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { emitWebhookEvent } from '../services/webhookService';
+import { scoreTimeEntryRisk } from '../services/opsInsightsService';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -323,7 +324,12 @@ export const getPendingTimesheets = async (req: AuthRequest, res: Response): Pro
 
         const saneEntries = pendingEntries.filter((entry) => new Date(entry.end_time).getTime() > new Date(entry.start_time).getTime());
 
-        res.status(200).json({ entries: saneEntries });
+        res.status(200).json({
+            entries: saneEntries.map((entry) => ({
+                ...entry,
+                intelligence: scoreTimeEntryRisk(entry),
+            })),
+        });
     } catch (error) {
         console.error('Failed to get pending timesheets:', error);
         res.status(500).json({ message: 'Internal server error' });

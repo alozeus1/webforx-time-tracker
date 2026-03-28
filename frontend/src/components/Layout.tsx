@@ -5,6 +5,7 @@ import Navbar from './Navbar';
 import OnboardingTour, { ONBOARDING_KEY } from './OnboardingTour';
 import HelpChatbot from './HelpChatbot';
 import { useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
+import { useWorkSignals } from '../hooks/useWorkSignals';
 
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -12,10 +13,12 @@ const Layout: React.FC = () => {
     const location = useLocation();
 
     useActiveTimerHeartbeat();
+    useWorkSignals();
 
     useEffect(() => {
         const routeTitles: Record<string, string> = {
             '/dashboard': 'Dashboard',
+            '/workday': 'Workday',
             '/timer': 'Timer',
             '/timeline': 'Timeline',
             '/timesheet': 'Timesheet',

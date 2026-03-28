@@ -2,6 +2,12 @@ export interface RoleSummary {
     name: string;
 }
 
+export interface ApprovalIntelligence {
+    score: number;
+    level: 'low' | 'medium' | 'high';
+    reasons: string[];
+}
+
 export interface RoleOption {
     id: string;
     name: string;
@@ -73,6 +79,10 @@ export interface TimeEntrySummary {
     start_time: string;
     end_time: string;
     status: string;
+    entry_type?: string;
+    notes?: string | null;
+    is_billable?: boolean;
+    intelligence?: ApprovalIntelligence;
     user: UserSummary;
     project?: ProjectReference | null;
 }
@@ -110,6 +120,12 @@ export interface IntegrationSummary {
     type: string;
     is_active: boolean;
     summary?: Record<string, string>;
+}
+
+export interface TaskSourceSummary {
+    type: string;
+    label: string;
+    readiness: 'live' | 'configured' | 'error';
 }
 
 export interface AnalyticsMetrics {
@@ -189,6 +205,73 @@ export interface UserWellbeingSummary {
     weeklyHourLimit: number | null;
     status: 'balanced' | 'approaching_burnout' | 'burnout_risk';
     workloadAlerts: WorkloadAlertSummary[];
+}
+
+export interface ManagerOperationsResponse {
+    managerExceptions: {
+        pendingApprovals: TimeEntrySummary[];
+        idleWarnings: NotificationSummary[];
+        overtimeAlerts: NotificationSummary[];
+        burnoutAlerts: NotificationSummary[];
+        rejectedEntries: Array<{
+            id: string;
+            task_description: string;
+            updated_at: string;
+            user: { first_name: string; last_name: string };
+            project?: { name: string } | null;
+        }>;
+        budgetAlerts: Array<{
+            project_id: string;
+            project_name: string;
+            budgetHours: number;
+            projectedHours: number;
+            trackedHours: number;
+        }>;
+    };
+    teamForecast: {
+        members: Array<{
+            user_id: string;
+            name: string;
+            role: string;
+            sevenDayHours: number;
+            projectedFourteenDayHours: number;
+            remainingCapacityHours: number;
+            projectedStatus: UserWellbeingSummary['status'];
+            overloadRisk: boolean;
+        }>;
+        projects: Array<{
+            project_id: string;
+            name: string;
+            budgetHours: number | null;
+            trackedHours: number;
+            approvedBillableHours: number;
+            projectedFourteenDayHours: number;
+            planningAccuracy: number | null;
+            burnRisk: boolean;
+        }>;
+    };
+    teamBenchmarks: {
+        planningAccuracyPct: number;
+        approvalLatencyHours: number;
+        billableLeakageHours: number;
+        overloadRiskCount: number;
+        byPerson: Array<{
+            user_id: string;
+            name: string;
+            role: string;
+            projectedFourteenDayHours: number;
+            remainingCapacityHours: number;
+            overloadRisk: boolean;
+        }>;
+    };
+}
+
+export interface SharedArtifactResponse {
+    type: 'operations' | 'project-burn' | 'invoice-evidence';
+    title: string;
+    description: string;
+    generatedAt: string;
+    data: unknown;
 }
 
 export interface InvoiceLineItem {

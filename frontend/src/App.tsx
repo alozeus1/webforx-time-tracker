@@ -8,6 +8,7 @@ import RequestAccess from './pages/RequestAccess';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
 import Dashboard from './pages/Dashboard';
+import Workday from './pages/Workday';
 import Timer from './pages/Timer';
 import Timeline from './pages/Timeline';
 import Admin from './pages/Admin';
@@ -21,6 +22,7 @@ import Invoices from './pages/Invoices';
 import Templates from './pages/Templates';
 import Webhooks from './pages/Webhooks';
 import ScheduledReports from './pages/ScheduledReports';
+import SharedArtifact from './pages/SharedArtifact';
 import { getStoredRole, getStoredToken } from './utils/session';
 
 // Auth Guard
@@ -66,10 +68,12 @@ const App: React.FC = () => {
         <Route path="/request-access" element={<PublicOnlyRoute><RequestAccess /></PublicOnlyRoute>} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/share/:token" element={<SharedArtifact />} />
 
         {/* Protected app routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/workday" element={<Workday />} />
           <Route path="/timer" element={<Timer />} />
           <Route path="/timeline" element={<Timeline />} />
           <Route path="/timesheet" element={<Timesheet />} />

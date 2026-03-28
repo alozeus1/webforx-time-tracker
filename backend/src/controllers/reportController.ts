@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { Prisma } from '@prisma/client';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env';
+import { getOperationsInsights } from '../services/opsInsightsService';
 
 const formatHoursMetric = (hours: number) => {
     if (hours > 0 && hours < 0.1) {
@@ -285,5 +288,153 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
     } catch (error) {
         console.error('Failed to generate analytics dashboard:', error);
         res.status(500).json({ message: 'Internal server error while generating analytics' });
+    }
+};
+
+export const getOperationsDashboard = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const insights = await getOperationsInsights();
+        res.status(200).json(insights);
+    } catch (error) {
+        console.error('Failed to load operations dashboard:', error);
+        res.status(500).json({ message: 'Internal server error while loading operations insights' });
+    }
+};
+
+type ShareArtifactType = 'operations' | 'project-burn' | 'invoice-evidence';
+
+const buildSharedArtifactPayload = async (type: ShareArtifactType, id?: string) => {
+    if (type === 'operations') {
+        const operations = await getOperationsInsights();
+        return {
+            type,
+            title: 'Operations trust summary',
+            description: 'Client-facing summary of team health, review hygiene, and delivery risk.',
+            generatedAt: new Date().toISOString(),
+            data: operations,
+        };
+    }
+
+    if (type === 'project-burn') {
+        if (!id) {
+            throw new Error('project_id is required');
+        }
+
+        const project = await prisma.project.findUnique({
+            where: { id },
+            include: {
+                time_entries: {
+                    select: {
+                        duration: true,
+                        is_billable: true,
+                        status: true,
+                    },
+                },
+            },
+        });
+
+        if (!project) {
+            throw new Error('Project not found');
+        }
+
+        const trackedHours = Number((project.time_entries.reduce((sum, entry) => sum + entry.duration, 0) / 3600).toFixed(1));
+        const approvedBillableHours = Number((project.time_entries
+            .filter((entry) => entry.is_billable !== false && entry.status === 'approved')
+            .reduce((sum, entry) => sum + entry.duration, 0) / 3600).toFixed(1));
+
+        return {
+            type,
+            title: `${project.name} burn report`,
+            description: 'Approved effort, billable progress, and budget burn for a single project.',
+            generatedAt: new Date().toISOString(),
+            data: {
+                id: project.id,
+                name: project.name,
+                description: project.description,
+                budgetHours: project.budget_hours,
+                trackedHours,
+                approvedBillableHours,
+                overBudget: Boolean(project.budget_hours && trackedHours > project.budget_hours),
+            },
+        };
+    }
+
+    if (!id) {
+        throw new Error('invoice_id is required');
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+        where: { id },
+        include: {
+            project: { select: { name: true } },
+            creator: { select: { first_name: true, last_name: true } },
+            line_items: {
+                include: {
+                    time_entry: {
+                        select: {
+                            start_time: true,
+                            end_time: true,
+                            task_description: true,
+                            status: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+
+    if (!invoice) {
+        throw new Error('Invoice not found');
+    }
+
+    return {
+        type,
+        title: `${invoice.invoice_number} invoice evidence`,
+        description: 'Approved line-item evidence for this invoice.',
+        generatedAt: new Date().toISOString(),
+        data: invoice,
+    };
+};
+
+export const createShareLink = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const type = req.body?.type as ShareArtifactType | undefined;
+        const id = typeof req.body?.id === 'string' ? req.body.id : undefined;
+
+        if (!type || !['operations', 'project-burn', 'invoice-evidence'].includes(type)) {
+            res.status(400).json({ message: 'Valid share artifact type is required' });
+            return;
+        }
+
+        const payload = await buildSharedArtifactPayload(type, id);
+        const token = jwt.sign(
+            {
+                type,
+                id,
+                exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+            },
+            env.jwtSecret,
+        );
+
+        res.status(201).json({
+            token,
+            url: `${env.frontendUrl.replace(/\/+$/, '')}/share/${token}`,
+            preview: payload,
+        });
+    } catch (error) {
+        console.error('Failed to create share link:', error);
+        res.status(500).json({ message: error instanceof Error ? error.message : 'Internal server error while creating share link' });
+    }
+};
+
+export const getSharedArtifact = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const token = req.params.token as string;
+        const payload = jwt.verify(token, env.jwtSecret) as { type: ShareArtifactType; id?: string };
+        const artifact = await buildSharedArtifactPayload(payload.type, payload.id);
+        res.status(200).json(artifact);
+    } catch (error) {
+        console.error('Failed to load shared artifact:', error);
+        res.status(404).json({ message: 'Shared artifact not found or expired' });
     }
 };

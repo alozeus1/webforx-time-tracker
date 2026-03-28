@@ -12,8 +12,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAnalyticsDashboard = exports.exportTimeEntries = void 0;
+exports.getSharedArtifact = exports.createShareLink = exports.getOperationsDashboard = exports.getAnalyticsDashboard = exports.exportTimeEntries = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const env_1 = require("../config/env");
+const opsInsightsService_1 = require("../services/opsInsightsService");
 const formatHoursMetric = (hours) => {
     if (hours > 0 && hours < 0.1) {
         return hours.toFixed(2);
@@ -271,3 +274,137 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
     }
 });
 exports.getAnalyticsDashboard = getAnalyticsDashboard;
+const getOperationsDashboard = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const insights = yield (0, opsInsightsService_1.getOperationsInsights)();
+        res.status(200).json(insights);
+    }
+    catch (error) {
+        console.error('Failed to load operations dashboard:', error);
+        res.status(500).json({ message: 'Internal server error while loading operations insights' });
+    }
+});
+exports.getOperationsDashboard = getOperationsDashboard;
+const buildSharedArtifactPayload = (type, id) => __awaiter(void 0, void 0, void 0, function* () {
+    if (type === 'operations') {
+        const operations = yield (0, opsInsightsService_1.getOperationsInsights)();
+        return {
+            type,
+            title: 'Operations trust summary',
+            description: 'Client-facing summary of team health, review hygiene, and delivery risk.',
+            generatedAt: new Date().toISOString(),
+            data: operations,
+        };
+    }
+    if (type === 'project-burn') {
+        if (!id) {
+            throw new Error('project_id is required');
+        }
+        const project = yield db_1.default.project.findUnique({
+            where: { id },
+            include: {
+                time_entries: {
+                    select: {
+                        duration: true,
+                        is_billable: true,
+                        status: true,
+                    },
+                },
+            },
+        });
+        if (!project) {
+            throw new Error('Project not found');
+        }
+        const trackedHours = Number((project.time_entries.reduce((sum, entry) => sum + entry.duration, 0) / 3600).toFixed(1));
+        const approvedBillableHours = Number((project.time_entries
+            .filter((entry) => entry.is_billable !== false && entry.status === 'approved')
+            .reduce((sum, entry) => sum + entry.duration, 0) / 3600).toFixed(1));
+        return {
+            type,
+            title: `${project.name} burn report`,
+            description: 'Approved effort, billable progress, and budget burn for a single project.',
+            generatedAt: new Date().toISOString(),
+            data: {
+                id: project.id,
+                name: project.name,
+                description: project.description,
+                budgetHours: project.budget_hours,
+                trackedHours,
+                approvedBillableHours,
+                overBudget: Boolean(project.budget_hours && trackedHours > project.budget_hours),
+            },
+        };
+    }
+    if (!id) {
+        throw new Error('invoice_id is required');
+    }
+    const invoice = yield db_1.default.invoice.findUnique({
+        where: { id },
+        include: {
+            project: { select: { name: true } },
+            creator: { select: { first_name: true, last_name: true } },
+            line_items: {
+                include: {
+                    time_entry: {
+                        select: {
+                            start_time: true,
+                            end_time: true,
+                            task_description: true,
+                            status: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+    if (!invoice) {
+        throw new Error('Invoice not found');
+    }
+    return {
+        type,
+        title: `${invoice.invoice_number} invoice evidence`,
+        description: 'Approved line-item evidence for this invoice.',
+        generatedAt: new Date().toISOString(),
+        data: invoice,
+    };
+});
+const createShareLink = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    try {
+        const type = (_a = req.body) === null || _a === void 0 ? void 0 : _a.type;
+        const id = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.id) === 'string' ? req.body.id : undefined;
+        if (!type || !['operations', 'project-burn', 'invoice-evidence'].includes(type)) {
+            res.status(400).json({ message: 'Valid share artifact type is required' });
+            return;
+        }
+        const payload = yield buildSharedArtifactPayload(type, id);
+        const token = jsonwebtoken_1.default.sign({
+            type,
+            id,
+            exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
+        }, env_1.env.jwtSecret);
+        res.status(201).json({
+            token,
+            url: `${env_1.env.frontendUrl.replace(/\/+$/, '')}/share/${token}`,
+            preview: payload,
+        });
+    }
+    catch (error) {
+        console.error('Failed to create share link:', error);
+        res.status(500).json({ message: error instanceof Error ? error.message : 'Internal server error while creating share link' });
+    }
+});
+exports.createShareLink = createShareLink;
+const getSharedArtifact = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const token = req.params.token;
+        const payload = jsonwebtoken_1.default.verify(token, env_1.env.jwtSecret);
+        const artifact = yield buildSharedArtifactPayload(payload.type, payload.id);
+        res.status(200).json(artifact);
+    }
+    catch (error) {
+        console.error('Failed to load shared artifact:', error);
+        res.status(404).json({ message: 'Shared artifact not found or expired' });
+    }
+});
+exports.getSharedArtifact = getSharedArtifact;

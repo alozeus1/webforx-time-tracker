@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.duplicateEntry = exports.deleteEntry = exports.updateEntry = exports.reviewTimesheet = exports.getPendingTimesheets = exports.pingTimer = exports.getMyEntries = exports.manualEntry = exports.stopTimer = exports.startTimer = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const webhookService_1 = require("../services/webhookService");
+const opsInsightsService_1 = require("../services/opsInsightsService");
 const requireUserId = (req) => {
     var _a;
     if (!((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId)) {
@@ -305,7 +306,9 @@ const getPendingTimesheets = (req, res) => __awaiter(void 0, void 0, void 0, fun
             orderBy: { created_at: 'desc' },
         });
         const saneEntries = pendingEntries.filter((entry) => new Date(entry.end_time).getTime() > new Date(entry.start_time).getTime());
-        res.status(200).json({ entries: saneEntries });
+        res.status(200).json({
+            entries: saneEntries.map((entry) => (Object.assign(Object.assign({}, entry), { intelligence: (0, opsInsightsService_1.scoreTimeEntryRisk)(entry) }))),
+        });
     }
     catch (error) {
         console.error('Failed to get pending timesheets:', error);

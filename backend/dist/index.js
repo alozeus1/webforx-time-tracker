@@ -35,6 +35,7 @@ const webhookRoutes_1 = __importDefault(require("./routes/webhookRoutes"));
 const invoiceRoutes_1 = __importDefault(require("./routes/invoiceRoutes"));
 const templateRoutes_1 = __importDefault(require("./routes/templateRoutes"));
 const scheduledReportRoutes_1 = __importDefault(require("./routes/scheduledReportRoutes"));
+const publicRoutes_1 = __importDefault(require("./routes/publicRoutes"));
 const notificationWorker_1 = require("./workers/notificationWorker");
 const idleTracker_1 = require("./workers/idleTracker");
 const burnoutTracker_1 = require("./workers/burnoutTracker");
@@ -96,6 +97,7 @@ const authLimiter = (0, express_rate_limit_1.default)({
 });
 // Routes
 app.use('/api/v1/auth', authLimiter, authRoutes_1.default);
+app.use('/api/v1/public', publicRoutes_1.default);
 app.use('/api/v1/users', userRoutes_1.default);
 app.use('/api/v1/projects', projectRoutes_1.default);
 app.use('/api/v1/timers', timeEntryRoutes_1.default);

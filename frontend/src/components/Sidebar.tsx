@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Clock, Calendar, FileText, BarChart2,
     Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle,
-    Sun, Moon, Receipt, FolderCog, Globe, CalendarClock,
+    Sun, Moon, Receipt, FolderCog, Globe, CalendarClock, Sparkles,
 } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
@@ -31,6 +31,7 @@ const NAV_GROUPS: NavGroup[] = [
     {
         items: [
             { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
+            { name: 'Workday', path: '/workday', icon: <Sparkles size={20} /> },
             { name: 'Timer', path: '/timer', icon: <Clock size={20} /> },
         ],
     },

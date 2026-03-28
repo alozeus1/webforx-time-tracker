@@ -46,6 +46,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
     const routeLabelMap: Record<string, string> = {
         '/dashboard': 'Dashboard',
+        '/workday': 'Workday',
         '/timer': 'Timer',
         '/timeline': 'Timeline',
         '/timesheet': 'Timesheet',

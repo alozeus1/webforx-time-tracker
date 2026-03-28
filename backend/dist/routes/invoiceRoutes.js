@@ -7,6 +7,7 @@ const router = (0, express_1.Router)();
 router.use(auth_1.authenticateToken);
 router.use((0, auth_1.requireRole)(['Admin', 'Manager']));
 router.get('/', invoiceController_1.listInvoices);
+router.post('/autopilot', invoiceController_1.createAutopilotInvoice);
 router.post('/', invoiceController_1.createInvoice);
 router.get('/:id', invoiceController_1.getInvoice);
 router.patch('/:id/status', invoiceController_1.updateInvoiceStatus);

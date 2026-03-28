@@ -7,6 +7,7 @@ const router = (0, express_1.Router)();
 router.use(auth_1.authenticateToken);
 // Individual developer integrations
 router.get('/github/commits', integrationController_1.getGithubCommits);
+router.get('/task-sources', integrationController_1.getTaskSources);
 router.get('/', (0, auth_1.requireRole)(['Admin', 'Manager']), integrationController_1.listIntegrations);
 router.post('/', (0, auth_1.requireRole)(['Admin']), integrationController_1.saveIntegration);
 router.post('/test', (0, auth_1.requireRole)(['Admin', 'Manager']), integrationController_1.testIntegration);

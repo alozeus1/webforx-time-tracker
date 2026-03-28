@@ -293,6 +293,7 @@ const Timesheet: React.FC = () => {
                                         <tr className="border-b border-slate-200 bg-slate-50">
                                             <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Employee</th>
                                             <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Task</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Risk</th>
                                             <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Duration</th>
                                             <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Date</th>
                                             <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 text-right">Actions</th>
@@ -303,6 +304,28 @@ const Timesheet: React.FC = () => {
                                             <tr key={entry.id} className="border-b border-slate-100">
                                                 <td className="px-4 py-3 text-sm font-medium text-slate-700">{entry.user.first_name} {entry.user.last_name}</td>
                                                 <td className="px-4 py-3 text-sm text-slate-700">{entry.task_description}</td>
+                                                <td className="px-4 py-3 text-sm text-slate-700">
+                                                    {entry.intelligence ? (
+                                                        <div className="space-y-1">
+                                                            <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                                                entry.intelligence.level === 'high'
+                                                                    ? 'bg-rose-100 text-rose-700'
+                                                                    : entry.intelligence.level === 'medium'
+                                                                        ? 'bg-amber-100 text-amber-700'
+                                                                        : 'bg-emerald-100 text-emerald-700'
+                                                            }`}>
+                                                                {entry.intelligence.level} risk · {entry.intelligence.score}
+                                                            </span>
+                                                            {entry.intelligence.reasons.length > 0 && (
+                                                                <p className="max-w-[180px] text-xs text-slate-500">
+                                                                    {entry.intelligence.reasons.join(', ')}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">No flags</span>
+                                                    )}
+                                                </td>
                                                 <td className="px-4 py-3 text-sm font-semibold text-slate-700">{formatSecondsValue(entry.duration)}</td>
                                                 <td className="px-4 py-3 text-sm text-slate-500">{new Date(entry.start_time).toLocaleDateString()}</td>
                                                 <td className="px-4 py-3">

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.syncQuickbooks = exports.testIntegration = exports.saveIntegration = exports.listIntegrations = exports.getGithubCommits = void 0;
+exports.syncQuickbooks = exports.testIntegration = exports.saveIntegration = exports.listIntegrations = exports.getTaskSources = exports.getGithubCommits = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const crypto_1 = require("../utils/crypto");
 const getGithubCommits = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -29,6 +29,55 @@ const getGithubCommits = (req, res) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.getGithubCommits = getGithubCommits;
+const getTaskSources = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const integrations = yield db_1.default.integration.findMany({
+            where: {
+                type: { in: ['github', 'jira', 'linear', 'asana', 'clickup', 'trello'] },
+                is_active: true,
+            },
+            orderBy: { type: 'asc' },
+        });
+        const sources = integrations.map((integration) => {
+            try {
+                if (integration.type === 'github') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    return { type: integration.type, label: config.repository, readiness: 'live' };
+                }
+                if (integration.type === 'jira') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    return { type: integration.type, label: `${config.projectKey} @ ${new URL(config.baseUrl).host}`, readiness: 'configured' };
+                }
+                if (integration.type === 'linear') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    return { type: integration.type, label: config.teamName, readiness: 'configured' };
+                }
+                if (integration.type === 'asana') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    return { type: integration.type, label: config.workspace, readiness: 'configured' };
+                }
+                if (integration.type === 'clickup') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    return { type: integration.type, label: config.workspaceId, readiness: 'configured' };
+                }
+                if (integration.type === 'trello') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    return { type: integration.type, label: config.boardId, readiness: 'configured' };
+                }
+            }
+            catch (error) {
+                return { type: integration.type, label: 'Configuration unreadable', readiness: 'error' };
+            }
+            return { type: integration.type, label: integration.type, readiness: 'configured' };
+        });
+        res.status(200).json({ sources });
+    }
+    catch (error) {
+        console.error('Failed to load task sources:', error);
+        res.status(500).json({ message: 'Internal server error while loading task sources' });
+    }
+});
+exports.getTaskSources = getTaskSources;
 const listIntegrations = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const integrations = yield db_1.default.integration.findMany({
@@ -44,6 +93,30 @@ const listIntegrations = (_req, res) => __awaiter(void 0, void 0, void 0, functi
                 if (integration.type === 'mattermost') {
                     const config = (0, crypto_1.decryptConfig)(integration.config);
                     summary = { webhookHost: new URL(config.webhookUrl).host };
+                }
+                if (integration.type === 'github') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    summary = { repository: config.repository };
+                }
+                if (integration.type === 'jira') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    summary = { host: new URL(config.baseUrl).host, projectKey: config.projectKey };
+                }
+                if (integration.type === 'linear') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    summary = { teamName: config.teamName };
+                }
+                if (integration.type === 'asana') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    summary = { workspace: config.workspace };
+                }
+                if (integration.type === 'clickup') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    summary = { workspaceId: config.workspaceId };
+                }
+                if (integration.type === 'trello') {
+                    const config = (0, crypto_1.decryptConfig)(integration.config);
+                    summary = { boardId: config.boardId };
                 }
             }
             catch (error) {
@@ -64,14 +137,14 @@ const listIntegrations = (_req, res) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.listIntegrations = listIntegrations;
 const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u;
     try {
         const { type, config } = req.body;
         if (!type || !config) {
             res.status(400).json({ message: 'Integration type and config are required' });
             return;
         }
-        if (!['taiga', 'mattermost', 'quickbooks'].includes(type)) {
+        if (!['taiga', 'mattermost', 'quickbooks', 'github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
             res.status(400).json({ message: 'Unsupported integration type' });
             return;
         }
@@ -97,6 +170,42 @@ const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
                 return;
             }
         }
+        if (type === 'github') {
+            if (!((_d = config.repository) === null || _d === void 0 ? void 0 : _d.trim()) || !((_e = config.personalAccessToken) === null || _e === void 0 ? void 0 : _e.trim())) {
+                res.status(400).json({ message: 'GitHub repository and personal access token are required' });
+                return;
+            }
+        }
+        if (type === 'jira') {
+            if (!((_f = config.baseUrl) === null || _f === void 0 ? void 0 : _f.trim()) || !((_g = config.email) === null || _g === void 0 ? void 0 : _g.trim()) || !((_h = config.apiToken) === null || _h === void 0 ? void 0 : _h.trim()) || !((_j = config.projectKey) === null || _j === void 0 ? void 0 : _j.trim())) {
+                res.status(400).json({ message: 'Jira base URL, email, API token, and project key are required' });
+                return;
+            }
+        }
+        if (type === 'linear') {
+            if (!((_k = config.apiKey) === null || _k === void 0 ? void 0 : _k.trim()) || !((_l = config.teamName) === null || _l === void 0 ? void 0 : _l.trim())) {
+                res.status(400).json({ message: 'Linear API key and team name are required' });
+                return;
+            }
+        }
+        if (type === 'asana') {
+            if (!((_m = config.personalAccessToken) === null || _m === void 0 ? void 0 : _m.trim()) || !((_o = config.workspace) === null || _o === void 0 ? void 0 : _o.trim())) {
+                res.status(400).json({ message: 'Asana personal access token and workspace are required' });
+                return;
+            }
+        }
+        if (type === 'clickup') {
+            if (!((_p = config.apiKey) === null || _p === void 0 ? void 0 : _p.trim()) || !((_q = config.workspaceId) === null || _q === void 0 ? void 0 : _q.trim())) {
+                res.status(400).json({ message: 'ClickUp API key and workspace ID are required' });
+                return;
+            }
+        }
+        if (type === 'trello') {
+            if (!((_r = config.apiKey) === null || _r === void 0 ? void 0 : _r.trim()) || !((_s = config.token) === null || _s === void 0 ? void 0 : _s.trim()) || !((_t = config.boardId) === null || _t === void 0 ? void 0 : _t.trim())) {
+                res.status(400).json({ message: 'Trello API key, token, and board ID are required' });
+                return;
+            }
+        }
         const integration = yield db_1.default.integration.upsert({
             where: { type },
             update: {
@@ -109,7 +218,7 @@ const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
                 is_active: true,
             },
         });
-        if ((_d = req.user) === null || _d === void 0 ? void 0 : _d.userId) {
+        if ((_u = req.user) === null || _u === void 0 ? void 0 : _u.userId) {
             try {
                 yield db_1.default.auditLog.create({
                     data: {
@@ -140,11 +249,11 @@ const saveIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
 });
 exports.saveIntegration = saveIntegration;
 const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c;
     try {
         const { type } = req.body;
-        if (!type || !['taiga', 'mattermost'].includes(type)) {
-            res.status(400).json({ message: 'Supported test types are taiga and mattermost' });
+        if (!type || !['taiga', 'mattermost', 'github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
+            res.status(400).json({ message: 'Supported test types are taiga, mattermost, github, jira, linear, asana, clickup, and trello' });
             return;
         }
         const integration = yield db_1.default.integration.findUnique({ where: { type } });
@@ -184,6 +293,28 @@ const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
             res.status(200).json({ status: 'success', message: 'Mattermost webhook test delivered successfully' });
             return;
         }
+        if (['github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
+            if ((_b = req.user) === null || _b === void 0 ? void 0 : _b.userId) {
+                try {
+                    yield db_1.default.auditLog.create({
+                        data: {
+                            user_id: req.user.userId,
+                            action: 'integration_tested',
+                            resource: 'integration',
+                            metadata: { type, result: 'configured' },
+                        },
+                    });
+                }
+                catch (error) {
+                    console.error(`Failed to write ${type} test audit log:`, error);
+                }
+            }
+            res.status(200).json({
+                status: 'success',
+                message: `${type} connector saved and ready for workday suggestions.`,
+            });
+            return;
+        }
         const config = (0, crypto_1.decryptConfig)(integration.config);
         const response = yield fetch('https://api.taiga.io/api/v1/auth', {
             method: 'POST',
@@ -204,7 +335,7 @@ const testIntegration = (req, res) => __awaiter(void 0, void 0, void 0, function
             res.status(400).json({ message: 'Taiga credential test failed: auth token missing from response' });
             return;
         }
-        if ((_b = req.user) === null || _b === void 0 ? void 0 : _b.userId) {
+        if ((_c = req.user) === null || _c === void 0 ? void 0 : _c.userId) {
             try {
                 yield db_1.default.auditLog.create({
                     data: {

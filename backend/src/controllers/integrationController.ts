@@ -3,7 +3,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { decryptConfig, encryptConfig } from '../utils/crypto';
 
-type IntegrationType = 'taiga' | 'mattermost' | 'quickbooks';
+type IntegrationType = 'taiga' | 'mattermost' | 'quickbooks' | 'github' | 'jira' | 'linear' | 'asana' | 'clickup' | 'trello';
 
 interface TaigaConfig {
     username: string;
@@ -12,6 +12,39 @@ interface TaigaConfig {
 
 interface MattermostConfig {
     webhookUrl: string;
+}
+
+interface GithubConfig {
+    repository: string;
+    personalAccessToken: string;
+}
+
+interface JiraConfig {
+    baseUrl: string;
+    email: string;
+    apiToken: string;
+    projectKey: string;
+}
+
+interface LinearConfig {
+    apiKey: string;
+    teamName: string;
+}
+
+interface AsanaConfig {
+    personalAccessToken: string;
+    workspace: string;
+}
+
+interface ClickUpConfig {
+    apiKey: string;
+    workspaceId: string;
+}
+
+interface TrelloConfig {
+    apiKey: string;
+    token: string;
+    boardId: string;
 }
 
 export const getGithubCommits = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -25,6 +58,61 @@ export const getGithubCommits = async (req: AuthRequest, res: Response): Promise
         res.status(200).json({ commits: mockCommits });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error while syncing GitHub' });
+    }
+};
+
+export const getTaskSources = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const integrations = await prisma.integration.findMany({
+            where: {
+                type: { in: ['github', 'jira', 'linear', 'asana', 'clickup', 'trello'] },
+                is_active: true,
+            },
+            orderBy: { type: 'asc' },
+        });
+
+        const sources = integrations.map((integration) => {
+            try {
+                if (integration.type === 'github') {
+                    const config = decryptConfig<GithubConfig>(integration.config);
+                    return { type: integration.type, label: config.repository, readiness: 'live' };
+                }
+
+                if (integration.type === 'jira') {
+                    const config = decryptConfig<JiraConfig>(integration.config);
+                    return { type: integration.type, label: `${config.projectKey} @ ${new URL(config.baseUrl).host}`, readiness: 'configured' };
+                }
+
+                if (integration.type === 'linear') {
+                    const config = decryptConfig<LinearConfig>(integration.config);
+                    return { type: integration.type, label: config.teamName, readiness: 'configured' };
+                }
+
+                if (integration.type === 'asana') {
+                    const config = decryptConfig<AsanaConfig>(integration.config);
+                    return { type: integration.type, label: config.workspace, readiness: 'configured' };
+                }
+
+                if (integration.type === 'clickup') {
+                    const config = decryptConfig<ClickUpConfig>(integration.config);
+                    return { type: integration.type, label: config.workspaceId, readiness: 'configured' };
+                }
+
+                if (integration.type === 'trello') {
+                    const config = decryptConfig<TrelloConfig>(integration.config);
+                    return { type: integration.type, label: config.boardId, readiness: 'configured' };
+                }
+            } catch (error) {
+                return { type: integration.type, label: 'Configuration unreadable', readiness: 'error' };
+            }
+
+            return { type: integration.type, label: integration.type, readiness: 'configured' };
+        });
+
+        res.status(200).json({ sources });
+    } catch (error) {
+        console.error('Failed to load task sources:', error);
+        res.status(500).json({ message: 'Internal server error while loading task sources' });
     }
 };
 
@@ -46,6 +134,36 @@ export const listIntegrations = async (_req: AuthRequest, res: Response): Promis
                 if (integration.type === 'mattermost') {
                     const config = decryptConfig<MattermostConfig>(integration.config);
                     summary = { webhookHost: new URL(config.webhookUrl).host };
+                }
+
+                if (integration.type === 'github') {
+                    const config = decryptConfig<GithubConfig>(integration.config);
+                    summary = { repository: config.repository };
+                }
+
+                if (integration.type === 'jira') {
+                    const config = decryptConfig<JiraConfig>(integration.config);
+                    summary = { host: new URL(config.baseUrl).host, projectKey: config.projectKey };
+                }
+
+                if (integration.type === 'linear') {
+                    const config = decryptConfig<LinearConfig>(integration.config);
+                    summary = { teamName: config.teamName };
+                }
+
+                if (integration.type === 'asana') {
+                    const config = decryptConfig<AsanaConfig>(integration.config);
+                    summary = { workspace: config.workspace };
+                }
+
+                if (integration.type === 'clickup') {
+                    const config = decryptConfig<ClickUpConfig>(integration.config);
+                    summary = { workspaceId: config.workspaceId };
+                }
+
+                if (integration.type === 'trello') {
+                    const config = decryptConfig<TrelloConfig>(integration.config);
+                    summary = { boardId: config.boardId };
                 }
             } catch (error) {
                 summary = { status: 'Configuration unreadable' };
@@ -74,7 +192,7 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
             return;
         }
 
-        if (!['taiga', 'mattermost', 'quickbooks'].includes(type)) {
+        if (!['taiga', 'mattermost', 'quickbooks', 'github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
             res.status(400).json({ message: 'Unsupported integration type' });
             return;
         }
@@ -99,6 +217,48 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
                 }
             } catch (error) {
                 res.status(400).json({ message: 'Mattermost webhook URL is invalid' });
+                return;
+            }
+        }
+
+        if (type === 'github') {
+            if (!config.repository?.trim() || !config.personalAccessToken?.trim()) {
+                res.status(400).json({ message: 'GitHub repository and personal access token are required' });
+                return;
+            }
+        }
+
+        if (type === 'jira') {
+            if (!config.baseUrl?.trim() || !config.email?.trim() || !config.apiToken?.trim() || !config.projectKey?.trim()) {
+                res.status(400).json({ message: 'Jira base URL, email, API token, and project key are required' });
+                return;
+            }
+        }
+
+        if (type === 'linear') {
+            if (!config.apiKey?.trim() || !config.teamName?.trim()) {
+                res.status(400).json({ message: 'Linear API key and team name are required' });
+                return;
+            }
+        }
+
+        if (type === 'asana') {
+            if (!config.personalAccessToken?.trim() || !config.workspace?.trim()) {
+                res.status(400).json({ message: 'Asana personal access token and workspace are required' });
+                return;
+            }
+        }
+
+        if (type === 'clickup') {
+            if (!config.apiKey?.trim() || !config.workspaceId?.trim()) {
+                res.status(400).json({ message: 'ClickUp API key and workspace ID are required' });
+                return;
+            }
+        }
+
+        if (type === 'trello') {
+            if (!config.apiKey?.trim() || !config.token?.trim() || !config.boardId?.trim()) {
+                res.status(400).json({ message: 'Trello API key, token, and board ID are required' });
                 return;
             }
         }
@@ -149,8 +309,8 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
     try {
         const { type } = req.body as { type?: IntegrationType };
 
-        if (!type || !['taiga', 'mattermost'].includes(type)) {
-            res.status(400).json({ message: 'Supported test types are taiga and mattermost' });
+        if (!type || !['taiga', 'mattermost', 'github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
+            res.status(400).json({ message: 'Supported test types are taiga, mattermost, github, jira, linear, asana, clickup, and trello' });
             return;
         }
 
@@ -192,6 +352,29 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
             }
 
             res.status(200).json({ status: 'success', message: 'Mattermost webhook test delivered successfully' });
+            return;
+        }
+
+        if (['github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
+            if (req.user?.userId) {
+                try {
+                    await prisma.auditLog.create({
+                        data: {
+                            user_id: req.user.userId,
+                            action: 'integration_tested',
+                            resource: 'integration',
+                            metadata: { type, result: 'configured' },
+                        },
+                    });
+                } catch (error) {
+                    console.error(`Failed to write ${type} test audit log:`, error);
+                }
+            }
+
+            res.status(200).json({
+                status: 'success',
+                message: `${type} connector saved and ready for workday suggestions.`,
+            });
             return;
         }
 

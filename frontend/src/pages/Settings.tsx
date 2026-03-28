@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getStoredPrivacyMode, setStoredPrivacyMode, type PrivacyMode } from '../utils/privacyMode';
 
 const devSettings = [
     {
@@ -21,6 +22,7 @@ const devSettings = [
 
 const Settings: React.FC = () => {
     const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+    const [privacyMode, setPrivacyMode] = useState<PrivacyMode>(() => getStoredPrivacyMode());
 
     const [notifPrefs, setNotifPrefs] = useState(() => {
         const defaults = {
@@ -58,6 +60,11 @@ const Settings: React.FC = () => {
             document.documentElement.classList.remove('dark');
             localStorage.setItem('wfx-theme', 'light');
         }
+    };
+
+    const updatePrivacyMode = (mode: PrivacyMode) => {
+        setPrivacyMode(mode);
+        setStoredPrivacyMode(mode);
     };
 
     return (
@@ -100,6 +107,47 @@ const Settings: React.FC = () => {
                                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isDark ? 'translate-x-6' : 'translate-x-1'}`}
                             />
                         </button>
+                    </div>
+                    <div className="pt-4">
+                        <div>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Privacy Mode</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                Make monitoring intent explicit across workday reconstruction and team reporting.
+                            </p>
+                        </div>
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                            {([
+                                {
+                                    key: 'personal' as const,
+                                    label: 'Personal',
+                                    description: 'Redacts browser activity titles and favors private self-review.',
+                                },
+                                {
+                                    key: 'team_ops' as const,
+                                    label: 'Team Ops',
+                                    description: 'Shares operational activity categories without exposing sensitive detail.',
+                                },
+                                {
+                                    key: 'compliance' as const,
+                                    label: 'Compliance',
+                                    description: 'Keeps detailed activity labels visible for auditable work evidence.',
+                                },
+                            ]).map((mode) => (
+                                <button
+                                    key={mode.key}
+                                    type="button"
+                                    onClick={() => updatePrivacyMode(mode.key)}
+                                    className={`rounded-2xl border px-4 py-4 text-left transition-all ${
+                                        privacyMode === mode.key
+                                            ? 'border-primary bg-primary/5 shadow-sm'
+                                            : 'border-slate-200 bg-slate-50 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900'
+                                    }`}
+                                >
+                                    <p className="text-sm font-bold text-slate-900 dark:text-white">{mode.label}</p>
+                                    <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">{mode.description}</p>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 

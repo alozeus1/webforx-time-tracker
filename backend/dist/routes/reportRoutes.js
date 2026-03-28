@@ -7,4 +7,6 @@ const router = (0, express_1.Router)();
 router.use(auth_1.authenticateToken);
 router.get('/export', reportController_1.exportTimeEntries);
 router.get('/dashboard', reportController_1.getAnalyticsDashboard);
+router.get('/operations', (0, auth_1.requireRole)(['Manager', 'Admin']), reportController_1.getOperationsDashboard);
+router.post('/share', (0, auth_1.requireRole)(['Manager', 'Admin']), reportController_1.createShareLink);
 exports.default = router;

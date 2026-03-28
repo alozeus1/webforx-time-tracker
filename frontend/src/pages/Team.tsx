@@ -701,7 +701,7 @@ const Team: React.FC = () => {
                                             onClick={() => void handleDeleteUser(user)}
                                             disabled={saving}
                                         >
-                                            Deactivate
+                                            Deactivate User
                                         </button>
                                     </div>
                                 )}
