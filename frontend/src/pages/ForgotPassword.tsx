@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, KeyRound, ArrowLeft, ShieldCheck } from 'lucide-react';
 import api from '../services/api';
 import './Login.css';
+import { usePageMetadata } from '../hooks/usePageMetadata';
 
 type Step = 'email' | 'code' | 'done';
 
@@ -16,6 +17,15 @@ const ForgotPassword: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+
+    usePageMetadata({
+        title: 'Reset Password | Web Forx Time Tracker',
+        description: 'Securely reset your Web Forx Time Tracker password and restore access to your workspace.',
+        ogTitle: 'Reset Password - Web Forx Time Tracker',
+        ogDescription: 'Use your reset code to set a new password for Web Forx Time Tracker.',
+        canonical: '/forgot-password',
+        noIndex: true,
+    });
 
     const handleRequestReset = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -61,7 +71,7 @@ const ForgotPassword: React.FC = () => {
     };
 
     return (
-        <div className="login-container">
+        <main id="main-content" className="login-container" tabIndex={-1}>
             <div className="login-side-panel">
                 <div className="login-side-brand">
                     <img src="/webforx-logo.png" alt="Web Forx" className="logo-icon-large logo-icon-large-image" />
@@ -120,9 +130,6 @@ const ForgotPassword: React.FC = () => {
                             </button>
                         </form>
 
-                        <div className="login-footer">
-                            <Link to="/login"><ArrowLeft size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Back to Sign In</Link>
-                        </div>
                     </>
                 )}
 
@@ -212,8 +219,16 @@ const ForgotPassword: React.FC = () => {
                         </button>
                     </>
                 )}
+
+                <div className="login-footer">
+                    <Link to="/login"><ArrowLeft size={14} style={{ display: 'inline', verticalAlign: 'middle' }} /> Back to Sign In</Link>
+                    <div className="login-footer-legal">
+                        <Link to="/privacy">Privacy</Link>
+                        <Link to="/terms">Terms</Link>
+                    </div>
+                </div>
             </div>
-        </div>
+        </main>
     );
 };
 

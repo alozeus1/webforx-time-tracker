@@ -32,7 +32,7 @@ const Layout: React.FC = () => {
 
             <main className="main-content">
                 <Navbar onMenuClick={() => setSidebarOpen(true)} />
-                <div id="main-content" className="page-wrapper">
+                <div id="main-content" className="page-wrapper" tabIndex={-1}>
                     <Outlet />
                 </div>
             </main>

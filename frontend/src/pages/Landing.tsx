@@ -1,13 +1,39 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users,
   ShieldCheck, Box, CheckCircle2, ArrowRight,
   Eye, Briefcase, UserCheck, Zap,
 } from 'lucide-react';
+import { usePageMetadata } from '../hooks/usePageMetadata';
 import './Landing.css';
 
 /* ───────────────────── static data ───────────────────── */
+
+type DemoTone = 'primary' | 'success' | 'info' | 'warning';
+
+type DemoTab = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  highlights: string[];
+  preview: {
+    headline: string;
+    subline: string;
+    badges: string[];
+    rows: Array<{
+      label: string;
+      value: string;
+      tone: DemoTone;
+      trend: string;
+    }>;
+    footer: string;
+  };
+};
+
+const DEMO_VIDEO_SOURCE = '/webforx-demo-pull.mp4';
 
 const features = [
   {
@@ -75,7 +101,7 @@ const steps = [
   { num: 6, title: 'Review & Report', desc: 'Managers and admins review reports, approve time, and track team output.' },
 ];
 
-const demoTabs = [
+const demoTabs: DemoTab[] = [
   {
     key: 'dashboard',
     label: 'Dashboard',
@@ -83,6 +109,17 @@ const demoTabs = [
     title: 'Dashboard',
     desc: 'Your command center. See today\'s tracked hours, active timer status, recent entries, top projects by time spent, and pending notifications — all in one view.',
     highlights: ['Daily hours summary', 'Active timer status', 'Project breakdown', 'Manager notifications'],
+    preview: {
+      headline: 'Today Snapshot',
+      subline: 'Tue, Mar 28 · 6h 42m tracked',
+      badges: ['3 active projects', '2 approvals pending'],
+      rows: [
+        { label: 'Platform Engineering', value: '2h 10m', tone: 'primary', trend: '+12%' },
+        { label: 'Webforx Website', value: '1h 45m', tone: 'info', trend: '+4%' },
+        { label: 'BA', value: '1h 22m', tone: 'success', trend: 'On target' },
+      ],
+      footer: 'Utilization: 84% of target hours',
+    },
   },
   {
     key: 'timer',
@@ -91,6 +128,17 @@ const demoTabs = [
     title: 'Timer',
     desc: 'Start tracking with a single click. Assign a task description, select a project, and let the live timer capture your work as it happens.',
     highlights: ['One-click start/stop', 'Task description', 'Project assignment', 'Daily progress bar'],
+    preview: {
+      headline: 'Live Session',
+      subline: 'Task: Sprint planning and backlog refinement',
+      badges: ['Running · 00:34:12', 'Project: Platform Engineering'],
+      rows: [
+        { label: 'Current run time', value: '00:34:12', tone: 'success', trend: 'Live' },
+        { label: 'Today total', value: '5h 18m', tone: 'primary', trend: '82%' },
+        { label: 'Break reminder', value: 'In 26m', tone: 'warning', trend: 'Health check' },
+      ],
+      footer: 'Auto-save pulse every 15 seconds',
+    },
   },
   {
     key: 'timeline',
@@ -99,6 +147,17 @@ const demoTabs = [
     title: 'Timeline',
     desc: 'Review your day in chronological order. Navigate between dates, see entry details, and understand how your hours are distributed.',
     highlights: ['Date navigation', 'Chronological entries', 'Duration breakdown', 'Daily analytics'],
+    preview: {
+      headline: 'Daily Timeline',
+      subline: '8 entries sorted by start time',
+      badges: ['First log: 08:42', 'Last log: 17:16'],
+      rows: [
+        { label: '09:00 · QA sync', value: '42m', tone: 'info', trend: 'Closed' },
+        { label: '10:15 · API review', value: '1h 20m', tone: 'primary', trend: 'Tracked' },
+        { label: '14:10 · Standup prep', value: '35m', tone: 'success', trend: 'Tracked' },
+      ],
+      footer: 'Unlogged gap detected: 17 minutes',
+    },
   },
   {
     key: 'timesheet',
@@ -107,6 +166,17 @@ const demoTabs = [
     title: 'Weekly Timesheet',
     desc: 'A structured weekly grid showing hours by project and day. Review totals, spot gaps, and prepare data for approvals or export.',
     highlights: ['Weekly grid view', 'Project × day matrix', 'Totals and subtotals', 'Export-ready format'],
+    preview: {
+      headline: 'Week 13 Summary',
+      subline: 'Total tracked: 37h 55m',
+      badges: ['4 projects', '1 pending approval'],
+      rows: [
+        { label: 'Platform Engineering', value: '14h 40m', tone: 'primary', trend: '38%' },
+        { label: 'EDUSUC', value: '8h 55m', tone: 'success', trend: '23%' },
+        { label: 'Web Forx Technology', value: '7h 10m', tone: 'info', trend: '19%' },
+      ],
+      footer: 'Submission deadline: Friday, 6:00 PM',
+    },
   },
   {
     key: 'reports',
@@ -115,6 +185,17 @@ const demoTabs = [
     title: 'Reports & Analytics',
     desc: 'Deep-dive into team or individual performance. Filter by date range, project, or member. Use data for billing, payroll, or capacity planning.',
     highlights: ['Date range filters', 'Team/project views', 'Performance metrics', 'Data export'],
+    preview: {
+      headline: 'Team Analytics',
+      subline: 'Range: Mar 1 - Mar 28',
+      badges: ['Team utilization: 79%', 'Billable ratio: 68%'],
+      rows: [
+        { label: 'Most tracked project', value: 'Platform Engineering', tone: 'primary', trend: '+9%' },
+        { label: 'Average approval lag', value: '7h 14m', tone: 'success', trend: '-18%' },
+        { label: 'At-risk capacity', value: '2 members', tone: 'warning', trend: 'Needs action' },
+      ],
+      footer: 'Exports available: CSV and PDF',
+    },
   },
   {
     key: 'team',
@@ -123,6 +204,17 @@ const demoTabs = [
     title: 'Team Management',
     desc: 'Managers can see their team members, track who is active, manage project assignments, and review individual time summaries.',
     highlights: ['Member directory', 'Role management', 'Project assignments', 'Activity overview'],
+    preview: {
+      headline: 'Team Status',
+      subline: '12 members in Engineering pod',
+      badges: ['9 online now', '2 pending approvals'],
+      rows: [
+        { label: 'Active timers', value: '7 members', tone: 'success', trend: 'Live' },
+        { label: 'Unsubmitted timesheets', value: '3 members', tone: 'warning', trend: 'Follow up' },
+        { label: 'Top contributor today', value: 'I. Kalu · 7h 04m', tone: 'info', trend: '+11%' },
+      ],
+      footer: 'Manager digest updated 5 minutes ago',
+    },
   },
   {
     key: 'admin',
@@ -131,6 +223,17 @@ const demoTabs = [
     title: 'Admin & Organization',
     desc: 'Full organizational control. Manage users, configure projects and tasks, set approval workflows, and maintain audit visibility.',
     highlights: ['User management', 'Project configuration', 'Organization settings', 'Audit controls'],
+    preview: {
+      headline: 'Organization Controls',
+      subline: 'Workspace: Web Forx Technology',
+      badges: ['Roles synced', 'Policy mode: strict'],
+      rows: [
+        { label: 'Pending role changes', value: '2 requests', tone: 'warning', trend: 'Review' },
+        { label: 'Active projects', value: '14', tone: 'primary', trend: '+2 this month' },
+        { label: 'Audit events (24h)', value: '56 entries', tone: 'info', trend: 'Normal' },
+      ],
+      footer: 'Last policy update: Today, 10:18 AM',
+    },
   },
   {
     key: 'integrations',
@@ -139,6 +242,17 @@ const demoTabs = [
     title: 'Integrations',
     desc: 'Connect Google Calendar to auto-import events as time entries. Sync with Taiga for task-level tracking. More integrations coming soon.',
     highlights: ['Google Calendar sync', 'Taiga project sync', 'Automated imports', 'Connected workflows'],
+    preview: {
+      headline: 'Connected Services',
+      subline: '2 integrations active',
+      badges: ['Google Calendar connected', 'Taiga linked'],
+      rows: [
+        { label: 'Last calendar sync', value: '4 minutes ago', tone: 'success', trend: 'Healthy' },
+        { label: 'Imported events today', value: '11 entries', tone: 'primary', trend: '+3' },
+        { label: 'Failed webhook calls', value: '0', tone: 'info', trend: 'Stable' },
+      ],
+      footer: 'Next sync window: 11:45 AM',
+    },
   },
 ];
 
@@ -177,27 +291,124 @@ const heroMetrics = [
   { label: 'Avg. Approval Time', value: '< 8 hrs' },
 ];
 
+/* ───────────────────── video modal ───────────────────── */
+
+const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose, source }) => {
+  const [hasVideoError, setHasVideoError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
+  const retryVideo = () => {
+    setHasVideoError(false);
+    setReloadKey((k) => k + 1);
+  };
+
+  return (
+    <div className="video-modal-backdrop" onClick={onClose}>
+      <div
+        className="video-modal-container"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="demo-video-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="demo-video-modal-title" className="visually-hidden">Web Forx Time Tracker demo video</h2>
+        <button className="video-modal-close" onClick={onClose} aria-label="Close demo video">✕</button>
+
+        {hasVideoError ? (
+          <div className="video-modal-fallback" role="status" aria-live="polite">
+            <h3>Demo video is temporarily unavailable</h3>
+            <p>
+              We could not load the video stream. Please retry, or download the advert directly.
+            </p>
+            <div className="video-modal-fallback-actions">
+              <button type="button" className="btn btn-primary" onClick={retryVideo}>Retry video</button>
+              <a className="btn btn-outline" href={source} target="_blank" rel="noopener noreferrer">Open video file</a>
+            </div>
+          </div>
+        ) : (
+          <video
+            key={reloadKey}
+            ref={videoRef}
+            className="video-modal-player"
+            src={source}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            onError={() => setHasVideoError(true)}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
 /* ───────────────────── component ───────────────────── */
 
 const Landing: React.FC = () => {
   const navigate = useNavigate();
   const [activeDemo, setActiveDemo] = useState('dashboard');
+  const [showVideo, setShowVideo] = useState(false);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
   const currentDemo = demoTabs.find((t) => t.key === activeDemo) ?? demoTabs[0];
 
+  usePageMetadata({
+    title: 'Web Forx Time Tracker | Track Time, Teams, and Approvals',
+    description: 'Web Forx Time Tracker helps teams capture hours, submit timesheets, and monitor project productivity with secure role-based access.',
+    ogTitle: 'Web Forx Time Tracker',
+    ogDescription: 'Track team hours, approvals, and project delivery with one enterprise-ready time tracking platform.',
+    ogImage: '/webforx-logo.png',
+    canonical: '/landing',
+  });
+
   const goLogin = () => navigate('/login');
+  const goRequestAccess = () => navigate('/request-access');
+  const openVideo = useCallback(() => setShowVideo(true), []);
+  const closeVideo = useCallback(() => setShowVideo(false), []);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleDemoTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex = index;
+
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % demoTabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + demoTabs.length) % demoTabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = demoTabs.length - 1;
+
+    if (nextIndex !== index) {
+      event.preventDefault();
+      setActiveDemo(demoTabs[nextIndex].key);
+      tabRefs.current[nextIndex]?.focus();
+    }
   };
 
   return (
     <div className="landing-page">
       {/* ── Nav ── */}
       <nav className="landing-nav">
-        <a href="/landing" className="landing-nav-brand">
+        <Link to="/landing" className="landing-nav-brand">
           <img src="/webforx-logo.png" alt="Web Forx" className="logo-mark-img" />
           <span>Web Forx Time Tracker</span>
-        </a>
+        </Link>
         <div className="landing-nav-actions">
           <button className="btn btn-outline" onClick={() => scrollTo('features')}>Features</button>
           <button className="btn btn-outline" onClick={() => scrollTo('demo')}>Demo</button>
@@ -205,244 +416,271 @@ const Landing: React.FC = () => {
         </div>
       </nav>
 
-      {/* ── 1. Hero ── */}
-      <section className="landing-section hero">
-        <p className="section-label">Time Tracking for Modern Teams</p>
-        <h1 className="section-heading">
-          Track Time. Improve Accountability. Deliver Results.
-        </h1>
-        <p className="section-subheading">
-          A powerful, enterprise-ready time tracking platform built for agencies,
-          engineering teams, and service organizations that need clarity on
-          where every hour goes.
-        </p>
-        <div className="hero-actions">
-          <button className="btn btn-primary btn-lg" onClick={goLogin}>
-            Get Started <ArrowRight size={18} style={{ marginLeft: 6 }} />
-          </button>
-          <button className="btn btn-secondary btn-lg" onClick={() => scrollTo('demo')}>
-            See How It Works
-          </button>
-        </div>
-        <div className="hero-metrics">
-          {heroMetrics.map((metric) => (
-            <div className="hero-metric" key={metric.label}>
-              <strong>{metric.value}</strong>
-              <span>{metric.label}</span>
-            </div>
-          ))}
-        </div>
-        <video
-          className="hero-visual hero-inline-video"
-          src="/webforx-demo-pull.mp4"
-          controls
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          aria-label="Web Forx Time Tracker advert video"
-        />
-      </section>
-
-      {/* ── 2. Trust / Value Bar ── */}
-      <div className="landing-section-alt">
-        <div className="trust-bar">
-          <div className="trust-item">
-            <div className="trust-icon"><Clock size={20} /></div>
-            <div className="trust-text">
-              <strong>Accurate Time Capture</strong>
-              <span>Real-time timers and manual entries ensure every minute is recorded.</span>
-            </div>
-          </div>
-          <div className="trust-item">
-            <div className="trust-icon"><Eye size={20} /></div>
-            <div className="trust-text">
-              <strong>Improved Accountability</strong>
-              <span>Transparent tracking keeps teams aligned and managers informed.</span>
-            </div>
-          </div>
-          <div className="trust-item">
-            <div className="trust-icon"><BarChart2 size={20} /></div>
-            <div className="trust-text">
-              <strong>Project Visibility</strong>
-              <span>See exactly where hours are spent across projects and tasks.</span>
-            </div>
-          </div>
-          <div className="trust-item">
-            <div className="trust-icon"><CheckCircle2 size={20} /></div>
-            <div className="trust-text">
-              <strong>Manager Reporting</strong>
-              <span>Approval workflows and reports built for team leads.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. Key Features ── */}
-      <section className="landing-section section-center" id="features">
-        <p className="section-label">Capabilities</p>
-        <h2 className="section-heading">Everything You Need to Track, Report, and Manage</h2>
-        <p className="section-subheading">
-          From individual time entries to organization-wide analytics, every tool
-          your team needs is built in.
-        </p>
-        <div className="features-grid">
-          {features.map((f) => (
-            <div className="feature-card" key={f.title}>
-              <div className="feature-card-icon">{f.icon}</div>
-              <h3>{f.title}</h3>
-              <p>{f.biz}</p>
-              <p>{f.ops}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── 4. How It Works ── */}
-      <div className="landing-section-alt">
-        <section className="landing-section section-center" style={{ paddingTop: 0, paddingBottom: 0 }}>
-          <p className="section-label">How It Works</p>
-          <h2 className="section-heading">Up and Running in Six Simple Steps</h2>
+      <main id="main-content" tabIndex={-1}>
+        {/* ── 1. Hero ── */}
+        <section className="landing-section hero">
+          <p className="section-label">Time Tracking for Modern Teams</p>
+          <h1 className="section-heading">
+            Track Time. Improve Accountability. Deliver Results.
+          </h1>
           <p className="section-subheading">
-            Whether you're an employee, manager, or admin — getting started takes minutes.
+            A powerful, enterprise-ready time tracking platform built for agencies,
+            engineering teams, and service organizations that need clarity on
+            where every hour goes.
           </p>
-          <div className="steps-grid">
-            {steps.map((s) => (
-              <div className="step-card" key={s.num}>
-                <div className="step-number">{s.num}</div>
-                <h3>{s.title}</h3>
-                <p>{s.desc}</p>
+          <div className="hero-actions">
+            <button className="btn btn-primary btn-lg" onClick={goLogin}>
+              Get Started <ArrowRight size={18} style={{ marginLeft: 6 }} />
+            </button>
+            <button className="btn btn-secondary btn-lg" onClick={() => scrollTo('demo')}>
+              See How It Works
+            </button>
+          </div>
+          <div className="hero-metrics">
+            {heroMetrics.map((metric) => (
+              <div className="hero-metric" key={metric.label}>
+                <strong>{metric.value}</strong>
+                <span>{metric.label}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="hero-visual hero-video-thumb"
+            onClick={openVideo}
+            aria-label="Watch demo video"
+          >
+            <img src="/webforx-logo.png" alt="Web Forx" className="video-thumb-logo" />
+            <div className="video-play-btn" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21" /></svg>
+            </div>
+            <div className="video-thumb-label">Watch the Demo · 76 seconds</div>
+          </button>
+        </section>
+
+        {/* ── 2. Trust / Value Bar ── */}
+        <div className="landing-section-alt">
+          <div className="trust-bar">
+            <div className="trust-item">
+              <div className="trust-icon"><Clock size={20} /></div>
+              <div className="trust-text">
+                <strong>Accurate Time Capture</strong>
+                <span>Real-time timers and manual entries ensure every minute is recorded.</span>
+              </div>
+            </div>
+            <div className="trust-item">
+              <div className="trust-icon"><Eye size={20} /></div>
+              <div className="trust-text">
+                <strong>Improved Accountability</strong>
+                <span>Transparent tracking keeps teams aligned and managers informed.</span>
+              </div>
+            </div>
+            <div className="trust-item">
+              <div className="trust-icon"><BarChart2 size={20} /></div>
+              <div className="trust-text">
+                <strong>Project Visibility</strong>
+                <span>See exactly where hours are spent across projects and tasks.</span>
+              </div>
+            </div>
+            <div className="trust-item">
+              <div className="trust-icon"><CheckCircle2 size={20} /></div>
+              <div className="trust-text">
+                <strong>Manager Reporting</strong>
+                <span>Approval workflows and reports built for team leads.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 3. Key Features ── */}
+        <section className="landing-section section-center" id="features">
+          <p className="section-label">Capabilities</p>
+          <h2 className="section-heading">Everything You Need to Track, Report, and Manage</h2>
+          <p className="section-subheading">
+            From individual time entries to organization-wide analytics, every tool
+            your team needs is built in.
+          </p>
+          <div className="features-grid">
+            {features.map((f) => (
+              <div className="feature-card" key={f.title}>
+                <div className="feature-card-icon">{f.icon}</div>
+                <h3>{f.title}</h3>
+                <p>{f.biz}</p>
+                <p>{f.ops}</p>
               </div>
             ))}
           </div>
         </section>
-      </div>
 
-      {/* ── 5. Interactive Demo / Walkthrough ── */}
-      <section className="landing-section" id="demo">
-        <div className="section-center">
-          <p className="section-label">Product Walkthrough</p>
-          <h2 className="section-heading">Explore the Product</h2>
-          <p className="section-subheading">
-            Click through each section to see what's inside.
-          </p>
-        </div>
-        <div className="demo-section">
-          <div className="demo-tabs">
-            {demoTabs.map((tab) => (
-              <button
-                key={tab.key}
-                className={`demo-tab ${activeDemo === tab.key ? 'active' : ''}`}
-                onClick={() => setActiveDemo(tab.key)}
-              >
-                {tab.icon}
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <div className="demo-panel">
-            <div className="demo-panel-text">
-              <h3>{currentDemo.title}</h3>
-              <p>{currentDemo.desc}</p>
-              <ul className="demo-highlight-list">
-                {currentDemo.highlights.map((h) => (
-                  <li key={h}>
-                    <CheckCircle2 size={14} />
-                    {h}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div className="demo-panel-visual">
-              {currentDemo.highlights.map((h, i) => (
-                <div className="demo-mock-row" key={h}>
-                  <div className="demo-mock-dot" style={{ background: i % 2 === 0 ? 'var(--color-primary)' : 'var(--color-success)' }} />
-                  <div className="demo-mock-bar" style={{ width: `${60 + i * 10}%` }} />
+        {/* ── 4. How It Works ── */}
+        <div className="landing-section-alt">
+          <section className="landing-section section-center" id="how-it-works" style={{ paddingTop: 0, paddingBottom: 0 }}>
+            <p className="section-label">How It Works</p>
+            <h2 className="section-heading">Up and Running in Six Simple Steps</h2>
+            <p className="section-subheading">
+              Whether you're an employee, manager, or admin — getting started takes minutes.
+            </p>
+            <div className="steps-grid">
+              {steps.map((s) => (
+                <div className="step-card" key={s.num}>
+                  <div className="step-number">{s.num}</div>
+                  <h3>{s.title}</h3>
+                  <p>{s.desc}</p>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         </div>
-      </section>
 
-      {/* ── 6. User Roles ── */}
-      <div className="landing-section-alt">
-        <section className="landing-section section-center" style={{ paddingTop: 0, paddingBottom: 0 }}>
-          <p className="section-label">Built For</p>
-          <h2 className="section-heading">Designed for Every Role in Your Organization</h2>
-          <p className="section-subheading">
-            Whether you're tracking your own time, overseeing a team, or managing the organization — there's a tailored experience for you.
-          </p>
-          <div className="roles-grid">
-            {roles.map((r) => (
-              <div className="role-card" key={r.title}>
-                <div className="role-card-icon">{r.icon}</div>
-                <h3>{r.title}</h3>
-                <p>{r.desc}</p>
+        {/* ── 5. Interactive Demo / Walkthrough ── */}
+        <section className="landing-section" id="demo">
+          <div className="section-center">
+            <p className="section-label">Product Walkthrough</p>
+            <h2 className="section-heading">Explore the Product</h2>
+            <p className="section-subheading">
+              Click through each section to see what's inside.
+            </p>
+          </div>
+          <div className="demo-section">
+            <div className="demo-tabs" role="tablist" aria-label="Product walkthrough tabs">
+              {demoTabs.map((tab, index) => (
+                <button
+                  key={tab.key}
+                  ref={(element) => { tabRefs.current[index] = element; }}
+                  className={`demo-tab ${activeDemo === tab.key ? 'active' : ''}`}
+                  role="tab"
+                  id={`demo-tab-${tab.key}`}
+                  aria-selected={activeDemo === tab.key}
+                  aria-controls={`demo-panel-${tab.key}`}
+                  tabIndex={activeDemo === tab.key ? 0 : -1}
+                  onClick={() => setActiveDemo(tab.key)}
+                  onKeyDown={(event) => handleDemoTabKeyDown(event, index)}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="demo-panel" role="tabpanel" id={`demo-panel-${currentDemo.key}`} aria-labelledby={`demo-tab-${currentDemo.key}`}>
+              <div className="demo-panel-text">
+                <h3>{currentDemo.title}</h3>
+                <p>{currentDemo.desc}</p>
+                <ul className="demo-highlight-list">
+                  {currentDemo.highlights.map((h) => (
+                    <li key={h}>
+                      <CheckCircle2 size={14} />
+                      {h}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="demo-panel-visual" aria-label={`${currentDemo.title} preview`}>
+                <div className="demo-preview-header">
+                  <strong>{currentDemo.preview.headline}</strong>
+                  <span>{currentDemo.preview.subline}</span>
+                </div>
+                <div className="demo-preview-badges">
+                  {currentDemo.preview.badges.map((badge) => (
+                    <span key={badge}>{badge}</span>
+                  ))}
+                </div>
+                <div className="demo-preview-rows">
+                  {currentDemo.preview.rows.map((row) => (
+                    <div className={`demo-preview-row demo-tone-${row.tone}`} key={row.label}>
+                      <div className="demo-preview-row-main">
+                        <strong>{row.label}</strong>
+                        <span>{row.value}</span>
+                      </div>
+                      <em>{row.trend}</em>
+                    </div>
+                  ))}
+                </div>
+                <p className="demo-preview-footer">{currentDemo.preview.footer}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── 6. User Roles ── */}
+        <div className="landing-section-alt">
+          <section className="landing-section section-center" style={{ paddingTop: 0, paddingBottom: 0 }}>
+            <p className="section-label">Built For</p>
+            <h2 className="section-heading">Designed for Every Role in Your Organization</h2>
+            <p className="section-subheading">
+              Whether you're tracking your own time, overseeing a team, or managing the organization — there's a tailored experience for you.
+            </p>
+            <div className="roles-grid">
+              {roles.map((r) => (
+                <div className="role-card" key={r.title}>
+                  <div className="role-card-icon">{r.icon}</div>
+                  <h3>{r.title}</h3>
+                  <p>{r.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {/* ── 7. Benefits ── */}
+        <section className="landing-section">
+          <div className="section-center">
+            <p className="section-label">Why It Matters</p>
+            <h2 className="section-heading">Real Outcomes for Real Teams</h2>
+            <p className="section-subheading">
+              Time tracking isn't just about logging hours — it's about making
+              better decisions for your business.
+            </p>
+          </div>
+          <div className="benefits-grid">
+            {benefits.map((b) => (
+              <div className="benefit-item" key={b.title}>
+                <div className="benefit-check"><CheckCircle2 size={14} /></div>
+                <div>
+                  <strong>{b.title}</strong>
+                  <span>{b.desc}</span>
+                </div>
               </div>
             ))}
           </div>
         </section>
-      </div>
 
-      {/* ── 7. Benefits ── */}
-      <section className="landing-section">
-        <div className="section-center">
-          <p className="section-label">Why It Matters</p>
-          <h2 className="section-heading">Real Outcomes for Real Teams</h2>
+        {/* ── 8. CTA Banner ── */}
+        <section className="cta-banner">
+          <h2 className="section-heading">Start Tracking Time Smarter</h2>
           <p className="section-subheading">
-            Time tracking isn't just about logging hours — it's about making
-            better decisions for your business.
+            Join organizations that rely on Web Forx Time Tracker
+            to improve visibility, accountability, and productivity.
           </p>
-        </div>
-        <div className="benefits-grid">
-          {benefits.map((b) => (
-            <div className="benefit-item" key={b.title}>
-              <div className="benefit-check"><CheckCircle2 size={14} /></div>
-              <div>
-                <strong>{b.title}</strong>
-                <span>{b.desc}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+          <div className="cta-actions">
+            <button className="btn btn-lg btn-white" onClick={goLogin}>
+              Sign In <ArrowRight size={18} style={{ marginLeft: 6 }} />
+            </button>
+            <button className="btn btn-lg btn-ghost" onClick={goRequestAccess}>
+              Request Access
+            </button>
+          </div>
+        </section>
 
-      {/* ── 8. CTA Banner ── */}
-      <section className="cta-banner">
-        <h2 className="section-heading">Start Tracking Time Smarter</h2>
-        <p className="section-subheading">
-          Join organizations that rely on Web Forx Time Tracker
-          to improve visibility, accountability, and productivity.
-        </p>
-        <div className="cta-actions">
-          <button className="btn btn-lg btn-white" onClick={goLogin}>
-            Sign In <ArrowRight size={18} style={{ marginLeft: 6 }} />
-          </button>
-          <button className="btn btn-lg btn-ghost" onClick={goLogin}>
-            Request Access
-          </button>
+        {/* ── 9. Footer ── */}
+        <footer className="landing-footer">
+          <div className="landing-footer-copy">
+            &copy; {new Date().getFullYear()} Web Forx. All rights reserved.
+          </div>
+          <div className="landing-footer-links">
+            <Link to="/login">Sign In</Link>
+            <Link to="/request-access">Request Access</Link>
+            <a href="#features" onClick={(e) => { e.preventDefault(); scrollTo('features'); }}>Features</a>
+            <a href="#demo" onClick={(e) => { e.preventDefault(); scrollTo('demo'); }}>Demo</a>
+            <Link to="/privacy">Privacy</Link>
+            <Link to="/terms">Terms</Link>
+          </div>
+        </footer>
+        <div className="landing-trademark">
+          Powered by <strong>Maralito Labs</strong> for <strong>Webforx Technology</strong>
         </div>
-      </section>
+      </main>
 
-      {/* ── 9. Footer ── */}
-      <footer className="landing-footer">
-        <div className="landing-footer-copy">
-          &copy; {new Date().getFullYear()} Web Forx. All rights reserved.
-        </div>
-        <div className="landing-footer-links">
-          <a href="/login">Sign In</a>
-          <a href="#features" onClick={(e) => { e.preventDefault(); scrollTo('features'); }}>Features</a>
-          <a href="#demo" onClick={(e) => { e.preventDefault(); scrollTo('demo'); }}>Demo</a>
-          <a href="#!" onClick={(e) => e.preventDefault()}>Privacy</a>
-          <a href="#!" onClick={(e) => e.preventDefault()}>Terms</a>
-        </div>
-      </footer>
-      <div className="landing-trademark">
-        Powered by <strong>Maralito Labs</strong> for <strong>Webforx Technology</strong>
-      </div>
-
+      {showVideo && <VideoModal onClose={closeVideo} source={DEMO_VIDEO_SOURCE} />}
     </div>
   );
 };

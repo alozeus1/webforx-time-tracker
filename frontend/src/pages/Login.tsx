@@ -4,6 +4,7 @@ import { Lock, Mail, ShieldCheck, Timer, ChartColumnBig } from 'lucide-react';
 import api from '../services/api';
 import './Login.css';
 import { setStoredSession } from '../utils/session';
+import { usePageMetadata } from '../hooks/usePageMetadata';
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -11,6 +12,15 @@ const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const navigate = useNavigate();
+
+    usePageMetadata({
+        title: 'Sign In | Web Forx Time Tracker',
+        description: 'Sign in to Web Forx Time Tracker to manage timers, timesheets, approvals, and team reporting.',
+        ogTitle: 'Sign In - Web Forx Time Tracker',
+        ogDescription: 'Secure workspace login for Web Forx Time Tracker users.',
+        canonical: '/login',
+        noIndex: true,
+    });
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -33,7 +43,7 @@ const Login: React.FC = () => {
     };
 
     return (
-        <div className="login-container">
+        <main id="main-content" className="login-container" tabIndex={-1}>
             <div className="login-side-panel">
                 <div className="login-side-brand">
                     <img src="/webforx-logo.png" alt="Web Forx" className="logo-icon-large logo-icon-large-image" />
@@ -121,11 +131,15 @@ const Login: React.FC = () => {
 
                 <div className="login-footer">
                     <Link to="/forgot-password">Forgot your password?</Link>
-                    <p>Need access? Contact your organization admin.</p>
+                    <Link to="/request-access">Need access? Request access</Link>
+                    <div className="login-footer-legal">
+                        <Link to="/privacy">Privacy</Link>
+                        <Link to="/terms">Terms</Link>
+                    </div>
                     <Link to="/landing">Back to product overview</Link>
                 </div>
             </div>
-        </div>
+        </main>
     );
 };
 
