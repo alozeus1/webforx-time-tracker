@@ -4,10 +4,43 @@ import path from 'path';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 
-const UPLOADS_DIR = path.join(__dirname, '../../uploads/projects');
-if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+const isServerlessRuntime = process.env.VERCEL === '1';
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads/projects');
+
+const parseLogoData = (logoData: string): { extension: string; data: string } | null => {
+    const matches = logoData.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
+    if (!matches) {
+        return null;
+    }
+
+    return {
+        extension: matches[1].replace('+xml', ''),
+        data: matches[2],
+    };
+};
+
+const ensureUploadsDir = () => {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+        fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+};
+
+const persistProjectLogo = (logoData: string): string | null => {
+    const parsedLogo = parseLogoData(logoData);
+    if (!parsedLogo) {
+        return null;
+    }
+
+    if (isServerlessRuntime) {
+        return logoData;
+    }
+
+    ensureUploadsDir();
+
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${parsedLogo.extension}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, fileName), Buffer.from(parsedLogo.data, 'base64'));
+    return `/uploads/projects/${fileName}`;
+};
 
 export const getAllProjects = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -110,13 +143,7 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
 
         let logo_url: string | null = null;
         if (typeof logo_data === 'string' && logo_data.startsWith('data:image/')) {
-            const matches = logo_data.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
-            if (matches) {
-                const ext = matches[1].replace('+xml', '');
-                const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-                fs.writeFileSync(path.join(UPLOADS_DIR, fileName), Buffer.from(matches[2], 'base64'));
-                logo_url = `/uploads/projects/${fileName}`;
-            }
+            logo_url = persistProjectLogo(logo_data);
         }
 
         const newProject = await prisma.project.create({
@@ -167,13 +194,7 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
         if (budget_amount !== undefined) updateData.budget_amount = budget_amount ? parseFloat(budget_amount) : null;
 
         if (typeof logo_data === 'string' && logo_data.startsWith('data:image/')) {
-            const matches = logo_data.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
-            if (matches) {
-                const ext = matches[1].replace('+xml', '');
-                const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-                fs.writeFileSync(path.join(UPLOADS_DIR, fileName), Buffer.from(matches[2], 'base64'));
-                updateData.logo_url = `/uploads/projects/${fileName}`;
-            }
+            updateData.logo_url = persistProjectLogo(logo_data);
         } else if (logo_data === null) {
             updateData.logo_url = null;
         }

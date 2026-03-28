@@ -16,10 +16,36 @@ exports.deleteProject = exports.getProjectBudgets = exports.updateProject = expo
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const db_1 = __importDefault(require("../config/db"));
-const UPLOADS_DIR = path_1.default.join(__dirname, '../../uploads/projects');
-if (!fs_1.default.existsSync(UPLOADS_DIR)) {
-    fs_1.default.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+const isServerlessRuntime = process.env.VERCEL === '1';
+const UPLOADS_DIR = path_1.default.join(process.cwd(), 'uploads/projects');
+const parseLogoData = (logoData) => {
+    const matches = logoData.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
+    if (!matches) {
+        return null;
+    }
+    return {
+        extension: matches[1].replace('+xml', ''),
+        data: matches[2],
+    };
+};
+const ensureUploadsDir = () => {
+    if (!fs_1.default.existsSync(UPLOADS_DIR)) {
+        fs_1.default.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+};
+const persistProjectLogo = (logoData) => {
+    const parsedLogo = parseLogoData(logoData);
+    if (!parsedLogo) {
+        return null;
+    }
+    if (isServerlessRuntime) {
+        return logoData;
+    }
+    ensureUploadsDir();
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${parsedLogo.extension}`;
+    fs_1.default.writeFileSync(path_1.default.join(UPLOADS_DIR, fileName), Buffer.from(parsedLogo.data, 'base64'));
+    return `/uploads/projects/${fileName}`;
+};
 const getAllProjects = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const projects = yield db_1.default.project.findMany({
@@ -111,13 +137,7 @@ const createProject = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         }
         let logo_url = null;
         if (typeof logo_data === 'string' && logo_data.startsWith('data:image/')) {
-            const matches = logo_data.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
-            if (matches) {
-                const ext = matches[1].replace('+xml', '');
-                const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-                fs_1.default.writeFileSync(path_1.default.join(UPLOADS_DIR, fileName), Buffer.from(matches[2], 'base64'));
-                logo_url = `/uploads/projects/${fileName}`;
-            }
+            logo_url = persistProjectLogo(logo_data);
         }
         const newProject = yield db_1.default.project.create({
             data: {
@@ -170,13 +190,7 @@ const updateProject = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         if (budget_amount !== undefined)
             updateData.budget_amount = budget_amount ? parseFloat(budget_amount) : null;
         if (typeof logo_data === 'string' && logo_data.startsWith('data:image/')) {
-            const matches = logo_data.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
-            if (matches) {
-                const ext = matches[1].replace('+xml', '');
-                const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-                fs_1.default.writeFileSync(path_1.default.join(UPLOADS_DIR, fileName), Buffer.from(matches[2], 'base64'));
-                updateData.logo_url = `/uploads/projects/${fileName}`;
-            }
+            updateData.logo_url = persistProjectLogo(logo_data);
         }
         else if (logo_data === null) {
             updateData.logo_url = null;

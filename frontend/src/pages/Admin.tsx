@@ -7,6 +7,17 @@ import { resolveApiOrigin } from '../utils/apiConfig';
 
 const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'audit'] as const;
 const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
+const resolveProjectLogoSrc = (logoUrl?: string | null) => {
+    if (!logoUrl) {
+        return null;
+    }
+
+    if (logoUrl.startsWith('data:') || /^https?:\/\//i.test(logoUrl)) {
+        return logoUrl;
+    }
+
+    return `${apiOrigin}${logoUrl}`;
+};
 
 const Admin: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -132,7 +143,7 @@ const Admin: React.FC = () => {
         setNewProjectDesc(project.description || '');
         setNewProjectBudgetHours(project.budget_hours?.toString() || '');
         setNewProjectBudgetAmount(project.budget_amount?.toString() || '');
-        setProjectLogoPreview(project.logo_url ? `${apiOrigin}${project.logo_url}` : null);
+        setProjectLogoPreview(resolveProjectLogoSrc(project.logo_url));
         setProjectLogoData(null);
         setIsProjectModalOpen(true);
         setProjectMenuOpen(null);
@@ -272,7 +283,7 @@ const Admin: React.FC = () => {
                                             <td className="px-6 py-4 text-sm font-semibold">
                                                 <div className="flex items-center gap-3">
                                                     {p.logo_url ? (
-                                                        <img src={`${apiOrigin}${p.logo_url}`} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
+                                                        <img src={resolveProjectLogoSrc(p.logo_url) ?? undefined} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
                                                     ) : (
                                                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">{p.name.slice(0, 2).toUpperCase()}</div>
                                                     )}

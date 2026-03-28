@@ -40,8 +40,9 @@ const idleTracker_1 = require("./workers/idleTracker");
 const burnoutTracker_1 = require("./workers/burnoutTracker");
 const db_1 = __importDefault(require("./config/db"));
 const env_1 = require("./config/env");
-dotenv_1.default.config();
+dotenv_1.default.config({ quiet: true });
 const app = (0, express_1.default)();
+app.set('trust proxy', process.env.VERCEL === '1' ? 1 : false);
 const expandOriginAliases = (origin) => {
     const normalized = origin.trim();
     if (!normalized) {

@@ -27,9 +27,10 @@ import { startBurnoutTracker } from './workers/burnoutTracker';
 import prisma from './config/db';
 import { env } from './config/env';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 const app = express();
+app.set('trust proxy', process.env.VERCEL === '1' ? 1 : false);
 
 const expandOriginAliases = (origin: string) => {
     const normalized = origin.trim();
