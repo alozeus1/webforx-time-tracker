@@ -117,6 +117,14 @@ app.get('/', (_req, res) => {
 app.get('/api/v1/health', (req, res) => {
     res.status(200).json({ status: 'ok', message: 'Time Tracker API is running' });
 });
+app.get('/api/v1', (_req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        message: 'Web Forx Time Tracker API base path',
+        health: '/api/v1/health',
+        docs: '/api-docs',
+    });
+});
 app.use('/api/v1', (_req, res) => {
     res.status(404).json({ message: 'API route not found' });
 });

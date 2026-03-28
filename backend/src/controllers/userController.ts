@@ -37,6 +37,27 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     }
 };
 
+export const getMyNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = requireUserId(req);
+        const requestedLimit = Number.parseInt(String(req.query.limit ?? '20'), 10);
+        const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 20;
+
+        const notifications = await prisma.notification.findMany({
+            where: { user_id: userId },
+            orderBy: { created_at: 'desc' },
+            take: limit,
+            include: {
+                user: { select: { email: true, first_name: true, last_name: true } },
+            },
+        });
+
+        res.status(200).json({ notifications });
+    } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
     try {
         const users = await prisma.user.findMany({

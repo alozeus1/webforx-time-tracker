@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Copy, Plus, Trash2 } from 'lucide-react';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import type { ProjectTemplateSummary } from '../types/api';
 
 const Templates: React.FC = () => {
@@ -8,6 +8,8 @@ const Templates: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [applyingId, setApplyingId] = useState<string | null>(null);
+    const [processingTemplateId, setProcessingTemplateId] = useState<string | null>(null);
+    const [creating, setCreating] = useState(false);
     const [projectName, setProjectName] = useState('');
     const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
 
@@ -23,8 +25,8 @@ const Templates: React.FC = () => {
         try {
             const res = await api.get<{ templates: ProjectTemplateSummary[] }>('/templates');
             setTemplates(res.data.templates || []);
-        } catch {
-            setFeedback({ message: 'Failed to load templates', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to load templates'), tone: 'error' });
         } finally {
             setLoading(false);
         }
@@ -34,6 +36,7 @@ const Templates: React.FC = () => {
 
     const handleCreate = async () => {
         if (!form.name.trim()) { setFeedback({ message: 'Template name is required', tone: 'error' }); return; }
+        setCreating(true);
         try {
             await api.post('/templates', {
                 name: form.name.trim(),
@@ -46,30 +49,38 @@ const Templates: React.FC = () => {
             setShowCreate(false);
             setForm({ name: '', description: '', default_billable: true, budget_hours: '', budget_amount: '' });
             void fetchTemplates();
-        } catch {
-            setFeedback({ message: 'Failed to create template', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to create template'), tone: 'error' });
+        } finally {
+            setCreating(false);
         }
     };
 
     const handleApply = async (templateId: string) => {
         if (!projectName.trim()) { setFeedback({ message: 'Enter a project name', tone: 'error' }); return; }
+        setProcessingTemplateId(templateId);
         try {
             await api.post(`/templates/${templateId}/apply`, { name: projectName.trim() });
             setFeedback({ message: `Project "${projectName.trim()}" created from template`, tone: 'success' });
             setApplyingId(null);
             setProjectName('');
-        } catch {
-            setFeedback({ message: 'Failed to create project. Name may already exist.', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to create project from template'), tone: 'error' });
+        } finally {
+            setProcessingTemplateId(null);
         }
     };
 
     const handleDelete = async (id: string) => {
+        setProcessingTemplateId(id);
         try {
             await api.delete(`/templates/${id}`);
             setFeedback({ message: 'Template deleted', tone: 'success' });
             void fetchTemplates();
-        } catch {
-            setFeedback({ message: 'Failed to delete template', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to delete template'), tone: 'error' });
+        } finally {
+            setProcessingTemplateId(null);
         }
     };
 
@@ -108,8 +119,8 @@ const Templates: React.FC = () => {
                             Default billable
                         </label>
                         <div className="flex gap-2">
-                            <button onClick={handleCreate} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all">Create</button>
-                            <button onClick={() => setShowCreate(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">Cancel</button>
+                            <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{creating ? 'Creating...' : 'Create'}</button>
+                            <button onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-70">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -127,7 +138,7 @@ const Templates: React.FC = () => {
                                         <h3 className="font-bold text-slate-900 dark:text-white">{t.name}</h3>
                                         {t.description && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{t.description}</p>}
                                     </div>
-                                    <button onClick={() => handleDelete(t.id)} title="Delete template" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors"><Trash2 size={16} /></button>
+                                    <button onClick={() => handleDelete(t.id)} disabled={processingTemplateId === t.id} title="Delete template" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
                                 </div>
                                 <div className="flex gap-4 text-xs text-slate-500 dark:text-slate-400">
                                     {t.budget_hours != null && <span>{t.budget_hours}h budget</span>}
@@ -137,8 +148,8 @@ const Templates: React.FC = () => {
                                 {applyingId === t.id ? (
                                     <div className="flex gap-2">
                                         <input className={inputClass} placeholder="New project name" value={projectName} onChange={e => setProjectName(e.target.value)} />
-                                        <button onClick={() => handleApply(t.id)} className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-bold whitespace-nowrap">Create</button>
-                                        <button onClick={() => { setApplyingId(null); setProjectName(''); }} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-medium whitespace-nowrap">Cancel</button>
+                                        <button onClick={() => handleApply(t.id)} disabled={processingTemplateId === t.id} className="px-3 py-2 bg-primary text-white rounded-lg text-xs font-bold whitespace-nowrap disabled:opacity-60">{processingTemplateId === t.id ? 'Creating...' : 'Create'}</button>
+                                        <button onClick={() => { setApplyingId(null); setProjectName(''); }} disabled={processingTemplateId === t.id} className="px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-medium whitespace-nowrap disabled:opacity-60">Cancel</button>
                                     </div>
                                 ) : (
                                     <button onClick={() => setApplyingId(t.id)} className="flex items-center gap-1.5 text-sm text-primary font-medium hover:underline">

@@ -7,6 +7,51 @@ const api = axios.create({
     baseURL: configuredBaseUrl.replace(/\/+$/, ''),
 });
 
+const STATUS_MESSAGES: Record<number, string> = {
+    400: 'Invalid request. Please review the form and try again.',
+    401: 'Your session has expired. Please sign in again.',
+    403: 'You do not have permission to perform this action.',
+    404: 'The requested resource was not found.',
+    409: 'A conflicting record already exists.',
+    500: 'Server error. Please try again in a moment.',
+};
+
+export interface ApiErrorInfo {
+    status: number | null;
+    message: string;
+    code?: string;
+    details?: unknown;
+    isNetworkError: boolean;
+}
+
+export const parseApiError = (error: unknown, fallback = 'Request failed. Please try again.'): ApiErrorInfo => {
+    const response = (error as {
+        response?: {
+            status?: number;
+            data?: { message?: string; error?: { code?: string; details?: unknown; message?: string } };
+        };
+        message?: string;
+    })?.response;
+
+    const status = typeof response?.status === 'number' ? response.status : null;
+    const serverMessage = response?.data?.message || response?.data?.error?.message;
+    const isNetworkError = status === null;
+
+    const statusMessage = status !== null ? STATUS_MESSAGES[status] : null;
+    const message = serverMessage || statusMessage || (isNetworkError ? 'Network error. Check your connection and retry.' : fallback);
+
+    return {
+        status,
+        message,
+        code: response?.data?.error?.code,
+        details: response?.data?.error?.details,
+        isNetworkError,
+    };
+};
+
+export const getApiErrorMessage = (error: unknown, fallback?: string) =>
+    parseApiError(error, fallback).message;
+
 // Request interceptor to attach JWT token
 api.interceptors.request.use(
     (config) => {

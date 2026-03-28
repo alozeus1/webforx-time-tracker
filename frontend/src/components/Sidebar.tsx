@@ -85,7 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
         <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
             <div className="sidebar-header">
                 <div className="sidebar-logo">
-                    <div className="logo-icon">TF</div>
+                    <img src="/webforx-logo.png" alt="Web Forx" className="logo-icon logo-icon-image" />
                     <span className="logo-text">Time Tracker</span>
                 </div>
                 <button className="sidebar-close" onClick={onClose} type="button" aria-label="Close navigation">

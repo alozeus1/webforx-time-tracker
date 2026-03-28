@@ -30,6 +30,12 @@
     box-shadow: 0 8px 16px rgba(53, 74, 192, 0.35);
 }
 
+.logo-icon-image {
+    object-fit: contain;
+    background: #ffffff;
+    padding: 4px;
+}
+
 .logo-text {
     font-family: var(--font-family-display);
     font-weight: 800;

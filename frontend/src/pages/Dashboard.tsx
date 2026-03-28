@@ -10,6 +10,21 @@ const ENTRY_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9'];
 const getElapsedSeconds = (startTime: string) =>
     Math.max(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000), 0);
 
+const getEntryDurationSeconds = (entry: TimeEntrySummary) => {
+    const storedDuration = Number(entry.duration || 0);
+    if (storedDuration > 0) {
+        return storedDuration;
+    }
+
+    const start = new Date(entry.start_time).getTime();
+    const end = new Date(entry.end_time).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return 0;
+    }
+
+    return Math.floor((end - start) / 1000);
+};
+
 const Dashboard: React.FC = () => {
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -76,7 +91,7 @@ const Dashboard: React.FC = () => {
             } else {
                 // Non-admin users: check their own notifications for overtime alerts
                 try {
-                    const userNotifResponse = await api.get<{ notifications: NotificationSummary[] }>('/admin/notifications');
+                    const userNotifResponse = await api.get<{ notifications: NotificationSummary[] }>('/users/me/notifications');
                     const allUserNotifs = userNotifResponse.data.notifications || [];
                     const sevenDaysAgo = new Date();
                     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -101,6 +116,24 @@ const Dashboard: React.FC = () => {
     }, [fetchDashboardData]);
 
     useEffect(() => {
+        const refresh = () => {
+            void fetchDashboardData();
+        };
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                void fetchDashboardData();
+            }
+        };
+
+        window.addEventListener('wfx:time-entry-changed', refresh as EventListener);
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => {
+            window.removeEventListener('wfx:time-entry-changed', refresh as EventListener);
+            document.removeEventListener('visibilitychange', onVisibility);
+        };
+    }, [fetchDashboardData]);
+
+    useEffect(() => {
         if (!activeTimerStart) {
             return;
         }
@@ -113,7 +146,7 @@ const Dashboard: React.FC = () => {
     }, [activeTimerStart]);
 
     const completedSeconds = useMemo(
-        () => entries.reduce((total, entry) => total + (entry.duration || 0), 0),
+        () => entries.reduce((total, entry) => total + getEntryDurationSeconds(entry), 0),
         [entries]
     );
     const totalSeconds = completedSeconds + liveSeconds;
@@ -122,7 +155,7 @@ const Dashboard: React.FC = () => {
         const durations = new Map<string, number>();
         entries.forEach((entry) => {
             if (entry.project?.name) {
-                durations.set(entry.project.name, (durations.get(entry.project.name) || 0) + (entry.duration || 0));
+                durations.set(entry.project.name, (durations.get(entry.project.name) || 0) + getEntryDurationSeconds(entry));
             }
         });
 
@@ -153,8 +186,9 @@ const Dashboard: React.FC = () => {
     };
 
     const clock = formatClock(liveSeconds);
-    const progressPercent = Math.min((totalSeconds / (8 * 3600)) * 100, 100);
-    const goalReached = progressPercent >= 100;
+    const rawProgressPercent = (totalSeconds / (8 * 3600)) * 100;
+    const progressPercent = Math.min(rawProgressPercent, 100);
+    const goalReached = rawProgressPercent >= 100;
 
     // Last completed entry duration for the Live Timer card
     const lastEntry = entries.length > 0 ? entries[0] : null;
@@ -186,7 +220,7 @@ const Dashboard: React.FC = () => {
                         <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
                     </button>
                     <button
-                        onClick={() => navigate('/timer')}
+                        onClick={() => navigate('/timeline?action=new')}
                         className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
                     >
                         <span className="material-symbols-outlined text-sm">add</span>
@@ -259,9 +293,10 @@ const Dashboard: React.FC = () => {
                                     <button
                                         onClick={() => navigate('/timer')}
                                         className="btn btn-primary timer-play-btn"
-                                        aria-label="Start timer"
+                                        aria-label="Open timer workspace"
+                                        title="Open timer workspace"
                                     >
-                                        <span className="material-symbols-outlined text-3xl">{activeTimerStart ? 'pause' : 'play_arrow'}</span>
+                                        <span className="material-symbols-outlined text-3xl">timer</span>
                                     </button>
                                 </div>
                             </div>
@@ -300,7 +335,7 @@ const Dashboard: React.FC = () => {
                                 </span>
                             </div>
                             <div className="text-2xl font-bold mt-3 dark:text-slate-100">
-                                {loading ? <div className="skeleton h-8 w-20 rounded" /> : `${(totalSeconds / 3600).toFixed(1)} / 8h`}
+                                {loading ? <div className="skeleton h-8 w-20 rounded" /> : `${formatHours(totalSeconds)} / 8h`}
                             </div>
                             <div className="mt-4">
                                 <div className="flex items-center gap-2">
@@ -316,7 +351,7 @@ const Dashboard: React.FC = () => {
                                         />
                                     </div>
                                     <span className="text-xs font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                        {Math.round(progressPercent)}%
+                                        {Math.round(rawProgressPercent)}%
                                     </span>
                                 </div>
                                 {goalReached && (
@@ -369,14 +404,14 @@ const Dashboard: React.FC = () => {
                                 <>
                                     {lastEntry && (
                                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                                            Last session: {formatHours(lastEntry.duration || 0)}
+                                            Last session: {formatHours(getEntryDurationSeconds(lastEntry))}
                                         </p>
                                     )}
                                     <button
-                                        onClick={() => navigate('/timer')}
+                                        onClick={() => navigate('/timeline?action=new')}
                                         className="mt-2 text-xs font-bold text-primary hover:underline"
                                     >
-                                        Start Timer →
+                                        Add Entry →
                                     </button>
                                 </>
                             )}

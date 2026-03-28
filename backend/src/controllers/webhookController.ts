@@ -1,7 +1,18 @@
 import crypto from 'crypto';
 import { Response } from 'express';
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
+import { sendApiError } from '../utils/http';
+
+const isValidUrl = (value: string): boolean => {
+    try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
 
 export const listWebhooks = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -9,29 +20,48 @@ export const listWebhooks = async (_req: AuthRequest, res: Response): Promise<vo
         res.status(200).json({ webhooks: subs });
     } catch (error) {
         console.error('Failed to list webhooks:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        sendApiError(res, 500, 'WEBHOOK_LIST_FAILED', 'Internal server error');
     }
 };
 
 export const createWebhook = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
-        const events = Array.isArray(req.body?.events) ? req.body.events : [];
+        const rawEvents: unknown[] = Array.isArray(req.body?.events) ? req.body.events : [];
+        const events = rawEvents
+            .filter((event: unknown): event is string => typeof event === 'string')
+            .map((event: string) => event.trim())
+            .filter((event: string) => event.length > 0);
 
         if (!url) {
-            res.status(400).json({ message: 'Webhook URL is required' });
+            sendApiError(res, 400, 'VALIDATION_ERROR', 'Webhook URL is required');
+            return;
+        }
+
+        if (!isValidUrl(url)) {
+            sendApiError(res, 400, 'VALIDATION_ERROR', 'Webhook URL must be a valid HTTP or HTTPS URL');
+            return;
+        }
+
+        if (events.length === 0) {
+            sendApiError(res, 400, 'VALIDATION_ERROR', 'At least one webhook event is required');
             return;
         }
 
         const secret = crypto.randomBytes(32).toString('hex');
+        const uniqueEvents = Array.from(new Set(events));
         const sub = await prisma.webhookSubscription.create({
-            data: { url, events, secret },
+            data: {
+                url,
+                events: uniqueEvents as Prisma.InputJsonValue,
+                secret,
+            },
         });
 
         res.status(201).json(sub);
     } catch (error) {
         console.error('Failed to create webhook:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        sendApiError(res, 500, 'WEBHOOK_CREATE_FAILED', 'Internal server error');
     }
 };
 
@@ -42,10 +72,10 @@ export const deleteWebhook = async (req: AuthRequest, res: Response): Promise<vo
         res.status(200).json({ message: 'Webhook deleted' });
     } catch (error) {
         if ((error as { code?: string }).code === 'P2025') {
-            res.status(404).json({ message: 'Webhook not found' });
+            sendApiError(res, 404, 'WEBHOOK_NOT_FOUND', 'Webhook not found');
             return;
         }
         console.error('Failed to delete webhook:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        sendApiError(res, 500, 'WEBHOOK_DELETE_FAILED', 'Internal server error');
     }
 };

@@ -64,7 +64,7 @@ const ForgotPassword: React.FC = () => {
         <div className="login-container">
             <div className="login-side-panel">
                 <div className="login-side-brand">
-                    <div className="logo-icon-large">TF</div>
+                    <img src="/webforx-logo.png" alt="Web Forx" className="logo-icon-large logo-icon-large-image" />
                     <div>
                         <h2>Web Forx Time Tracker</h2>
                         <p>Password Recovery</p>

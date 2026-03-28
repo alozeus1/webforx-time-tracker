@@ -69,6 +69,7 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
             return;
         }
         const { range = '30d', projectId, queryUserId } = req.query;
+        const selectedProjectId = projectId && projectId !== 'all' ? String(projectId) : null;
         // Build where clause
         const whereClause = {};
         // 1. Role / User filter
@@ -79,8 +80,8 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
             whereClause.user_id = String(queryUserId);
         }
         // 2. Project filter
-        if (projectId && projectId !== 'all') {
-            whereClause.project_id = String(projectId);
+        if (selectedProjectId) {
+            whereClause.project_id = selectedProjectId;
         }
         // 3. Date Range
         const now = new Date();
@@ -113,17 +114,18 @@ const getAnalyticsDashboard = (req, res) => __awaiter(void 0, void 0, void 0, fu
         // Compute Metric Cards
         let totalDurationSec = 0;
         let billableAmount = 0;
-        const projectIds = new Set();
         entries.forEach(entry => {
             var _a;
             totalDurationSec += entry.duration;
-            if (entry.project_id)
-                projectIds.add(entry.project_id);
             const rate = parseFloat(((_a = entry.user.hourly_rate) === null || _a === void 0 ? void 0 : _a.toString()) || '0');
             billableAmount += (entry.duration / 3600) * rate;
         });
         const totalHours = totalDurationSec / 3600;
-        const activeProjectsCount = projectIds.size;
+        const activeProjectsCount = yield db_1.default.project.count({
+            where: selectedProjectId
+                ? { id: selectedProjectId, is_active: true }
+                : { is_active: true },
+        });
         let billableSeconds = 0;
         entries.forEach(entry => {
             if (entry.is_billable !== false) {

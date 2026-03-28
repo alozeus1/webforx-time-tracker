@@ -5,6 +5,7 @@ const userController_1 = require("../controllers/userController");
 const auth_1 = require("../middlewares/auth");
 const router = (0, express_1.Router)();
 router.get('/me', auth_1.authenticateToken, userController_1.getMe);
+router.get('/me/notifications', auth_1.authenticateToken, userController_1.getMyNotifications);
 router.put('/me', auth_1.authenticateToken, userController_1.updateMe);
 router.get('/', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Manager']), userController_1.getAllUsers);
 router.get('/roles', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Manager']), userController_1.getRoles);

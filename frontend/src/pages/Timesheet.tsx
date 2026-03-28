@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar as CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Calendar as CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Download, XCircle } from 'lucide-react';
+import api, { getApiErrorMessage } from '../services/api';
 import type { TimeEntrySummary } from '../types/api';
+import { hasAnyRole } from '../utils/session';
 
 const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 const toISODate = (value: Date) => {
@@ -22,12 +22,16 @@ const startOfWeek = (date: Date) => {
 };
 
 const Timesheet: React.FC = () => {
-    const navigate = useNavigate();
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
+    const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
     const [loading, setLoading] = useState(true);
+    const [approvalsLoading, setApprovalsLoading] = useState(false);
+    const [showApprovals, setShowApprovals] = useState(false);
     const [weekAnchorDate, setWeekAnchorDate] = useState(() => new Date());
     const [exporting, setExporting] = useState(false);
+    const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
     const datePickerRef = useRef<HTMLInputElement | null>(null);
+    const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
 
     useEffect(() => {
         const loadEntries = async () => {
@@ -44,6 +48,27 @@ const Timesheet: React.FC = () => {
 
         void loadEntries();
     }, []);
+
+    const fetchApprovals = useCallback(async () => {
+        if (!canReviewApprovals) {
+            return;
+        }
+        setApprovalsLoading(true);
+        try {
+            const response = await api.get<{ entries: TimeEntrySummary[] }>('/timers/approvals');
+            setPendingApprovals(response.data.entries || []);
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to load pending approvals'), tone: 'error' });
+        } finally {
+            setApprovalsLoading(false);
+        }
+    }, [canReviewApprovals]);
+
+    useEffect(() => {
+        if (canReviewApprovals) {
+            void fetchApprovals();
+        }
+    }, [canReviewApprovals, fetchApprovals]);
 
     const weekStart = useMemo(() => startOfWeek(weekAnchorDate), [weekAnchorDate]);
     const weekDays = useMemo(
@@ -146,16 +171,32 @@ const Timesheet: React.FC = () => {
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
+            setFeedback({ message: 'Timesheet CSV exported', tone: 'success' });
         } catch (error) {
             console.error('Failed to export timesheet CSV:', error);
-            alert('Export failed. Please try again.');
+            setFeedback({ message: getApiErrorMessage(error, 'Export failed. Please try again.'), tone: 'error' });
         } finally {
             setExporting(false);
         }
     };
 
+    const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
+        try {
+            await api.post(`/timers/approvals/${entryId}`, { action });
+            setFeedback({ message: `Entry ${action}d successfully`, tone: 'success' });
+            await fetchApprovals();
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, `Failed to ${action} entry`), tone: 'error' });
+        }
+    };
+
     return (
         <div className="timesheet-container flex-1 w-full overflow-y-auto">
+            {feedback && (
+                <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${feedback.tone === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                    {feedback.message}
+                </div>
+            )}
             <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-black tracking-tight text-slate-900">Weekly Timesheet</h1>
@@ -182,14 +223,69 @@ const Timesheet: React.FC = () => {
                     <button className="btn btn-outline" onClick={() => handleWeekShift(1)}>
                         Next Week <ChevronRight size={16} />
                     </button>
-                    <button className="btn btn-primary" onClick={() => navigate('/reports')}>
-                        <CheckCircle size={16} /> Approval Queue
-                    </button>
+                    {canReviewApprovals && (
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => setShowApprovals((value) => !value)}
+                        >
+                            <CheckCircle size={16} /> Approval Queue ({pendingApprovals.length})
+                        </button>
+                    )}
                     <button className="btn btn-outline" onClick={() => void handleExport()} disabled={exporting}>
                         <Download size={16} /> {exporting ? 'Exporting...' : 'Export CSV'}
                     </button>
                 </div>
             </div>
+
+            {canReviewApprovals && showApprovals && (
+                <div className="card mb-6">
+                    <div className="card-body">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h3 className="text-base font-bold text-slate-900">Pending Approvals</h3>
+                            <span className="text-sm text-slate-500">{pendingApprovals.length} pending</span>
+                        </div>
+                        {approvalsLoading ? (
+                            <p className="py-6 text-sm text-slate-500">Loading approval queue…</p>
+                        ) : pendingApprovals.length === 0 ? (
+                            <p className="py-6 text-sm text-slate-500">No pending entries require review.</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-[760px] w-full border-collapse text-left">
+                                    <thead>
+                                        <tr className="border-b border-slate-200 bg-slate-50">
+                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Employee</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Task</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Duration</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Date</th>
+                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {pendingApprovals.map((entry) => (
+                                            <tr key={entry.id} className="border-b border-slate-100">
+                                                <td className="px-4 py-3 text-sm font-medium text-slate-700">{entry.user.first_name} {entry.user.last_name}</td>
+                                                <td className="px-4 py-3 text-sm text-slate-700">{entry.task_description}</td>
+                                                <td className="px-4 py-3 text-sm font-semibold text-slate-700">{(entry.duration / 3600).toFixed(2)}h</td>
+                                                <td className="px-4 py-3 text-sm text-slate-500">{new Date(entry.start_time).toLocaleDateString()}</td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button className="btn btn-outline !px-2.5 !py-2 text-rose-600" onClick={() => void handleReview(entry.id, 'reject')}>
+                                                            <XCircle size={14} />
+                                                        </button>
+                                                        <button className="btn btn-outline !px-2.5 !py-2 text-emerald-600" onClick={() => void handleReview(entry.id, 'approve')}>
+                                                            <CheckCircle size={14} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="card mb-6">
                 <div className="card-body">
@@ -254,7 +350,7 @@ const Timesheet: React.FC = () => {
                                                 <input
                                                     type="text"
                                                     className="form-control mx-auto h-9 w-[74px] text-center font-semibold text-slate-700"
-                                                    value={value > 0 ? value.toFixed(1) : '-'}
+                                                    value={value.toFixed(1)}
                                                     disabled
                                                     readOnly
                                                 />
@@ -271,9 +367,9 @@ const Timesheet: React.FC = () => {
                                 <tr className="border-t-2 border-slate-200 bg-slate-50">
                                     <td className="px-4 py-3 text-left text-sm font-black text-slate-900">Daily Total</td>
                                     {dailyTotals.map((value, index) => (
-                                        <td key={`total-${index}`} className={`px-2 py-3 text-sm font-bold ${value > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
-                                            {value > 0 ? `${value.toFixed(1)}h` : '0h'}
-                                        </td>
+                                    <td key={`total-${index}`} className={`px-2 py-3 text-sm font-bold ${value > 0 ? 'text-slate-800' : 'text-slate-500'}`}>
+                                            {`${value.toFixed(1)}h`}
+                                    </td>
                                     ))}
                                     <td className="px-4 py-3 text-right text-base font-black text-slate-900">{weeklyTotal.toFixed(1)}h</td>
                                 </tr>

@@ -47,6 +47,57 @@ export const getAllProjects = async (req: Request, res: Response): Promise<void>
     }
 };
 
+export const searchProjectsAndTasks = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+        if (query.length < 2) {
+            res.status(200).json({ query, projects: [], tasks: [] });
+            return;
+        }
+
+        const userId = req.user?.userId;
+        const role = req.user?.role;
+        const canViewAll = role === 'Manager' || role === 'Admin';
+
+        const [projects, tasks] = await Promise.all([
+            prisma.project.findMany({
+                where: {
+                    is_active: true,
+                    name: { contains: query, mode: 'insensitive' },
+                },
+                select: { id: true, name: true },
+                orderBy: { name: 'asc' },
+                take: 8,
+            }),
+            prisma.timeEntry.findMany({
+                where: {
+                    ...(canViewAll ? {} : { user_id: userId }),
+                    task_description: { contains: query, mode: 'insensitive' },
+                },
+                select: {
+                    task_description: true,
+                    project: { select: { id: true, name: true } },
+                },
+                orderBy: { updated_at: 'desc' },
+                distinct: ['task_description'],
+                take: 8,
+            }),
+        ]);
+
+        res.status(200).json({
+            query,
+            projects,
+            tasks: tasks.map((task) => ({
+                name: task.task_description,
+                project: task.project ? { id: task.project.id, name: task.project.name } : null,
+            })),
+        });
+    } catch (error) {
+        console.error('Failed to search projects and tasks:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const createProject = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { name, description, budget_hours, budget_amount, logo_data } = req.body;

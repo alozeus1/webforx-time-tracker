@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, Plus, Trash2 } from 'lucide-react';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 
 interface ScheduledReportItem {
     id: string;
@@ -20,6 +20,8 @@ const ScheduledReports: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [processingId, setProcessingId] = useState<string | null>(null);
 
     const [form, setForm] = useState({
         frequency: 'weekly',
@@ -32,8 +34,8 @@ const ScheduledReports: React.FC = () => {
         try {
             const res = await api.get<{ reports: ScheduledReportItem[] }>('/scheduled-reports');
             setReports(res.data.reports || []);
-        } catch {
-            setFeedback({ message: 'Failed to load scheduled reports', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to load scheduled reports'), tone: 'error' });
         } finally {
             setLoading(false);
         }
@@ -47,6 +49,7 @@ const ScheduledReports: React.FC = () => {
             setFeedback({ message: 'At least one recipient email required', tone: 'error' });
             return;
         }
+        setCreating(true);
         try {
             await api.post('/scheduled-reports', {
                 frequency: form.frequency,
@@ -58,27 +61,35 @@ const ScheduledReports: React.FC = () => {
             setShowCreate(false);
             setForm({ frequency: 'weekly', day_of_week: '1', recipients: '', report_type: 'summary' });
             void fetchReports();
-        } catch {
-            setFeedback({ message: 'Failed to create scheduled report', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to create scheduled report'), tone: 'error' });
+        } finally {
+            setCreating(false);
         }
     };
 
     const handleDelete = async (id: string) => {
+        setProcessingId(id);
         try {
             await api.delete(`/scheduled-reports/${id}`);
             setFeedback({ message: 'Scheduled report deleted', tone: 'success' });
             void fetchReports();
-        } catch {
-            setFeedback({ message: 'Failed to delete scheduled report', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to delete scheduled report'), tone: 'error' });
+        } finally {
+            setProcessingId(null);
         }
     };
 
     const handleToggle = async (report: ScheduledReportItem) => {
+        setProcessingId(report.id);
         try {
             await api.put(`/scheduled-reports/${report.id}`, { is_active: !report.is_active });
             void fetchReports();
-        } catch {
-            setFeedback({ message: 'Failed to update report', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to update report'), tone: 'error' });
+        } finally {
+            setProcessingId(null);
         }
     };
 
@@ -124,8 +135,8 @@ const ScheduledReports: React.FC = () => {
                             <input className={inputClass} placeholder="Recipients (comma-separated emails)" value={form.recipients} onChange={e => setForm(p => ({ ...p, recipients: e.target.value }))} />
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={handleCreate} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all">Create</button>
-                            <button onClick={() => setShowCreate(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">Cancel</button>
+                            <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60">{creating ? 'Creating...' : 'Create'}</button>
+                            <button onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-60">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -153,10 +164,10 @@ const ScheduledReports: React.FC = () => {
                                     </p>
                                 </div>
                                 <div className="flex gap-1 shrink-0">
-                                    <button onClick={() => handleToggle(r)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${r.is_active ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400'}`}>
+                                    <button onClick={() => handleToggle(r)} disabled={processingId === r.id} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-60 ${r.is_active ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400'}`}>
                                         {r.is_active ? 'Pause' : 'Resume'}
                                     </button>
-                                    <button onClick={() => handleDelete(r.id)} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors"><Trash2 size={16} /></button>
+                                    <button onClick={() => handleDelete(r.id)} disabled={processingId === r.id} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-60"><Trash2 size={16} /></button>
                                 </div>
                             </div>
                         ))}

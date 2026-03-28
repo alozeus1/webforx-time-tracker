@@ -64,6 +64,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         }
 
         const { range = '30d', projectId, queryUserId } = req.query;
+        const selectedProjectId = projectId && projectId !== 'all' ? String(projectId) : null;
 
         // Build where clause
         const whereClause: Prisma.TimeEntryWhereInput = {};
@@ -76,8 +77,8 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         }
 
         // 2. Project filter
-        if (projectId && projectId !== 'all') {
-            whereClause.project_id = String(projectId);
+        if (selectedProjectId) {
+            whereClause.project_id = selectedProjectId;
         }
 
         // 3. Date Range
@@ -110,17 +111,19 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         // Compute Metric Cards
         let totalDurationSec = 0;
         let billableAmount = 0;
-        const projectIds = new Set<string>();
 
         entries.forEach(entry => {
             totalDurationSec += entry.duration;
-            if (entry.project_id) projectIds.add(entry.project_id);
             const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
             billableAmount += (entry.duration / 3600) * rate;
         });
 
         const totalHours = totalDurationSec / 3600;
-        const activeProjectsCount = projectIds.size;
+        const activeProjectsCount = await prisma.project.count({
+            where: selectedProjectId
+                ? { id: selectedProjectId, is_active: true }
+                : { is_active: true },
+        });
         let billableSeconds = 0;
         entries.forEach(entry => {
             if (entry.is_billable !== false) {

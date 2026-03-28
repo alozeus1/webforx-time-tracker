@@ -130,11 +130,13 @@ const Profile: React.FC = () => {
                             </div>
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Email</p>
-                                <p className="mt-2 text-lg font-semibold text-slate-900">{user?.email || 'Loading...'}</p>
+                                <p className="mt-2 break-all text-sm font-semibold leading-relaxed text-slate-900">{user?.email || 'Loading...'}</p>
                             </div>
                             <div>
                                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Role</p>
-                                <p className="mt-2 text-lg font-semibold text-slate-900">{user?.role || 'Loading...'}</p>
+                                <p className="mt-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-700">
+                                    {user?.role || 'Loading...'}
+                                </p>
                             </div>
                             <div className="md:col-span-2">
                                 <p className="text-xs font-bold uppercase tracking-wider text-slate-400">New Password</p>

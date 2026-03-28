@@ -33,6 +33,7 @@ const extractErrorMessage = (error: unknown, fallback: string) =>
         : fallback;
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const emitTimerStateChange = () => window.dispatchEvent(new CustomEvent('wfx:time-entry-changed'));
 
 const Timer: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -230,8 +231,12 @@ const Timer: React.FC = () => {
 
         try {
             if (isRunning) {
+                // Optimistically reset the visual state while stop request is in flight.
+                setTimerStartedAt(null);
+                setTime(0);
                 await api.post('/timers/stop');
                 await loadTimerPageData(true, true);
+                emitTimerStateChange();
             } else {
                 const response = await api.post<ActiveTimerSummary>('/timers/start', {
                     project_id: selectedProject || undefined,
@@ -241,6 +246,7 @@ const Timer: React.FC = () => {
                 });
 
                 syncFromActiveTimer(response.data);
+                emitTimerStateChange();
             }
         } catch (error) {
             console.error(isRunning ? 'Failed to stop timer' : 'Failed to start timer', error);
@@ -250,6 +256,7 @@ const Timer: React.FC = () => {
             if (isRunning && message.toLowerCase().includes('no active timer found')) {
                 // Keep UI in sync if the timer has already been cleared server-side.
                 await loadTimerPageData(true);
+                emitTimerStateChange();
                 alert('Timer was already stopped. The page has been refreshed.');
                 return;
             }

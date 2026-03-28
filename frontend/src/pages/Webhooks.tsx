@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Globe, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import type { WebhookSummary } from '../types/api';
 
 const AVAILABLE_EVENTS = ['timer.started', 'timer.stopped', 'entry.created', 'entry.updated', 'entry.deleted', 'invoice.created', 'invoice.paid'];
@@ -10,6 +10,8 @@ const Webhooks: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [processingId, setProcessingId] = useState<string | null>(null);
 
     const [form, setForm] = useState({ url: '', events: [] as string[] });
 
@@ -17,8 +19,8 @@ const Webhooks: React.FC = () => {
         try {
             const res = await api.get<{ webhooks: WebhookSummary[] }>('/webhooks');
             setWebhooks(res.data.webhooks || []);
-        } catch {
-            setFeedback({ message: 'Failed to load webhooks', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to load webhooks'), tone: 'error' });
         } finally {
             setLoading(false);
         }
@@ -38,24 +40,30 @@ const Webhooks: React.FC = () => {
             setFeedback({ message: 'URL and at least one event required', tone: 'error' });
             return;
         }
+        setCreating(true);
         try {
             await api.post('/webhooks', { url: form.url.trim(), events: form.events });
             setFeedback({ message: 'Webhook created', tone: 'success' });
             setShowCreate(false);
             setForm({ url: '', events: [] });
             void fetchWebhooks();
-        } catch {
-            setFeedback({ message: 'Failed to create webhook', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to create webhook'), tone: 'error' });
+        } finally {
+            setCreating(false);
         }
     };
 
     const handleDelete = async (id: string) => {
+        setProcessingId(id);
         try {
             await api.delete(`/webhooks/${id}`);
             setFeedback({ message: 'Webhook deleted', tone: 'success' });
             void fetchWebhooks();
-        } catch {
-            setFeedback({ message: 'Failed to delete webhook', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to delete webhook'), tone: 'error' });
+        } finally {
+            setProcessingId(null);
         }
     };
 
@@ -100,8 +108,8 @@ const Webhooks: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={handleCreate} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all">Create</button>
-                            <button onClick={() => setShowCreate(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">Cancel</button>
+                            <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60">{creating ? 'Creating...' : 'Create'}</button>
+                            <button onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-60">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -130,7 +138,7 @@ const Webhooks: React.FC = () => {
                                         ))}
                                     </div>
                                 </div>
-                                <button onClick={() => handleDelete(wh.id)} title="Delete webhook" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors shrink-0">
+                                <button onClick={() => handleDelete(wh.id)} disabled={processingId === wh.id} title="Delete webhook" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors shrink-0 disabled:opacity-60">
                                     <Trash2 size={16} />
                                 </button>
                             </div>

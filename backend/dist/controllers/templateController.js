@@ -14,6 +14,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteTemplate = exports.createProjectFromTemplate = exports.createTemplate = exports.listTemplates = void 0;
 const db_1 = __importDefault(require("../config/db"));
+const http_1 = require("../utils/http");
+const parseOptionalInteger = (value) => {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isFinite(parsed) ? parsed : null;
+};
+const parseOptionalNumber = (value) => {
+    if (value === undefined || value === null || value === '') {
+        return null;
+    }
+    const parsed = Number.parseFloat(String(value));
+    return Number.isFinite(parsed) ? parsed : null;
+};
 const listTemplates = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const templates = yield db_1.default.projectTemplate.findMany({
@@ -24,35 +39,45 @@ const listTemplates = (_req, res) => __awaiter(void 0, void 0, void 0, function*
     }
     catch (error) {
         console.error('Failed to list templates:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        (0, http_1.sendApiError)(res, 500, 'TEMPLATE_LIST_FAILED', 'Internal server error');
     }
 });
 exports.listTemplates = listTemplates;
 const createTemplate = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c, _d, _e, _f, _g;
     try {
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.userId;
         if (!userId) {
-            res.status(401).json({ message: 'Authenticated user required' });
+            (0, http_1.sendApiError)(res, 401, 'AUTH_REQUIRED', 'Authenticated user required');
             return;
         }
         const name = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.name) === 'string' ? req.body.name.trim() : '';
         if (!name) {
-            res.status(400).json({ message: 'Template name is required' });
+            (0, http_1.sendApiError)(res, 400, 'VALIDATION_ERROR', 'Template name is required');
+            return;
+        }
+        const budgetHours = parseOptionalInteger((_c = req.body) === null || _c === void 0 ? void 0 : _c.budget_hours);
+        if (((_d = req.body) === null || _d === void 0 ? void 0 : _d.budget_hours) !== undefined && budgetHours === null) {
+            (0, http_1.sendApiError)(res, 400, 'VALIDATION_ERROR', 'budget_hours must be a valid integer');
+            return;
+        }
+        const budgetAmount = parseOptionalNumber((_e = req.body) === null || _e === void 0 ? void 0 : _e.budget_amount);
+        if (((_f = req.body) === null || _f === void 0 ? void 0 : _f.budget_amount) !== undefined && budgetAmount === null) {
+            (0, http_1.sendApiError)(res, 400, 'VALIDATION_ERROR', 'budget_amount must be a valid number');
             return;
         }
         const existing = yield db_1.default.projectTemplate.findUnique({ where: { name } });
         if (existing) {
-            res.status(409).json({ message: 'Template name already exists' });
+            (0, http_1.sendApiError)(res, 409, 'TEMPLATE_EXISTS', 'Template name already exists');
             return;
         }
         const template = yield db_1.default.projectTemplate.create({
             data: {
                 name,
-                description: req.body.description || null,
+                description: typeof ((_g = req.body) === null || _g === void 0 ? void 0 : _g.description) === 'string' && req.body.description.trim() ? req.body.description.trim() : null,
                 default_billable: req.body.default_billable !== false,
-                budget_hours: req.body.budget_hours ? parseInt(req.body.budget_hours) : null,
-                budget_amount: req.body.budget_amount ? parseFloat(req.body.budget_amount) : null,
+                budget_hours: budgetHours,
+                budget_amount: budgetAmount,
                 tag_ids: Array.isArray(req.body.tag_ids) ? req.body.tag_ids : [],
                 created_by: userId,
             },
@@ -61,7 +86,7 @@ const createTemplate = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
     catch (error) {
         console.error('Failed to create template:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        (0, http_1.sendApiError)(res, 500, 'TEMPLATE_CREATE_FAILED', 'Internal server error');
     }
 });
 exports.createTemplate = createTemplate;
@@ -71,17 +96,17 @@ const createProjectFromTemplate = (req, res) => __awaiter(void 0, void 0, void 0
         const templateId = req.params.id;
         const template = yield db_1.default.projectTemplate.findUnique({ where: { id: templateId } });
         if (!template) {
-            res.status(404).json({ message: 'Template not found' });
+            (0, http_1.sendApiError)(res, 404, 'TEMPLATE_NOT_FOUND', 'Template not found');
             return;
         }
         const projectName = typeof ((_a = req.body) === null || _a === void 0 ? void 0 : _a.name) === 'string' ? req.body.name.trim() : '';
         if (!projectName) {
-            res.status(400).json({ message: 'Project name is required' });
+            (0, http_1.sendApiError)(res, 400, 'VALIDATION_ERROR', 'Project name is required');
             return;
         }
         const existingProject = yield db_1.default.project.findUnique({ where: { name: projectName } });
         if (existingProject) {
-            res.status(409).json({ message: 'Project name already exists' });
+            (0, http_1.sendApiError)(res, 409, 'PROJECT_EXISTS', 'Project name already exists');
             return;
         }
         const project = yield db_1.default.project.create({
@@ -96,7 +121,7 @@ const createProjectFromTemplate = (req, res) => __awaiter(void 0, void 0, void 0
     }
     catch (error) {
         console.error('Failed to create project from template:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        (0, http_1.sendApiError)(res, 500, 'TEMPLATE_APPLY_FAILED', 'Internal server error');
     }
 });
 exports.createProjectFromTemplate = createProjectFromTemplate;
@@ -108,11 +133,11 @@ const deleteTemplate = (req, res) => __awaiter(void 0, void 0, void 0, function*
     }
     catch (error) {
         if (error.code === 'P2025') {
-            res.status(404).json({ message: 'Template not found' });
+            (0, http_1.sendApiError)(res, 404, 'TEMPLATE_NOT_FOUND', 'Template not found');
             return;
         }
         console.error('Failed to delete template:', error);
-        res.status(500).json({ message: 'Internal server error' });
+        (0, http_1.sendApiError)(res, 500, 'TEMPLATE_DELETE_FAILED', 'Internal server error');
     }
 });
 exports.deleteTemplate = deleteTemplate;

@@ -37,6 +37,12 @@
     flex-shrink: 0;
 }
 
+.logo-icon-large-image {
+    object-fit: contain;
+    background: #ffffff;
+    padding: 5px;
+}
+
 .login-side-brand h2 {
     font-family: var(--font-family-display);
     font-size: clamp(1.3rem, 2.2vw, 1.7rem);

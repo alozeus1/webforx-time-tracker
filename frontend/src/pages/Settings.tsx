@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 
 const devSettings = [
     {
@@ -22,19 +22,23 @@ const devSettings = [
 const Settings: React.FC = () => {
     const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
-    const [notifPrefs, setNotifPrefs] = useState({
-        overtime_alerts: true,
-        budget_warnings: true,
-        approval_requests: true,
-        weekly_summary: false,
-    });
-
-    useEffect(() => {
+    const [notifPrefs, setNotifPrefs] = useState(() => {
+        const defaults = {
+            overtime_alerts: true,
+            budget_warnings: true,
+            approval_requests: true,
+            weekly_summary: false,
+        };
         const stored = localStorage.getItem('wfx-notification-prefs');
-        if (stored) {
-            try { setNotifPrefs(JSON.parse(stored)); } catch { /* ignore */ }
+        if (!stored) {
+            return defaults;
         }
-    }, []);
+        try {
+            return { ...defaults, ...(JSON.parse(stored) as Partial<typeof defaults>) };
+        } catch {
+            return defaults;
+        }
+    });
 
     const toggleNotifPref = (key: keyof typeof notifPrefs) => {
         setNotifPrefs(prev => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import type { PieLabelRenderProps } from 'recharts';
+import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
@@ -17,14 +18,19 @@ function getTrendClasses(trend: string | undefined): string {
 }
 
 const Reports: React.FC = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const initialRange = ['7d', '30d', '90d'].includes(searchParams.get('range') || '') ? (searchParams.get('range') as string) : '30d';
+    const initialProjectId = searchParams.get('projectId') || 'all';
+    const initialQueryUserId = searchParams.get('queryUserId') || 'all';
+
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
     const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
     // Filters
-    const [range, setRange] = useState('30d');
-    const [projectId, setProjectId] = useState('all');
-    const [queryUserId, setQueryUserId] = useState('all');
+    const [range, setRange] = useState(initialRange);
+    const [projectId, setProjectId] = useState(initialProjectId);
+    const [queryUserId, setQueryUserId] = useState(initialQueryUserId);
 
     // Dropdown Data
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -82,6 +88,20 @@ const Reports: React.FC = () => {
     useEffect(() => {
         void fetchAnalytics();
     }, [fetchAnalytics]);
+
+    useEffect(() => {
+        const nextParams = new URLSearchParams();
+        nextParams.set('range', range);
+        if (projectId !== 'all') nextParams.set('projectId', projectId);
+        if (queryUserId !== 'all') nextParams.set('queryUserId', queryUserId);
+        const focusDate = searchParams.get('focusDate');
+        const source = searchParams.get('source');
+        if (focusDate) nextParams.set('focusDate', focusDate);
+        if (source) nextParams.set('source', source);
+        setSearchParams(nextParams, { replace: true });
+        // Intentionally keep this effect driven by active filters only.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId, queryUserId, range, setSearchParams]);
 
     const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
         try {
@@ -210,7 +230,7 @@ const Reports: React.FC = () => {
                                     </span>
                                 </div>
                                 <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.activeProjects}</h3>
-                                <p className="text-xs text-slate-400 mt-1">With logged hours</p>
+                                <p className="text-xs text-slate-400 mt-1">Currently active projects</p>
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">

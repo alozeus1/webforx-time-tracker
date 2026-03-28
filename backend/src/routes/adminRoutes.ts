@@ -5,9 +5,8 @@ import { authenticateToken, requireRole } from '../middlewares/auth';
 const router = Router();
 
 router.use(authenticateToken);
-router.use(requireRole(['Admin']));
 
-router.get('/audit-logs', getAuditLogs);
-router.get('/notifications', getSystemNotifications);
+router.get('/audit-logs', requireRole(['Admin']), getAuditLogs);
+router.get('/notifications', requireRole(['Admin', 'Manager']), getSystemNotifications);
 
 export default router;

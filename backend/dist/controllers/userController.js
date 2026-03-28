@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.deleteUser = exports.updateUser = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMe = void 0;
+exports.updateMe = exports.deleteUser = exports.updateUser = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMyNotifications = exports.getMe = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
 const requireUserId = (req) => {
@@ -47,6 +47,27 @@ const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.getMe = getMe;
+const getMyNotifications = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = requireUserId(req);
+        const requestedLimit = Number.parseInt(String((_a = req.query.limit) !== null && _a !== void 0 ? _a : '20'), 10);
+        const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 20;
+        const notifications = yield db_1.default.notification.findMany({
+            where: { user_id: userId },
+            orderBy: { created_at: 'desc' },
+            take: limit,
+            include: {
+                user: { select: { email: true, first_name: true, last_name: true } },
+            },
+        });
+        res.status(200).json({ notifications });
+    }
+    catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.getMyNotifications = getMyNotifications;
 const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const users = yield db_1.default.user.findMany({

@@ -307,9 +307,13 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
 // --- Timesheet Approvals (Managers/Admins) ---
 export const getPendingTimesheets = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        // Find all time entries with 'pending' status
+        // Only return valid pending entries with positive duration windows.
         const pendingEntries = await prisma.timeEntry.findMany({
-            where: { status: 'pending' },
+            where: {
+                status: 'pending',
+                duration: { gt: 0 },
+                end_time: { gt: new Date('1970-01-01') },
+            },
             include: {
                 user: { select: { id: true, first_name: true, last_name: true, email: true } },
                 project: { select: { name: true } }
@@ -317,7 +321,9 @@ export const getPendingTimesheets = async (req: AuthRequest, res: Response): Pro
             orderBy: { created_at: 'desc' },
         });
 
-        res.status(200).json({ entries: pendingEntries });
+        const saneEntries = pendingEntries.filter((entry) => new Date(entry.end_time).getTime() > new Date(entry.start_time).getTime());
+
+        res.status(200).json({ entries: saneEntries });
     } catch (error) {
         console.error('Failed to get pending timesheets:', error);
         res.status(500).json({ message: 'Internal server error' });

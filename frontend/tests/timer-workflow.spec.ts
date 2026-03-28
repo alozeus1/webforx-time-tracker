@@ -46,7 +46,6 @@ const mockTimerAPIs = async (page: import('@playwright/test').Page, hasActiveTim
     // requests reliably, so we use an exact origin match and route based on URL content.
     await page.route('http://localhost:5005/**', (route) => {
         const url = route.request().url();
-        const method = route.request().method();
 
         if (url.includes('/api/v1/projects')) {
             route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockProjects) });

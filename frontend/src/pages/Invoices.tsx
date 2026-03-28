@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { FileText, Plus, Send, CheckCircle, Trash2, DollarSign } from 'lucide-react';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import type { InvoiceSummary, ProjectSummary } from '../types/api';
 
 const STATUS_STYLES: Record<string, string> = {
@@ -16,6 +16,9 @@ const Invoices: React.FC = () => {
     const [showCreate, setShowCreate] = useState(false);
     const [statusFilter, setStatusFilter] = useState('all');
     const [feedback, setFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const [form, setForm] = useState({
         client_name: '',
@@ -32,8 +35,8 @@ const Invoices: React.FC = () => {
             if (statusFilter !== 'all') params.status = statusFilter;
             const res = await api.get<{ invoices: InvoiceSummary[] }>('/invoices', { params });
             setInvoices(res.data.invoices || []);
-        } catch {
-            setFeedback({ message: 'Failed to load invoices', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to load invoices'), tone: 'error' });
         } finally {
             setLoading(false);
         }
@@ -51,6 +54,7 @@ const Invoices: React.FC = () => {
     }, [fetchInvoices]);
 
     const handleCreate = async () => {
+        setCreating(true);
         try {
             const lineItems = form.line_items
                 .filter(li => li.description && li.hours && li.rate)
@@ -75,28 +79,36 @@ const Invoices: React.FC = () => {
             setShowCreate(false);
             setForm({ client_name: '', project_id: '', tax_rate: '0', notes: '', due_date: '', line_items: [{ description: '', hours: '', rate: '' }] });
             void fetchInvoices();
-        } catch {
-            setFeedback({ message: 'Failed to create invoice', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to create invoice'), tone: 'error' });
+        } finally {
+            setCreating(false);
         }
     };
 
     const updateStatus = async (id: string, status: 'sent' | 'paid') => {
+        setStatusUpdatingId(id);
         try {
             await api.patch(`/invoices/${id}/status`, { status });
             setFeedback({ message: `Invoice marked as ${status}`, tone: 'success' });
             void fetchInvoices();
-        } catch {
-            setFeedback({ message: 'Failed to update status', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to update status'), tone: 'error' });
+        } finally {
+            setStatusUpdatingId(null);
         }
     };
 
     const deleteInvoice = async (id: string) => {
+        setDeletingId(id);
         try {
             await api.delete(`/invoices/${id}`);
             setFeedback({ message: 'Invoice deleted', tone: 'success' });
             void fetchInvoices();
-        } catch {
-            setFeedback({ message: 'Only draft invoices can be deleted', tone: 'error' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Only draft invoices can be deleted'), tone: 'error' });
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -165,7 +177,10 @@ const Invoices: React.FC = () => {
                                 <option value="">No project</option>
                                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
-                            <input className={inputClass} type="number" step="0.01" placeholder="Tax Rate %" value={form.tax_rate} onChange={e => setForm(p => ({ ...p, tax_rate: e.target.value }))} />
+                            <div>
+                                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tax Rate (%)</label>
+                                <input className={`${inputClass} mt-1`} type="number" step="0.01" placeholder="0.00" value={form.tax_rate} onChange={e => setForm(p => ({ ...p, tax_rate: e.target.value }))} />
+                            </div>
                             <input className={inputClass} type="date" placeholder="Due Date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
                         </div>
                         <textarea className={inputClass} rows={2} placeholder="Notes (optional)" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
@@ -181,8 +196,8 @@ const Invoices: React.FC = () => {
                             <button onClick={addLineItem} className="text-sm text-primary font-medium hover:underline">+ Add line item</button>
                         </div>
                         <div className="flex gap-2 pt-2">
-                            <button onClick={handleCreate} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all">Create</button>
-                            <button onClick={() => setShowCreate(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all">Cancel</button>
+                            <button onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-70 disabled:cursor-not-allowed">{creating ? 'Creating...' : 'Create'}</button>
+                            <button onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-70">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -219,12 +234,12 @@ const Invoices: React.FC = () => {
                                     <div className="flex gap-1">
                                         {inv.status === 'draft' && (
                                             <>
-                                                <button onClick={() => updateStatus(inv.id, 'sent')} title="Mark as Sent" className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 transition-colors"><Send size={16} /></button>
-                                                <button onClick={() => deleteInvoice(inv.id)} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors"><Trash2 size={16} /></button>
+                                                <button onClick={() => updateStatus(inv.id, 'sent')} disabled={statusUpdatingId === inv.id} title="Mark as Sent" className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 transition-colors disabled:opacity-50"><Send size={16} /></button>
+                                                <button onClick={() => deleteInvoice(inv.id)} disabled={deletingId === inv.id} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
                                             </>
                                         )}
                                         {inv.status === 'sent' && (
-                                            <button onClick={() => updateStatus(inv.id, 'paid')} title="Mark as Paid" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600 transition-colors"><CheckCircle size={16} /></button>
+                                            <button onClick={() => updateStatus(inv.id, 'paid')} disabled={statusUpdatingId === inv.id} title="Mark as Paid" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600 transition-colors disabled:opacity-50"><CheckCircle size={16} /></button>
                                         )}
                                     </div>
                                 </div>

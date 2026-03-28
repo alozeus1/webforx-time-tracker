@@ -291,16 +291,21 @@ exports.pingTimer = pingTimer;
 // --- Timesheet Approvals (Managers/Admins) ---
 const getPendingTimesheets = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Find all time entries with 'pending' status
+        // Only return valid pending entries with positive duration windows.
         const pendingEntries = yield db_1.default.timeEntry.findMany({
-            where: { status: 'pending' },
+            where: {
+                status: 'pending',
+                duration: { gt: 0 },
+                end_time: { gt: new Date('1970-01-01') },
+            },
             include: {
                 user: { select: { id: true, first_name: true, last_name: true, email: true } },
                 project: { select: { name: true } }
             },
             orderBy: { created_at: 'desc' },
         });
-        res.status(200).json({ entries: pendingEntries });
+        const saneEntries = pendingEntries.filter((entry) => new Date(entry.end_time).getTime() > new Date(entry.start_time).getTime());
+        res.status(200).json({ entries: saneEntries });
     }
     catch (error) {
         console.error('Failed to get pending timesheets:', error);

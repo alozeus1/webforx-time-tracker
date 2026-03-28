@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarX } from 'lucide-react';
-import api from '../services/api';
-import type { ActiveTimerSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
+import api, { getApiErrorMessage } from '../services/api';
+import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 
 interface ActivityItem {
     id: string;
@@ -33,35 +33,77 @@ const toWeekNumber = (date: Date) => {
 
 const formatDuration = (seconds: number) => {
     const safe = Math.max(seconds, 0);
+    if (safe > 0 && safe < 60) {
+        return '1m';
+    }
     const h = Math.floor(safe / 3600);
     const m = Math.floor((safe % 3600) / 60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
 };
 
+const getEntryDurationSeconds = (entry: TimeEntrySummary) => {
+    const storedDuration = Number(entry.duration || 0);
+    if (storedDuration > 0) {
+        return storedDuration;
+    }
+
+    const start = new Date(entry.start_time).getTime();
+    const end = new Date(entry.end_time).getTime();
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+        return 0;
+    }
+
+    return Math.floor((end - start) / 1000);
+};
+
+const toLocalInputValue = (value: Date) => {
+    const local = new Date(value);
+    local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+    return local.toISOString().slice(0, 16);
+};
+
 const Timeline: React.FC = () => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [activeTimer, setActiveTimer] = useState<ActiveTimerSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [currentDate, setCurrentDate] = useState(() => getStartOfDay(new Date()));
     const [showOnlyCurrentDay, setShowOnlyCurrentDay] = useState(true);
+    const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+    const [editorOpen, setEditorOpen] = useState(false);
+    const [editorSaving, setEditorSaving] = useState(false);
+    const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+    const [entryForm, setEntryForm] = useState({
+        task_description: '',
+        project_id: '',
+        start_time: '',
+        end_time: '',
+        notes: '',
+    });
+
+    const loadTimeline = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [timerResponse, projectResponse] = await Promise.all([
+                api.get<TimerEntriesResponse>('/timers/me'),
+                api.get<ProjectSummary[]>('/projects'),
+            ]);
+            setEntries(timerResponse.data.entries || []);
+            setActiveTimer(timerResponse.data.activeTimer || null);
+            setProjects(projectResponse.data || []);
+        } catch (error) {
+            console.error('Failed to load timeline:', error);
+            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to load timeline entries') });
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
     useEffect(() => {
-        const loadTimeline = async () => {
-            setLoading(true);
-            try {
-                const response = await api.get<TimerEntriesResponse>('/timers/me');
-                setEntries(response.data.entries || []);
-                setActiveTimer(response.data.activeTimer || null);
-            } catch (error) {
-                console.error('Failed to load timeline:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         void loadTimeline();
-    }, []);
+    }, [loadTimeline]);
 
     const weekStart = useMemo(() => getStartOfWeek(currentDate), [currentDate]);
     const weekDays = useMemo(
@@ -130,7 +172,7 @@ const Timeline: React.FC = () => {
 
     const today = getStartOfDay(new Date());
     const isCurrentDateToday = dayStart.getTime() === today.getTime();
-    const totalSeconds = displayedEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0);
+    const totalSeconds = displayedEntries.reduce((sum, entry) => sum + getEntryDurationSeconds(entry), 0);
     const currentMinutes = new Date().getHours() * 60 + new Date().getMinutes();
     const currentLineTopPercent = Math.min((currentMinutes / (24 * 60)) * 100, 100);
 
@@ -141,6 +183,101 @@ const Timeline: React.FC = () => {
             return getStartOfDay(next);
         });
     };
+
+    const openCreateEntry = useCallback(() => {
+        const defaultStart = new Date(currentDate);
+        defaultStart.setHours(9, 0, 0, 0);
+        const defaultEnd = new Date(defaultStart);
+        defaultEnd.setHours(defaultStart.getHours() + 1);
+        setEditingEntryId(null);
+        setEntryForm({
+            task_description: '',
+            project_id: '',
+            start_time: toLocalInputValue(defaultStart),
+            end_time: toLocalInputValue(defaultEnd),
+            notes: '',
+        });
+        setEditorOpen(true);
+    }, [currentDate]);
+
+    const openEditEntry = (entry: TimeEntrySummary) => {
+        setEditingEntryId(entry.id);
+        setEntryForm({
+            task_description: entry.task_description || '',
+            project_id: entry.project?.id || '',
+            start_time: toLocalInputValue(new Date(entry.start_time)),
+            end_time: toLocalInputValue(new Date(entry.end_time)),
+            notes: '',
+        });
+        setEditorOpen(true);
+    };
+
+    const handleSaveEntry = async () => {
+        if (!entryForm.task_description.trim()) {
+            setFeedback({ tone: 'error', message: 'Task description is required.' });
+            return;
+        }
+
+        const start = new Date(entryForm.start_time);
+        const end = new Date(entryForm.end_time);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+            setFeedback({ tone: 'error', message: 'End time must be after start time.' });
+            return;
+        }
+
+        setEditorSaving(true);
+        try {
+            const payload = {
+                task_description: entryForm.task_description.trim(),
+                project_id: entryForm.project_id || undefined,
+                start_time: start.toISOString(),
+                end_time: end.toISOString(),
+                notes: entryForm.notes.trim() || undefined,
+            };
+
+            if (editingEntryId) {
+                await api.put(`/timers/${editingEntryId}`, payload);
+                setFeedback({ tone: 'success', message: 'Entry updated successfully.' });
+            } else {
+                await api.post('/timers/manual', payload);
+                setFeedback({ tone: 'success', message: 'Entry added successfully.' });
+            }
+
+            setEditorOpen(false);
+            await loadTimeline();
+            window.dispatchEvent(new CustomEvent('wfx:time-entry-changed'));
+        } catch (error) {
+            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to save entry') });
+        } finally {
+            setEditorSaving(false);
+        }
+    };
+
+    const resolveProjectFilter = (sourceEntries: TimeEntrySummary[]) => sourceEntries.find((entry) => entry.project?.id)?.project?.id;
+
+    const openAnalytics = (source: 'timeline' | 'weekly-summary', sourceEntries: TimeEntrySummary[]) => {
+        const params = new URLSearchParams();
+        params.set('range', showOnlyCurrentDay ? '7d' : '30d');
+        params.set('focusDate', dayStart.toISOString().slice(0, 10));
+        params.set('source', source);
+        const projectFilter = resolveProjectFilter(sourceEntries);
+        if (projectFilter) {
+            params.set('projectId', projectFilter);
+        }
+        navigate(`/reports?${params.toString()}`);
+    };
+
+    useEffect(() => {
+        if (loading) {
+            return;
+        }
+        if (searchParams.get('action') === 'new') {
+            openCreateEntry();
+            const nextParams = new URLSearchParams(searchParams);
+            nextParams.delete('action');
+            setSearchParams(nextParams, { replace: true });
+        }
+    }, [loading, openCreateEntry, searchParams, setSearchParams]);
 
     return (
         <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50 dark:bg-slate-900">
@@ -185,13 +322,19 @@ const Timeline: React.FC = () => {
                     </button>
                     <button
                         className="flex items-center gap-2 bg-primary px-6 py-2 rounded-lg text-sm font-bold text-white shadow-lg shadow-primary/30 hover:bg-primary/90 transition-all"
-                        onClick={() => navigate('/timer')}
+                        onClick={openCreateEntry}
                     >
                         <span className="material-symbols-outlined text-[18px]">add</span>
                         New Task
                     </button>
                 </div>
             </div>
+
+            {feedback && (
+                <div className={`mx-4 mt-4 rounded-lg px-4 py-3 text-sm font-medium md:mx-6 ${feedback.tone === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                    {feedback.message}
+                </div>
+            )}
 
             <div className="flex flex-1 overflow-hidden">
                 <main className="flex flex-1 flex-col overflow-y-auto p-4 md:p-6">
@@ -217,7 +360,7 @@ const Timeline: React.FC = () => {
                             </div>
                             <button
                                 className="text-sm font-semibold text-primary hover:underline"
-                                onClick={() => navigate('/reports')}
+                                onClick={() => openAnalytics('timeline', displayedEntries)}
                             >
                                 View Analytics
                             </button>
@@ -246,7 +389,7 @@ const Timeline: React.FC = () => {
                                 </p>
                                 <button
                                     className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
-                                    onClick={() => navigate('/timer')}
+                                    onClick={openCreateEntry}
                                 >
                                     <span className="material-symbols-outlined text-base">add</span>
                                     Add Entry
@@ -278,15 +421,15 @@ const Timeline: React.FC = () => {
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                                                {formatDuration(entry.duration || 0)}
+                                                {formatDuration(getEntryDurationSeconds(entry))}
                                             </span>
                                             {(entry as unknown as Record<string, unknown>).is_billable === false && (
                                                 <span className="text-[10px] font-semibold text-slate-400">Non-billable</span>
                                             )}
                                             <button
                                                 className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
-                                                title="Edit in Timer"
-                                                onClick={() => navigate(`/timer?task=${encodeURIComponent(entry.task_description)}${entry.project?.id ? `&projectId=${encodeURIComponent(entry.project.id)}` : ''}`)}
+                                                title="Edit entry"
+                                                onClick={() => openEditEntry(entry)}
                                             >
                                                 <span className="material-symbols-outlined text-[18px]">edit</span>
                                             </button>
@@ -299,7 +442,7 @@ const Timeline: React.FC = () => {
                         <div className="border-t border-slate-100 dark:border-slate-700 px-5 py-4">
                             <button
                                 className="w-full rounded-lg border border-dashed border-slate-300 dark:border-slate-600 px-4 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                                onClick={() => navigate('/timer')}
+                                onClick={openCreateEntry}
                             >
                                 + Add Entry
                             </button>
@@ -359,12 +502,12 @@ const Timeline: React.FC = () => {
                         <div className="bg-primary/5 rounded-xl p-4 border border-primary/20 text-center">
                             <span className="material-symbols-outlined text-primary text-4xl mb-2">stars</span>
                             <h4 className="font-bold text-slate-900 dark:text-slate-100 mb-1">Weekly Summary</h4>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
-                                You&apos;ve logged {formatDuration(weekEntries.reduce((sum, entry) => sum + (entry.duration || 0), 0))} this week.
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                                You&apos;ve logged {formatDuration(weekEntries.reduce((sum, entry) => sum + getEntryDurationSeconds(entry), 0))} this week.
                             </p>
                             <button
                                 className="w-full py-2 bg-primary text-white text-xs font-bold rounded-lg hover:bg-primary/90 transition-all"
-                                onClick={() => navigate('/reports')}
+                                onClick={() => openAnalytics('weekly-summary', weekEntries)}
                             >
                                 View Analytics
                             </button>
@@ -372,6 +515,77 @@ const Timeline: React.FC = () => {
                     </section>
                 </aside>
             </div>
+
+            {editorOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+                    <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                        <div className="mb-4">
+                            <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Timeline Entry</p>
+                            <h3 className="text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">{editingEntryId ? 'Edit Entry' : 'Add Entry'}</h3>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Task</label>
+                                <input
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                                    value={entryForm.task_description}
+                                    onChange={(event) => setEntryForm((prev) => ({ ...prev, task_description: event.target.value }))}
+                                    placeholder="What did you work on?"
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Project</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                                    value={entryForm.project_id}
+                                    onChange={(event) => setEntryForm((prev) => ({ ...prev, project_id: event.target.value }))}
+                                >
+                                    <option value="">No project</option>
+                                    {projects.map((project) => (
+                                        <option key={project.id} value={project.id}>{project.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <div>
+                                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">Start Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                                        value={entryForm.start_time}
+                                        onChange={(event) => setEntryForm((prev) => ({ ...prev, start_time: event.target.value }))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">End Time</label>
+                                    <input
+                                        type="datetime-local"
+                                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                                        value={entryForm.end_time}
+                                        onChange={(event) => setEntryForm((prev) => ({ ...prev, end_time: event.target.value }))}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="mt-5 flex justify-end gap-2">
+                            <button
+                                className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                                onClick={() => setEditorOpen(false)}
+                                disabled={editorSaving}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-70"
+                                onClick={() => void handleSaveEntry()}
+                                disabled={editorSaving}
+                            >
+                                {editorSaving ? 'Saving...' : editingEntryId ? 'Save Changes' : 'Add Entry'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
