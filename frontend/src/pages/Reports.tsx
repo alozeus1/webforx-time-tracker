@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import type { PieLabelRenderProps } from 'recharts';
 import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
@@ -277,7 +278,7 @@ const Reports: React.FC = () => {
                                                     outerRadius={80}
                                                     innerRadius={45}
                                                     paddingAngle={2}
-                                                    label={(props: Record<string, unknown>) => `${props.name ?? ''} (${((Number(props.percent) || 0) * 100).toFixed(0)}%)`}
+                                                    label={({ name, percent }: PieLabelRenderProps) => `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                                                 >
                                                     {analytics?.projectDistribution.slice(0, 6).map((_entry, idx) => (
                                                         <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
