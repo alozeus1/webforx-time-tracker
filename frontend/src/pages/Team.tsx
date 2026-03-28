@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import type { BulkUserImportResponse, ProjectSummary, RoleOption, UserSummary } from '../types/api';
 import { getStoredRole } from '../utils/session';
 import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
@@ -129,12 +129,19 @@ const Team: React.FC = () => {
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            await Promise.all([loadTeam(), loadRoles(), loadProjects(), loadTeamHours()]);
+            await Promise.all([loadTeam(), loadRoles()]);
             setLoading(false);
+            void loadTeamHours();
         };
 
         void load();
-    }, [loadProjects, loadRoles, loadTeam, loadTeamHours]);
+    }, [loadRoles, loadTeam, loadTeamHours]);
+
+    useEffect(() => {
+        if (importModalOpen && canManageTeam && projects.length === 0) {
+            void loadProjects();
+        }
+    }, [canManageTeam, importModalOpen, loadProjects, projects.length]);
 
     const activeCount = team.filter((user) => user.is_active).length;
     const adminsCount = team.filter((user) => user.role?.name === 'Admin').length;
@@ -380,10 +387,7 @@ const Team: React.FC = () => {
             closeModal();
         } catch (error) {
             console.error('Failed to save team member', error);
-            const message =
-                typeof (error as { response?: { data?: { message?: string } } })?.response?.data?.message === 'string'
-                    ? (error as { response: { data: { message: string } } }).response.data.message
-                    : 'Failed to save team member';
+            const message = getApiErrorMessage(error, 'Failed to save team member');
             setFeedback({ message, tone: 'error' });
         } finally {
             setSaving(false);
@@ -826,6 +830,16 @@ const Team: React.FC = () => {
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
+
+                {feedback && (
+                    <div className={`mb-4 rounded-xl px-4 py-3 text-sm font-medium ${
+                        feedback.tone === 'success'
+                            ? 'border border-emerald-200 bg-emerald-50 text-emerald-800'
+                            : 'border border-rose-200 bg-rose-50 text-rose-800'
+                    }`}>
+                        {feedback.message}
+                    </div>
+                )}
 
                 <form className="space-y-4" onSubmit={(event) => void handleSaveMember(event)}>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

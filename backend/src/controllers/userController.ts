@@ -114,6 +114,22 @@ const resolveCanonicalRoleName = (rawRole: string): string => {
 
 const looksLikeEmail = (value: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
+const hasDatabaseCapacityError = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return /connection pool/i.test(message) || /Timed out fetching a new connection/i.test(message);
+};
+
+const respondWithUserServiceError = (res: Response, error: unknown, fallbackLogMessage: string) => {
+    if (hasDatabaseCapacityError(error)) {
+        console.error(`${fallbackLogMessage}: database capacity temporarily unavailable`, error);
+        res.status(503).json({ message: 'The service is busy right now. Please try again in a moment.' });
+        return;
+    }
+
+    console.error(fallbackLogMessage, error);
+    res.status(500).json({ message: 'Internal server error' });
+};
+
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user = await prisma.user.findUnique({
@@ -185,7 +201,7 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
         });
         res.status(200).json(users);
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to load users');
     }
 };
 
@@ -198,7 +214,7 @@ export const getRoles = async (_req: Request, res: Response): Promise<void> => {
 
         res.status(200).json({ roles });
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to load roles');
     }
 };
 
@@ -281,7 +297,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
 
         res.status(201).json(newUser);
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to create user');
     }
 };
 
@@ -491,7 +507,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
             failed,
         });
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to import users');
     }
 };
 
@@ -574,7 +590,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
 
         res.status(200).json(updatedUser);
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to update user');
     }
 };
 
@@ -620,7 +636,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
         res.status(200).json({ message: 'User deactivated successfully' });
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to delete user');
     }
 };
 

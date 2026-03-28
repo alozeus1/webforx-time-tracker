@@ -86,6 +86,19 @@ const resolveCanonicalRoleName = (rawRole) => {
     return ROLE_ALIAS_TO_CANONICAL[normalized] || rawRole.trim();
 };
 const looksLikeEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+const hasDatabaseCapacityError = (error) => {
+    const message = error instanceof Error ? error.message : String(error !== null && error !== void 0 ? error : '');
+    return /connection pool/i.test(message) || /Timed out fetching a new connection/i.test(message);
+};
+const respondWithUserServiceError = (res, error, fallbackLogMessage) => {
+    if (hasDatabaseCapacityError(error)) {
+        console.error(`${fallbackLogMessage}: database capacity temporarily unavailable`, error);
+        res.status(503).json({ message: 'The service is busy right now. Please try again in a moment.' });
+        return;
+    }
+    console.error(fallbackLogMessage, error);
+    res.status(500).json({ message: 'Internal server error' });
+};
 const getMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const user = yield db_1.default.user.findUnique({
@@ -158,7 +171,7 @@ const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         res.status(200).json(users);
     }
     catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to load users');
     }
 });
 exports.getAllUsers = getAllUsers;
@@ -171,7 +184,7 @@ const getRoles = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
         res.status(200).json({ roles });
     }
     catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to load roles');
     }
 });
 exports.getRoles = getRoles;
@@ -246,7 +259,7 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.status(201).json(newUser);
     }
     catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to create user');
     }
 });
 exports.createUser = createUser;
@@ -431,7 +444,7 @@ const importUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
         });
     }
     catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to import users');
     }
 });
 exports.importUsers = importUsers;
@@ -505,7 +518,7 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.status(200).json(updatedUser);
     }
     catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to update user');
     }
 });
 exports.updateUser = updateUser;
@@ -547,7 +560,7 @@ const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         res.status(200).json({ message: 'User deactivated successfully' });
     }
     catch (error) {
-        res.status(500).json({ message: 'Internal server error' });
+        respondWithUserServiceError(res, error, 'Failed to delete user');
     }
 });
 exports.deleteUser = deleteUser;
