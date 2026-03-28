@@ -71,7 +71,7 @@ const Team: React.FC = () => {
     const [importFileName, setImportFileName] = useState('');
     const [lastImportResult, setLastImportResult] = useState<BulkUserImportResponse | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
 
     const [teamHours, setTeamHours] = useState<TeamHoursEntry[]>([]);
 
@@ -144,6 +144,7 @@ const Team: React.FC = () => {
     }, [canManageTeam, importModalOpen, loadProjects, projects.length]);
 
     const activeCount = team.filter((user) => user.is_active).length;
+    const inactiveCount = team.length - activeCount;
     const adminsCount = team.filter((user) => user.role?.name === 'Admin').length;
     const defaultEmployeeRole = roles.find((item) => item.name === 'Employee')?.name || roles[0]?.name || 'Employee';
 
@@ -420,7 +421,7 @@ const Team: React.FC = () => {
 
     const handleDeleteUser = async (user: UserSummary) => {
         if (!canManageTeam) return;
-        if (!window.confirm(`Are you sure you want to remove ${user.first_name} ${user.last_name}? This will deactivate their account.`)) return;
+        if (!window.confirm(`Are you sure you want to deactivate ${user.first_name} ${user.last_name}? This will hide them from the active team roster.`)) return;
 
         setSaving(true);
         setFeedback(null);
@@ -428,8 +429,13 @@ const Team: React.FC = () => {
 
         try {
             await api.delete(`/users/${user.id}`);
-            await loadTeam();
-            setFeedback({ message: `${user.first_name} ${user.last_name} has been deactivated`, tone: 'success' });
+            setTeam((previous) => previous.map((member) => (
+                member.id === user.id
+                    ? { ...member, is_active: false }
+                    : member
+            )));
+            setStatusFilter('active');
+            setFeedback({ message: `${user.first_name} ${user.last_name} has been deactivated and removed from the active roster`, tone: 'success' });
         } catch (error) {
             console.error('Failed to delete team member', error);
             setFeedback({ message: 'Failed to remove team member', tone: 'error' });
@@ -574,12 +580,12 @@ const Team: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <span className="text-sm font-medium text-slate-500">Total Members</span>
-                    <div className="text-3xl font-bold mt-3">{loading ? '...' : team.length}</div>
+                    <span className="text-sm font-medium text-slate-500">Active Members</span>
+                    <div className="text-3xl font-bold mt-3">{loading ? '...' : activeCount}</div>
                 </div>
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                    <span className="text-sm font-medium text-slate-500">Currently Active</span>
-                    <div className="text-3xl font-bold mt-3">{loading ? '...' : activeCount}</div>
+                    <span className="text-sm font-medium text-slate-500">Deactivated Accounts</span>
+                    <div className="text-3xl font-bold mt-3">{loading ? '...' : inactiveCount}</div>
                 </div>
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                     <span className="text-sm font-medium text-slate-500">Admin Accounts</span>
@@ -606,7 +612,12 @@ const Team: React.FC = () => {
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-visible">
                     <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                        <h3 className="text-lg font-bold">Team Directory</h3>
+                        <div>
+                            <h3 className="text-lg font-bold">Team Directory</h3>
+                            <p className="mt-1 text-xs text-slate-500">
+                                Deactivated accounts are hidden from the default roster. Use the filter to review or restore them.
+                            </p>
+                        </div>
                         <div className="flex items-center gap-2">
                             <input
                                 type="text"
@@ -620,7 +631,7 @@ const Team: React.FC = () => {
                                 onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
                                 className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-600 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                             >
-                                <option value="all">All</option>
+                                <option value="all">All Accounts</option>
                                 <option value="active">Active</option>
                                 <option value="inactive">Inactive</option>
                             </select>
@@ -690,7 +701,7 @@ const Team: React.FC = () => {
                                             onClick={() => void handleDeleteUser(user)}
                                             disabled={saving}
                                         >
-                                            Remove
+                                            Deactivate
                                         </button>
                                     </div>
                                 )}
@@ -772,7 +783,7 @@ const Team: React.FC = () => {
                                                         disabled={!canManageTeam || saving}
                                                     >
                                                         <span className="material-symbols-outlined text-base">delete</span>
-                                                        Remove User
+                                                        Deactivate User
                                                     </button>
                                                 </div>
                                             )}

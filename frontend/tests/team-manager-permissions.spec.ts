@@ -16,6 +16,8 @@ test.describe('Team Manager Permissions', () => {
 
     test('manager can add, edit, and remove team members without losing focus while typing', async ({ page }) => {
         await expect(page.getByRole('button', { name: 'Add Team Member' })).toBeVisible();
+        await expect(page.locator('div').filter({ hasText: /^Active Members2$/ }).first()).toBeVisible();
+        await expect(page.locator('div').filter({ hasText: /^Deactivated Accounts0$/ }).first()).toBeVisible();
 
         await page.getByRole('button', { name: 'Add Team Member' }).click();
 
@@ -54,7 +56,7 @@ test.describe('Team Manager Permissions', () => {
         await roleSelect.selectOption('Employee');
         await dialog.getByRole('button', { name: 'Add Member' }).click();
 
-        await expect(page.getByText('Team member added successfully')).toBeVisible();
+        await expect(page.getByText('Team member added successfully').first()).toBeVisible();
 
         const createdMemberActions = page.getByRole('button', { name: /Actions for Miles Carter/ });
         await expect(createdMemberActions).toBeVisible();
@@ -70,7 +72,7 @@ test.describe('Team Manager Permissions', () => {
         await page.getByLabel('Role').selectOption('Manager');
         await editDialog.getByRole('button', { name: 'Save Changes' }).click();
 
-        await expect(page.getByText('Team member updated successfully')).toBeVisible();
+        await expect(page.getByText('Team member updated successfully').first()).toBeVisible();
 
         const updatedMemberRow = page.locator('table tbody tr').filter({ hasText: 'Mila Carter' }).first();
         await expect(updatedMemberRow).toBeVisible();
@@ -78,10 +80,16 @@ test.describe('Team Manager Permissions', () => {
 
         page.once('dialog', (dialogEvent) => dialogEvent.accept());
         await page.getByRole('button', { name: /Actions for Mila Carter/ }).click();
-        await page.getByRole('button', { name: 'Remove User' }).click();
+        await page.getByRole('button', { name: 'Deactivate User' }).click();
 
-        await expect(page.getByText('Mila Carter has been deactivated')).toBeVisible();
-        await expect(updatedMemberRow).toContainText('Inactive');
-        await expect(updatedMemberRow.getByRole('button', { name: /Actions for Mila Carter/ })).toBeVisible();
+        await expect(page.getByText('Mila Carter has been deactivated and removed from the active roster').first()).toBeVisible();
+        await expect(page.locator('table tbody tr').filter({ hasText: 'Mila Carter' })).toHaveCount(0);
+        await expect(page.locator('div').filter({ hasText: /^Active Members2$/ }).first()).toBeVisible();
+        await expect(page.locator('div').filter({ hasText: /^Deactivated Accounts1$/ }).first()).toBeVisible();
+
+        await page.locator('select').first().selectOption('inactive');
+        const inactiveMemberRow = page.locator('table tbody tr').filter({ hasText: 'Mila Carter' }).first();
+        await expect(inactiveMemberRow).toBeVisible();
+        await expect(inactiveMemberRow).toContainText('Inactive');
     });
 });
