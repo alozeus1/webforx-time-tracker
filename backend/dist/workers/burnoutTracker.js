@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.startBurnoutTracker = exports.checkBurnout = void 0;
 const node_cron_1 = __importDefault(require("node-cron"));
 const db_1 = __importDefault(require("../config/db"));
+const wellbeingService_1 = require("../services/wellbeingService");
 const checkBurnout = () => __awaiter(void 0, void 0, void 0, function* () {
     console.log('[Worker] Running Burnout Metrics Checks...');
     try {
@@ -33,8 +34,20 @@ const checkBurnout = () => __awaiter(void 0, void 0, void 0, function* () {
                 totalSecondsLogged += entry.duration;
             }
             const totalHours = totalSecondsLogged / 3600;
-            if (totalHours > 50) {
-                console.log(`[Worker] User ${user.email} exceeded 50 hours (${totalHours.toFixed(1)}h). Dispatching Burnout Alert.`);
+            if (totalHours > wellbeingService_1.BURNOUT_THRESHOLD_HOURS) {
+                const existingAlert = yield db_1.default.notification.findFirst({
+                    where: {
+                        user_id: user.id,
+                        type: 'burnout_alert',
+                        created_at: {
+                            gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+                        },
+                    },
+                });
+                if (existingAlert) {
+                    continue;
+                }
+                console.log(`[Worker] User ${user.email} exceeded ${wellbeingService_1.BURNOUT_THRESHOLD_HOURS} hours (${totalHours.toFixed(1)}h). Dispatching Burnout Alert.`);
                 yield db_1.default.notification.create({
                     data: {
                         user_id: user.id,

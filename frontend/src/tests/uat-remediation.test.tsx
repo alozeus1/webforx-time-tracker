@@ -289,6 +289,20 @@ describe('UAT remediation regressions', () => {
                     },
                 });
             }
+            if (url === '/users/me/wellbeing') {
+                return Promise.resolve({
+                    data: {
+                        sevenDayHours: 8,
+                        averageDailyHours: 1.14,
+                        burnoutThresholdHours: 50,
+                        cautionThresholdHours: 45,
+                        hoursUntilBurnout: 42,
+                        weeklyHourLimit: 40,
+                        status: 'balanced',
+                        workloadAlerts: [],
+                    },
+                });
+            }
             if (url === '/users/me/notifications') return Promise.resolve({ data: { notifications: [] } });
             return Promise.resolve({ data: {} });
         });

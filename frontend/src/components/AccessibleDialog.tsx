@@ -29,6 +29,11 @@ const AccessibleDialog: React.FC<AccessibleDialogProps> = ({
 }) => {
     const panelRef = useRef<HTMLDivElement | null>(null);
     const lastFocusedRef = useRef<HTMLElement | null>(null);
+    const onCloseRef = useRef(onClose);
+
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     useEffect(() => {
         if (!isOpen) {
@@ -58,7 +63,7 @@ const AccessibleDialog: React.FC<AccessibleDialogProps> = ({
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
                 event.preventDefault();
-                onClose();
+                onCloseRef.current();
                 return;
             }
 
@@ -104,7 +109,7 @@ const AccessibleDialog: React.FC<AccessibleDialogProps> = ({
             document.removeEventListener('keydown', onKeyDown);
             lastFocusedRef.current?.focus?.();
         };
-    }, [isOpen, onClose]);
+    }, [isOpen]);
 
     if (!isOpen) {
         return null;
@@ -115,7 +120,7 @@ const AccessibleDialog: React.FC<AccessibleDialogProps> = ({
             className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
             onMouseDown={(event) => {
                 if (closeOnBackdrop && event.target === event.currentTarget) {
-                    onClose();
+                    onCloseRef.current();
                 }
             }}
         >

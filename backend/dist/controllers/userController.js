@@ -12,9 +12,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMyNotifications = exports.getMe = void 0;
+exports.updateMe = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.getMyNotifications = exports.getMe = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
+const wellbeingService_1 = require("../services/wellbeingService");
 const requireUserId = (req) => {
     var _a;
     if (!((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId)) {
@@ -131,6 +132,17 @@ const getMyNotifications = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getMyNotifications = getMyNotifications;
+const getMyWellbeing = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const wellbeing = yield (0, wellbeingService_1.getUserWellbeingSummary)(requireUserId(req));
+        res.status(200).json(wellbeing);
+    }
+    catch (error) {
+        console.error('Failed to load wellbeing summary:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.getMyWellbeing = getMyWellbeing;
 const getAllUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const users = yield db_1.default.user.findMany({

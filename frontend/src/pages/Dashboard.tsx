@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, TrendingUp } from 'lucide-react';
 import api from '../services/api';
-import type { NotificationSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
+import type { NotificationSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse, UserWellbeingSummary } from '../types/api';
 import { getStoredRole } from '../utils/session';
+import WorkloadInsights from '../components/WorkloadInsights';
 
 const ENTRY_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9'];
 
@@ -25,6 +26,23 @@ const getEntryDurationSeconds = (entry: TimeEntrySummary) => {
     return Math.floor((end - start) / 1000);
 };
 
+const isWellbeingSummary = (value: unknown): value is UserWellbeingSummary => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<UserWellbeingSummary>;
+    return (
+        typeof candidate.sevenDayHours === 'number'
+        && typeof candidate.averageDailyHours === 'number'
+        && typeof candidate.burnoutThresholdHours === 'number'
+        && typeof candidate.cautionThresholdHours === 'number'
+        && typeof candidate.hoursUntilBurnout === 'number'
+        && typeof candidate.status === 'string'
+        && Array.isArray(candidate.workloadAlerts)
+    );
+};
+
 const Dashboard: React.FC = () => {
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -39,6 +57,7 @@ const Dashboard: React.FC = () => {
     }[]>([]);
     const [hoursTrend, setHoursTrend] = useState<string | null>(null);
     const [overtimeAlerts, setOvertimeAlerts] = useState<NotificationSummary[]>([]);
+    const [wellbeing, setWellbeing] = useState<UserWellbeingSummary | null>(null);
     const notificationsRef = useRef<HTMLDivElement | null>(null);
     const navigate = useNavigate();
     const role = getStoredRole();
@@ -68,6 +87,14 @@ const Dashboard: React.FC = () => {
                 setHoursTrend(dashResponse.data.metrics?.trends?.hours ?? null);
             } catch {
                 setHoursTrend(null);
+            }
+
+            try {
+                const wellbeingResponse = await api.get<UserWellbeingSummary>('/users/me/wellbeing');
+                setWellbeing(isWellbeingSummary(wellbeingResponse.data) ? wellbeingResponse.data : null);
+            } catch (error) {
+                console.error('Failed to load wellbeing summary:', error);
+                setWellbeing(null);
             }
 
             if (role === 'Admin' || role === 'Manager') {
@@ -305,6 +332,8 @@ const Dashboard: React.FC = () => {
                             </p>
                         </div>
                     )}
+
+                    {wellbeing && <WorkloadInsights wellbeing={wellbeing} />}
 
                     {/* Timer Widget */}
                     <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm transition-colors">

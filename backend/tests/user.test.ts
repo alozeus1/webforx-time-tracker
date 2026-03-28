@@ -12,6 +12,12 @@ jest.mock('../src/config/db', () => ({
             create: jest.fn(),
             update: jest.fn(),
         },
+        timeEntry: {
+            findMany: jest.fn(),
+        },
+        notification: {
+            findMany: jest.fn(),
+        },
         role: {
             findMany: jest.fn(),
             findUnique: jest.fn(),
@@ -51,6 +57,8 @@ const mockRole = { id: 'role-emp-1', name: 'Employee' };
 beforeEach(() => {
     jest.clearAllMocks();
     (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
+    (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
 });
 
 // ─── getMe ───────────────────────────────────────────────────────────────────
@@ -83,6 +91,38 @@ describe('GET /api/v1/users/me', () => {
     it('returns 401 when not authenticated', async () => {
         const res = await request(app).get('/api/v1/users/me');
         expect(res.status).toBe(401);
+    });
+});
+
+describe('GET /api/v1/users/me/wellbeing', () => {
+    it('returns a structured wellbeing summary for the authenticated user', async () => {
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+            ...mockUser,
+            weekly_hour_limit: 40,
+        });
+        (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([
+            { duration: 18_000 },
+            { duration: 14_400 },
+        ]);
+        (prisma.notification.findMany as jest.Mock).mockResolvedValue([
+            {
+                id: 'alert-1',
+                type: 'burnout_alert',
+                message: 'Burnout Alert: You have logged 9.0 hours in the last 7 days.',
+                is_read: false,
+                created_at: new Date('2026-03-28T10:00:00.000Z'),
+            },
+        ]);
+
+        const res = await request(app)
+            .get('/api/v1/users/me/wellbeing')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.sevenDayHours).toBe(9);
+        expect(res.body.weeklyHourLimit).toBe(40);
+        expect(res.body.status).toBe('balanced');
+        expect(res.body.workloadAlerts).toHaveLength(1);
     });
 });
 

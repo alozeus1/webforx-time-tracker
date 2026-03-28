@@ -9,23 +9,34 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runDailyReport = exports.runHourlyChecks = void 0;
+exports.runDailyReport = exports.runWorkloadChecks = exports.runIdleChecks = void 0;
 const burnoutTracker_1 = require("../workers/burnoutTracker");
 const idleTracker_1 = require("../workers/idleTracker");
 const reporterService_1 = require("../services/reporterService");
-const runHourlyChecks = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const runIdleChecks = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        console.log('[Cron] Running hourly checks for burnout and idle timers...');
-        yield (0, burnoutTracker_1.checkBurnout)();
+        console.log('[Cron] Running idle timer checks...');
         yield (0, idleTracker_1.checkIdleTimers)();
-        res.status(200).json({ status: 'success', message: 'Hourly checks completed successfully' });
+        res.status(200).json({ status: 'success', message: 'Idle checks completed successfully' });
     }
     catch (error) {
-        console.error('[Cron] Error during hourly checks:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to run hourly checks' });
+        console.error('[Cron] Error during idle checks:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run idle checks' });
     }
 });
-exports.runHourlyChecks = runHourlyChecks;
+exports.runIdleChecks = runIdleChecks;
+const runWorkloadChecks = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log('[Cron] Running workload burnout checks...');
+        yield (0, burnoutTracker_1.checkBurnout)();
+        res.status(200).json({ status: 'success', message: 'Workload checks completed successfully' });
+    }
+    catch (error) {
+        console.error('[Cron] Error during workload checks:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run workload checks' });
+    }
+});
+exports.runWorkloadChecks = runWorkloadChecks;
 const runDailyReport = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         console.log('[Cron] Running daily PDF report generation...');

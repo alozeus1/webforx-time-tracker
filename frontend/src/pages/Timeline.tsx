@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarX } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
+import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
 interface ActivityItem {
     id: string;
@@ -274,7 +275,7 @@ const Timeline: React.FC = () => {
 
             closeEditor();
             await loadTimeline();
-            window.dispatchEvent(new CustomEvent('wfx:time-entry-changed'));
+            emitTimeEntryChanged();
         } catch (error) {
             setEditorError(getApiErrorMessage(error, 'Failed to save entry'));
         } finally {

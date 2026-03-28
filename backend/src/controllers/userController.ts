@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
+import { getUserWellbeingSummary } from '../services/wellbeingService';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -156,6 +157,16 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
 
         res.status(200).json({ notifications });
     } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const getMyWellbeing = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const wellbeing = await getUserWellbeingSummary(requireUserId(req));
+        res.status(200).json(wellbeing);
+    } catch (error) {
+        console.error('Failed to load wellbeing summary:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

@@ -14,8 +14,12 @@
   ],
   "crons": [
     {
-      "path": "/api/v1/cron/hourly",
-      "schedule": "0 10 * * *"
+      "path": "/api/v1/cron/idle",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/v1/cron/workload",
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/v1/cron/daily",

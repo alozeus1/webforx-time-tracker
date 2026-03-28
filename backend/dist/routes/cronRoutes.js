@@ -22,6 +22,8 @@ router.use((req, res, next) => {
     }
     next();
 });
-router.get('/hourly', cronController_1.runHourlyChecks);
+router.get('/hourly', cronController_1.runIdleChecks);
+router.get('/idle', cronController_1.runIdleChecks);
+router.get('/workload', cronController_1.runWorkloadChecks);
 router.get('/daily', cronController_1.runDailyReport);
 exports.default = router;

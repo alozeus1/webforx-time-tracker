@@ -3,15 +3,25 @@ import { checkBurnout } from '../workers/burnoutTracker';
 import { checkIdleTimers } from '../workers/idleTracker';
 import { generateAndEmailDailyReport } from '../services/reporterService';
 
-export const runHourlyChecks = async (_req: Request, res: Response): Promise<void> => {
+export const runIdleChecks = async (_req: Request, res: Response): Promise<void> => {
     try {
-        console.log('[Cron] Running hourly checks for burnout and idle timers...');
-        await checkBurnout();
+        console.log('[Cron] Running idle timer checks...');
         await checkIdleTimers();
-        res.status(200).json({ status: 'success', message: 'Hourly checks completed successfully' });
+        res.status(200).json({ status: 'success', message: 'Idle checks completed successfully' });
     } catch (error) {
-        console.error('[Cron] Error during hourly checks:', error);
-        res.status(500).json({ status: 'error', message: 'Failed to run hourly checks' });
+        console.error('[Cron] Error during idle checks:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run idle checks' });
+    }
+};
+
+export const runWorkloadChecks = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        console.log('[Cron] Running workload burnout checks...');
+        await checkBurnout();
+        res.status(200).json({ status: 'success', message: 'Workload checks completed successfully' });
+    } catch (error) {
+        console.error('[Cron] Error during workload checks:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run workload checks' });
     }
 };
 

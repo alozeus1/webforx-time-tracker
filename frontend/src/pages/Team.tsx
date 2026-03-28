@@ -425,7 +425,7 @@ const Team: React.FC = () => {
         try {
             await api.delete(`/users/${user.id}`);
             await loadTeam();
-            setFeedback({ message: `${user.first_name} ${user.last_name} has been removed`, tone: 'success' });
+            setFeedback({ message: `${user.first_name} ${user.last_name} has been deactivated`, tone: 'success' });
         } catch (error) {
             console.error('Failed to delete team member', error);
             setFeedback({ message: 'Failed to remove team member', tone: 'error' });

@@ -4,11 +4,14 @@ import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import OnboardingTour, { ONBOARDING_KEY } from './OnboardingTour';
 import HelpChatbot from './HelpChatbot';
+import { useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
 
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [tourKey, setTourKey] = useState(0);
     const location = useLocation();
+
+    useActiveTimerHeartbeat();
 
     useEffect(() => {
         const routeTitles: Record<string, string> = {

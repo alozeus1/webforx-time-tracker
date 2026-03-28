@@ -23,6 +23,18 @@ const roleToUser = (role: AppRole) => ({
   role,
 });
 
+const toTeamUser = (role: AppRole, overrides: Partial<ReturnType<typeof roleToUser>> = {}) => {
+  const user = { ...roleToUser(role), ...overrides };
+  return {
+    id: user.id,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    email: user.email,
+    is_active: true,
+    role: { name: role },
+  };
+};
+
 const inferRoleFromEmail = (email?: string): AppRole => {
   if (!email) return 'Employee';
   const lowered = email.toLowerCase();
@@ -41,6 +53,25 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
   const loginMode = options.loginMode ?? 'success';
   let timerRunning = Boolean(options.activeTimer);
   let timerTaskDescription = 'Test task';
+  let teamUsers = configuredRole === 'Admin'
+    ? [
+      toTeamUser('Admin'),
+      toTeamUser('Manager'),
+      toTeamUser('Employee'),
+    ]
+    : configuredRole === 'Manager'
+      ? [
+        toTeamUser('Manager'),
+        toTeamUser('Employee', {
+          id: 'employee-2',
+          first_name: 'Jordan',
+          last_name: 'Cole',
+          email: 'jordan.cole@webforxtech.com',
+        }),
+      ]
+      : [
+        toTeamUser('Employee'),
+      ];
 
   await page.unroute('**/api/v1/**').catch(() => undefined);
 
@@ -94,7 +125,7 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
     }
 
     if (path.endsWith('/users') && method === 'GET') {
-      return respond(200, [roleToUser(configuredRole)]);
+      return respond(200, teamUsers);
     }
 
     if (path.endsWith('/users/roles') && method === 'GET') {
@@ -118,15 +149,88 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
     }
 
     if (path.endsWith('/users') && method === 'POST') {
-      return respond(201, { id: 'user-new', ...roleToUser(configuredRole) });
+      const payload = JSON.parse(request.postData() || '{}') as {
+        first_name?: string;
+        last_name?: string;
+        email?: string;
+        role?: AppRole;
+      };
+      const createdUser = {
+        id: `user-${teamUsers.length + 1}`,
+        first_name: payload.first_name || 'New',
+        last_name: payload.last_name || 'User',
+        email: payload.email || `user-${teamUsers.length + 1}@webforxtech.com`,
+        is_active: true,
+        role: { name: payload.role || 'Employee' },
+      };
+      teamUsers = [createdUser, ...teamUsers];
+      return respond(201, createdUser);
     }
 
     if (/\/users\/[^/]+$/.test(path) && ['PUT', 'DELETE'].includes(method)) {
+      const userId = path.split('/').pop() as string;
+
+      if (method === 'PUT') {
+        const payload = JSON.parse(request.postData() || '{}') as {
+          first_name?: string;
+          last_name?: string;
+          email?: string;
+          role?: AppRole;
+          is_active?: boolean;
+        };
+        teamUsers = teamUsers.map((user) =>
+          user.id === userId
+            ? {
+              ...user,
+              first_name: payload.first_name ?? user.first_name,
+              last_name: payload.last_name ?? user.last_name,
+              email: payload.email ?? user.email,
+              is_active: payload.is_active ?? user.is_active,
+              role: payload.role ? { name: payload.role } : user.role,
+            }
+            : user,
+        );
+      }
+
+      if (method === 'DELETE') {
+        teamUsers = teamUsers.map((user) =>
+          user.id === userId
+            ? {
+              ...user,
+              is_active: false,
+            }
+            : user,
+        );
+      }
+
       return respond(200, { success: true });
     }
 
     if (path.endsWith('/users/me/notifications')) {
       return respond(200, { notifications: [] });
+    }
+
+    if (path.endsWith('/users/me/wellbeing')) {
+      return respond(200, {
+        sevenDayHours: configuredRole === 'Manager' ? 47.5 : 36.0,
+        averageDailyHours: configuredRole === 'Manager' ? 6.79 : 5.14,
+        burnoutThresholdHours: 50,
+        cautionThresholdHours: 45,
+        hoursUntilBurnout: configuredRole === 'Manager' ? 2.5 : 14,
+        weeklyHourLimit: 40,
+        status: configuredRole === 'Manager' ? 'approaching_burnout' : 'balanced',
+        workloadAlerts: configuredRole === 'Manager'
+          ? [
+            {
+              id: 'alert-manager-1',
+              type: 'overtime_alert',
+              message: 'You have logged 42.0h this week, exceeding your 40h weekly limit.',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            },
+          ]
+          : [],
+      });
     }
 
     if (path.endsWith('/admin/notifications')) {
@@ -241,8 +345,8 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
       return respond(200, { entries: [], total: 0 });
     }
 
-    if (path.includes('/notifications') || path.includes('/tags')) {
-      return respond(200, []);
+    if (path.includes('/tags')) {
+      return respond(200, { tags: [] });
     }
 
     return respond(200, {});

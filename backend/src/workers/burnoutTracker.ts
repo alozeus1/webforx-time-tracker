@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import prisma from '../config/db';
+import { BURNOUT_THRESHOLD_HOURS } from '../services/wellbeingService';
 
 export const checkBurnout = async () => {
     console.log('[Worker] Running Burnout Metrics Checks...');
@@ -24,8 +25,22 @@ export const checkBurnout = async () => {
 
             const totalHours = totalSecondsLogged / 3600;
 
-            if (totalHours > 50) {
-                console.log(`[Worker] User ${user.email} exceeded 50 hours (${totalHours.toFixed(1)}h). Dispatching Burnout Alert.`);
+            if (totalHours > BURNOUT_THRESHOLD_HOURS) {
+                const existingAlert = await prisma.notification.findFirst({
+                    where: {
+                        user_id: user.id,
+                        type: 'burnout_alert',
+                        created_at: {
+                            gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+                        },
+                    },
+                });
+
+                if (existingAlert) {
+                    continue;
+                }
+
+                console.log(`[Worker] User ${user.email} exceeded ${BURNOUT_THRESHOLD_HOURS} hours (${totalHours.toFixed(1)}h). Dispatching Burnout Alert.`);
 
                 await prisma.notification.create({
                     data: {

@@ -9,6 +9,7 @@ import type {
     TimeEntrySummary,
     TimerEntriesResponse,
 } from '../types/api';
+import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
 const getElapsedSeconds = (startTime: string) =>
     Math.max(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000), 0);
@@ -33,7 +34,6 @@ const extractErrorMessage = (error: unknown, fallback: string) =>
         : fallback;
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-const emitTimerStateChange = () => window.dispatchEvent(new CustomEvent('wfx:time-entry-changed'));
 const buildTaskSuggestions = (entries: TimeEntrySummary[]) => (
     Array.from(
         new Set(
@@ -169,29 +169,16 @@ const Timer: React.FC = () => {
 
     useEffect(() => {
         let interval: number | undefined;
-        let pingInterval: number | undefined;
 
         if (timerStartedAt) {
             interval = window.setInterval(() => {
                 setTime(getElapsedSeconds(timerStartedAt));
             }, 1000);
-
-            pingInterval = window.setInterval(async () => {
-                try {
-                    await api.post('/timers/ping');
-                } catch (error) {
-                    console.error('Failed to ping timer activity:', error);
-                }
-            }, 60000);
         }
 
         return () => {
             if (interval) {
                 window.clearInterval(interval);
-            }
-
-            if (pingInterval) {
-                window.clearInterval(pingInterval);
             }
         };
     }, [timerStartedAt]);
@@ -237,7 +224,7 @@ const Timer: React.FC = () => {
                 setTime(0);
                 await api.post('/timers/stop');
                 await loadTimerPageData(true, true);
-                emitTimerStateChange();
+                emitTimeEntryChanged();
             } else {
                 const response = await api.post<ActiveTimerSummary>('/timers/start', {
                     project_id: selectedProject || undefined,
@@ -247,7 +234,7 @@ const Timer: React.FC = () => {
                 });
 
                 syncFromActiveTimer(response.data);
-                emitTimerStateChange();
+                emitTimeEntryChanged();
             }
         } catch (error) {
             console.error(isRunning ? 'Failed to stop timer' : 'Failed to start timer', error);
@@ -257,7 +244,7 @@ const Timer: React.FC = () => {
             if (isRunning && message.toLowerCase().includes('no active timer found')) {
                 // Keep UI in sync if the timer has already been cleared server-side.
                 await loadTimerPageData(true);
-                emitTimerStateChange();
+                emitTimeEntryChanged();
                 alert('Timer was already stopped. The page has been refreshed.');
                 return;
             }

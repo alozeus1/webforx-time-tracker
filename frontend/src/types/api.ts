@@ -172,6 +172,25 @@ export interface NotificationSummary {
     user: { email: string; first_name: string; last_name: string };
 }
 
+export interface WorkloadAlertSummary {
+    id: string;
+    message: string;
+    type: string;
+    is_read: boolean;
+    created_at: string;
+}
+
+export interface UserWellbeingSummary {
+    sevenDayHours: number;
+    averageDailyHours: number;
+    burnoutThresholdHours: number;
+    cautionThresholdHours: number;
+    hoursUntilBurnout: number;
+    weeklyHourLimit: number | null;
+    status: 'balanced' | 'approaching_burnout' | 'burnout_risk';
+    workloadAlerts: WorkloadAlertSummary[];
+}
+
 export interface InvoiceLineItem {
     id: string;
     description: string;

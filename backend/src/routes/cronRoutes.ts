@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runHourlyChecks, runDailyReport } from '../controllers/cronController';
+import { runIdleChecks, runWorkloadChecks, runDailyReport } from '../controllers/cronController';
 import { env } from '../config/env';
 
 const router = Router();
@@ -26,7 +26,9 @@ router.use((req, res, next) => {
     next();
 });
 
-router.get('/hourly', runHourlyChecks);
+router.get('/hourly', runIdleChecks);
+router.get('/idle', runIdleChecks);
+router.get('/workload', runWorkloadChecks);
 router.get('/daily', runDailyReport);
 
 export default router;
