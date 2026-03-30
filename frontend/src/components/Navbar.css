@@ -176,6 +176,50 @@ html.dark .search-input::placeholder {
     flex-shrink: 0;
 }
 
+/* ── Logo button (top-right, links to /dashboard) ── */
+.navbar-logo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    width: 38px;
+    height: 38px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    overflow: hidden;
+    padding: 2px;
+}
+
+.navbar-logo-btn:hover {
+    border-color: rgba(53, 74, 192, 0.4);
+    box-shadow: 0 0 0 3px rgba(53, 74, 192, 0.1);
+    transform: scale(1.05);
+}
+
+.navbar-logo-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+.navbar-logo-img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+html.dark .navbar-logo-btn {
+    border-color: #334155;
+    background: #1e293b;
+}
+
+html.dark .navbar-logo-btn:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
 .notification-wrapper {
     position: relative;
 }

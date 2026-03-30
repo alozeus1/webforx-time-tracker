@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import api, { getApiErrorMessage } from '../services/api';
 import type { BulkUserImportResponse, ProjectSummary, RoleOption, UserSummary } from '../types/api';
-import { getStoredRole } from '../utils/session';
+import { getStoredRole, getStoredUserProfile } from '../utils/session';
 import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
 import AccessibleDialog from '../components/AccessibleDialog';
 
@@ -74,9 +74,12 @@ const Team: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
 
     const [teamHours, setTeamHours] = useState<TeamHoursEntry[]>([]);
+    const [roleSavingFor, setRoleSavingFor] = useState<Set<string>>(new Set());
 
     const role = getStoredRole();
     const canManageTeam = role === 'Admin' || role === 'Manager';
+    const isAdmin = role === 'Admin';
+    const currentUserId = getStoredUserProfile()?.id ?? null;
 
     const loadTeam = useCallback(async () => {
         try {
@@ -444,6 +447,33 @@ const Team: React.FC = () => {
         }
     };
 
+    const handleInlineRoleChange = async (user: UserSummary, newRole: string) => {
+        if (!isAdmin || user.id === currentUserId) return;
+
+        setRoleSavingFor((prev) => new Set(prev).add(user.id));
+        setFeedback(null);
+
+        try {
+            await api.put(`/users/${user.id}`, { role: newRole });
+            setTeam((prev) =>
+                prev.map((member) =>
+                    member.id === user.id
+                        ? { ...member, role: { ...member.role, name: newRole } }
+                        : member,
+                ),
+            );
+            setFeedback({ message: `${user.first_name} ${user.last_name}'s role changed to ${newRole}`, tone: 'success' });
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to update role'), tone: 'error' });
+        } finally {
+            setRoleSavingFor((prev) => {
+                const next = new Set(prev);
+                next.delete(user.id);
+                return next;
+            });
+        }
+    };
+
     const activityFeed = useMemo(() => {
         return team
             .slice()
@@ -655,7 +685,10 @@ const Team: React.FC = () => {
                         {loading && (
                             <div className="px-4 py-6 text-center text-sm text-slate-500">Loading...</div>
                         )}
-                        {!loading && filteredTeam.map((user) => (
+                        {!loading && filteredTeam.map((user) => {
+                            const isSelf = user.id === currentUserId;
+                            const isRoleSaving = roleSavingFor.has(user.id);
+                            return (
                             <article key={`mobile-${user.id}`} className="space-y-3 px-4 py-4">
                                 <div className="flex items-center gap-3">
                                     <div
@@ -670,9 +703,31 @@ const Team: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
-                                    <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                        {user.role?.name || 'Employee'}
-                                    </span>
+                                    {isAdmin && !isSelf ? (
+                                        <div className="flex items-center gap-1.5">
+                                            <select
+                                                value={user.role?.name || 'Employee'}
+                                                onChange={(e) => void handleInlineRoleChange(user, e.target.value)}
+                                                disabled={isRoleSaving}
+                                                aria-label={`Change role for ${user.first_name} ${user.last_name}`}
+                                                className="rounded-md border border-slate-200 bg-slate-50 py-1 pl-2 pr-6 text-xs font-semibold text-slate-600 outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                            >
+                                                {(roles.length > 0
+                                                    ? roles.map((r) => r.name)
+                                                    : ['Admin', 'Employee', 'Intern', 'Manager']
+                                                ).map((r) => (
+                                                    <option key={r} value={r}>{r}</option>
+                                                ))}
+                                            </select>
+                                            {isRoleSaving && (
+                                                <span className="material-symbols-outlined animate-spin text-sm text-primary">progress_activity</span>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <span className="rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                            {user.role?.name || 'Employee'}
+                                        </span>
+                                    )}
                                     <span className={`inline-flex items-center gap-2 font-medium ${user.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}`}>
                                         <span className={`h-2 w-2 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
                                         {user.is_active ? 'Active' : 'Inactive'}
@@ -706,7 +761,8 @@ const Team: React.FC = () => {
                                     </div>
                                 )}
                             </article>
-                        ))}
+                            );
+                        })}
                         {!loading && filteredTeam.length === 0 && (
                             <div className="px-4 py-6 text-center text-sm text-slate-500">
                                 No team members match this filter.
@@ -726,8 +782,11 @@ const Team: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                 {loading && <tr><td colSpan={4} className="px-6 py-4 text-center">Loading...</td></tr>}
-                                {!loading && filteredTeam.map((user) => (
-                                    <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                {!loading && filteredTeam.map((user) => {
+                                    const isSelf = user.id === currentUserId;
+                                    const isRoleSaving = roleSavingFor.has(user.id);
+                                    return (
+                                    <tr key={user.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${isRoleSaving ? 'bg-primary/5 dark:bg-primary/10' : ''}`}>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-9 h-9 rounded-full bg-slate-200 bg-cover flex items-center justify-center text-slate-500 font-bold overflow-hidden" style={{ backgroundImage: `url('https://ui-avatars.com/api/?name=${user.first_name}+${user.last_name}&background=random')` }}></div>
@@ -738,7 +797,29 @@ const Team: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className="text-sm capitalize">{user.role?.name || 'Employee'}</span>
+                                            {isAdmin && !isSelf ? (
+                                                <div className="relative flex items-center gap-1.5">
+                                                    <select
+                                                        value={user.role?.name || 'Employee'}
+                                                        onChange={(e) => void handleInlineRoleChange(user, e.target.value)}
+                                                        disabled={isRoleSaving}
+                                                        aria-label={`Change role for ${user.first_name} ${user.last_name}`}
+                                                        className="rounded-md border border-slate-200 bg-slate-50 py-1 pl-2 pr-7 text-sm font-medium text-slate-700 outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                                    >
+                                                        {(roles.length > 0
+                                                            ? roles.map((r) => r.name)
+                                                            : ['Admin', 'Employee', 'Intern', 'Manager']
+                                                        ).map((r) => (
+                                                            <option key={r} value={r}>{r}</option>
+                                                        ))}
+                                                    </select>
+                                                    {isRoleSaving && (
+                                                        <span className="material-symbols-outlined animate-spin text-sm text-primary">progress_activity</span>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm capitalize">{user.role?.name || 'Employee'}{isSelf && isAdmin && <span className="ml-1.5 text-xs text-slate-400">(you)</span>}</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-2">
@@ -789,7 +870,8 @@ const Team: React.FC = () => {
                                             )}
                                         </td>
                                     </tr>
-                                ))}
+                                );
+                                })}
                                 {!loading && filteredTeam.length === 0 && (
                                     <tr>
                                         <td colSpan={4} className="px-6 py-6 text-center text-sm text-slate-500">

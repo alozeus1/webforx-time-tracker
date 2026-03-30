@@ -449,6 +449,7 @@ const importUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.importUsers = importUsers;
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d;
     try {
         const userIdParam = req.params.id;
         const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
@@ -475,13 +476,47 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             updateData.password_hash = yield bcryptjs_1.default.hash(password.trim(), salt);
         }
         if ((typeof role_id === 'string' && role_id.trim()) || (typeof role === 'string' && role.trim())) {
-            try {
-                updateData.role_id = yield resolveRoleId(role_id, role);
+            // Only Admins may change roles
+            if (((_a = req.user) === null || _a === void 0 ? void 0 : _a.role) !== 'Admin') {
+                res.status(403).json({ message: 'Only Admin users can change member roles' });
+                return;
             }
-            catch (error) {
+            // Prevent admins from changing their own role (lockout prevention)
+            const requesterId = requireUserId(req);
+            if (userId === requesterId) {
+                res.status(400).json({ message: 'You cannot change your own role' });
+                return;
+            }
+            let resolvedRoleId;
+            try {
+                resolvedRoleId = yield resolveRoleId(role_id, role);
+            }
+            catch (_e) {
                 res.status(400).json({ message: 'Invalid role' });
                 return;
             }
+            // Determine the canonical name of the role being assigned
+            const targetRoleRecord = yield db_1.default.role.findUnique({ where: { id: resolvedRoleId }, select: { name: true } });
+            const targetRoleName = (_b = targetRoleRecord === null || targetRoleRecord === void 0 ? void 0 : targetRoleRecord.name) !== null && _b !== void 0 ? _b : '';
+            // If changing AWAY from Admin, verify at least one other Admin remains
+            const currentTarget = yield db_1.default.user.findUnique({
+                where: { id: userId },
+                select: { role: { select: { name: true } } },
+            });
+            if (((_c = currentTarget === null || currentTarget === void 0 ? void 0 : currentTarget.role) === null || _c === void 0 ? void 0 : _c.name) === 'Admin' && targetRoleName !== 'Admin') {
+                const remainingAdmins = yield db_1.default.user.count({
+                    where: {
+                        role: { name: 'Admin' },
+                        is_active: true,
+                        id: { not: userId },
+                    },
+                });
+                if (remainingAdmins === 0) {
+                    res.status(400).json({ message: 'Cannot change role: at least one active Admin must remain' });
+                    return;
+                }
+            }
+            updateData.role_id = resolvedRoleId;
         }
         if (Object.keys(updateData).length === 0) {
             res.status(400).json({ message: 'No valid fields provided for update' });
@@ -500,15 +535,13 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             },
         });
         try {
+            const isRoleChange = 'role_id' in updateData;
             yield db_1.default.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
-                    action: 'user_updated',
+                    action: isRoleChange ? 'role_changed' : 'user_updated',
                     resource: 'user',
-                    metadata: {
-                        target_user_id: updatedUser.id,
-                        updated_fields: Object.keys(updateData),
-                    },
+                    metadata: Object.assign({ target_user_id: updatedUser.id, updated_fields: Object.keys(updateData) }, (isRoleChange && { new_role: (_d = updatedUser.role) === null || _d === void 0 ? void 0 : _d.name })),
                 },
             });
         }

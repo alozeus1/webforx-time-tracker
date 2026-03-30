@@ -278,6 +278,16 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
             </div>
 
             <div className="navbar-right">
+                <button
+                    type="button"
+                    className="navbar-logo-btn"
+                    onClick={() => navigate('/dashboard')}
+                    aria-label="Go to Dashboard"
+                    title="Go to Dashboard"
+                >
+                    <img src="/webforx-logo.png" alt="Web Forx" className="navbar-logo-img" />
+                </button>
+
                 <div className="notification-wrapper" ref={notificationRef}>
                     <button
                         className="notification-btn"

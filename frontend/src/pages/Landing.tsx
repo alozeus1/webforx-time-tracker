@@ -455,6 +455,11 @@ const Landing: React.FC = () => {
       <main id="main-content" tabIndex={-1}>
         {/* ── 1. Hero ── */}
         <section className="landing-section hero">
+          {/* Floating orbs */}
+          <div className="hero-orb-1" aria-hidden="true" />
+          <div className="hero-orb-2" aria-hidden="true" />
+          <div className="hero-orb-3" aria-hidden="true" />
+
           <p className="section-label">Time Tracking for Modern Teams</p>
           <h1 className="section-heading">
             Track Time. Improve Accountability. Deliver Results.

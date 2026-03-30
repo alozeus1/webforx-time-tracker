@@ -546,12 +546,53 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
         }
 
         if ((typeof role_id === 'string' && role_id.trim()) || (typeof role === 'string' && role.trim())) {
+            // Only Admins may change roles
+            if (req.user?.role !== 'Admin') {
+                res.status(403).json({ message: 'Only Admin users can change member roles' });
+                return;
+            }
+
+            // Prevent admins from changing their own role (lockout prevention)
+            const requesterId = requireUserId(req);
+            if (userId === requesterId) {
+                res.status(400).json({ message: 'You cannot change your own role' });
+                return;
+            }
+
+            let resolvedRoleId: string;
             try {
-                updateData.role_id = await resolveRoleId(role_id, role);
-            } catch (error) {
+                resolvedRoleId = await resolveRoleId(role_id, role);
+            } catch {
                 res.status(400).json({ message: 'Invalid role' });
                 return;
             }
+
+            // Determine the canonical name of the role being assigned
+            const targetRoleRecord = await prisma.role.findUnique({ where: { id: resolvedRoleId }, select: { name: true } });
+            const targetRoleName = targetRoleRecord?.name ?? '';
+
+            // If changing AWAY from Admin, verify at least one other Admin remains
+            const currentTarget = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { role: { select: { name: true } } },
+            });
+
+            if (currentTarget?.role?.name === 'Admin' && targetRoleName !== 'Admin') {
+                const remainingAdmins = await prisma.user.count({
+                    where: {
+                        role: { name: 'Admin' },
+                        is_active: true,
+                        id: { not: userId },
+                    },
+                });
+
+                if (remainingAdmins === 0) {
+                    res.status(400).json({ message: 'Cannot change role: at least one active Admin must remain' });
+                    return;
+                }
+            }
+
+            updateData.role_id = resolvedRoleId;
         }
 
         if (Object.keys(updateData).length === 0) {
@@ -573,14 +614,16 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
         });
 
         try {
+            const isRoleChange = 'role_id' in updateData;
             await prisma.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
-                    action: 'user_updated',
+                    action: isRoleChange ? 'role_changed' : 'user_updated',
                     resource: 'user',
                     metadata: {
                         target_user_id: updatedUser.id,
                         updated_fields: Object.keys(updateData),
+                        ...(isRoleChange && { new_role: updatedUser.role?.name }),
                     },
                 },
             });

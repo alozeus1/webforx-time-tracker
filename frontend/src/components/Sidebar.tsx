@@ -4,6 +4,7 @@ import {
     LayoutDashboard, Clock, Calendar, FileText, BarChart2,
     Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle,
     Sun, Moon, Receipt, FolderCog, Globe, CalendarClock, Sparkles,
+    ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
@@ -25,6 +26,8 @@ interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
     onStartTour?: () => void;
+    collapsed: boolean;
+    onCollapsedChange: (collapsed: boolean) => void;
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -63,7 +66,7 @@ const NAV_GROUPS: NavGroup[] = [
     },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour, collapsed, onCollapsedChange }) => {
     const navigate = useNavigate();
     const user = getStoredUserProfile();
     const initials = `${user?.first_name?.[0] || ''}${user?.last_name?.[0] || ''}`.toUpperCase() || 'U';
@@ -82,19 +85,44 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
         }
     };
 
+    const sidebarClass = [
+        'sidebar',
+        isOpen ? 'open' : '',
+        collapsed ? 'collapsed' : '',
+    ].filter(Boolean).join(' ');
+
     return (
-        <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+        <aside className={sidebarClass}>
+            {/* ── Header ── */}
             <div className="sidebar-header">
-                <div className="sidebar-logo">
+                <button
+                    type="button"
+                    className="sidebar-logo sidebar-logo-btn"
+                    onClick={() => navigate('/dashboard')}
+                    aria-label="Go to Dashboard"
+                    title="Go to Dashboard"
+                >
                     <img src="/webforx-logo.png" alt="Web Forx" className="logo-icon logo-icon-image" />
-                    <span className="logo-text">Time Tracker</span>
-                </div>
+                    {!collapsed && <span className="logo-text">Time Tracker</span>}
+                </button>
+
+                <button
+                    className="sidebar-collapse-btn"
+                    onClick={() => onCollapsedChange(!collapsed)}
+                    type="button"
+                    aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                    title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                    {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                </button>
+
                 <button className="sidebar-close" onClick={onClose} type="button" aria-label="Close navigation">
                     <X size={24} />
                 </button>
             </div>
 
-            <nav className="sidebar-nav">
+            {/* ── Nav ── */}
+            <nav className="sidebar-nav" aria-label="Main navigation">
                 {NAV_GROUPS.map((group, groupIndex) => {
                     const visibleItems = group.items.filter(
                         (item) => !item.allowedRoles || hasAnyRole(item.allowedRoles),
@@ -103,8 +131,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
 
                     return (
                         <React.Fragment key={groupIndex}>
-                            {group.label && (
+                            {group.label && !collapsed && (
                                 <span className="nav-group-label">{group.label}</span>
+                            )}
+                            {group.label && collapsed && (
+                                <div className="nav-group-divider" />
                             )}
                             {visibleItems.map((item) => (
                                 <NavLink
@@ -114,9 +145,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
                                     onClick={() => {
                                         if (window.innerWidth <= 768) onClose();
                                     }}
+                                    title={collapsed ? item.name : undefined}
                                 >
                                     <span className="link-icon">{item.icon}</span>
-                                    <span className="link-text">{item.name}</span>
+                                    {!collapsed && <span className="link-text">{item.name}</span>}
                                 </NavLink>
                             ))}
                         </React.Fragment>
@@ -124,13 +156,20 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
                 })}
             </nav>
 
+            {/* ── Footer ── */}
             <div className="sidebar-footer">
-                <NavLink to="/profile" className="profile-widget">
+                <NavLink
+                    to="/profile"
+                    className="profile-widget"
+                    title={collapsed ? `${user?.first_name || ''} ${user?.last_name || ''}` : undefined}
+                >
                     <UserAvatar initials={initials} size={40} />
-                    <div className="user-info">
-                        <span className="user-name">{user ? `${user.first_name} ${user.last_name}` : 'Profile'}</span>
-                        <span className="user-role">{user?.role || 'User'}</span>
-                    </div>
+                    {!collapsed && (
+                        <div className="user-info">
+                            <span className="user-name">{user ? `${user.first_name} ${user.last_name}` : 'Profile'}</span>
+                            <span className="user-role">{user?.role || 'User'}</span>
+                        </div>
+                    )}
                 </NavLink>
                 <button
                     className="sidebar-link"
@@ -139,20 +178,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
                         if (window.innerWidth <= 768) onClose();
                     }}
                     type="button"
+                    title={collapsed ? 'Product Tour' : undefined}
                 >
                     <span className="link-icon"><HelpCircle size={20} /></span>
-                    <span className="link-text">Product Tour</span>
+                    {!collapsed && <span className="link-text">Product Tour</span>}
                 </button>
                 <button
                     className="sidebar-link"
                     onClick={toggleTheme}
                     type="button"
                     aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    title={collapsed ? (isDark ? 'Light Mode' : 'Dark Mode') : undefined}
                 >
                     <span className="link-icon">
                         {isDark ? <Sun size={20} /> : <Moon size={20} />}
                     </span>
-                    <span className="link-text">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+                    {!collapsed && <span className="link-text">{isDark ? 'Light Mode' : 'Dark Mode'}</span>}
                 </button>
                 <button
                     className="sidebar-link"
@@ -162,9 +203,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, onStartTour }) => {
                     }}
                     type="button"
                     aria-label="Sign out"
+                    title={collapsed ? 'Sign Out' : undefined}
                 >
                     <span className="link-icon"><LogOut size={20} /></span>
-                    <span className="link-text">Sign Out</span>
+                    {!collapsed && <span className="link-text">Sign Out</span>}
                 </button>
             </div>
         </aside>

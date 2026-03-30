@@ -9,7 +9,15 @@ import { useWorkSignals } from '../hooks/useWorkSignals';
 
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        return localStorage.getItem('wfx-sidebar-collapsed') === 'true';
+    });
     const [tourKey, setTourKey] = useState(0);
+
+    const handleCollapsedChange = (next: boolean) => {
+        setSidebarCollapsed(next);
+        localStorage.setItem('wfx-sidebar-collapsed', String(next));
+    };
     const location = useLocation();
 
     useActiveTimerHeartbeat();
@@ -46,11 +54,13 @@ const Layout: React.FC = () => {
     };
 
     return (
-        <div className="app-container">
+        <div className={`app-container${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
             <Sidebar
                 isOpen={sidebarOpen}
                 onClose={() => setSidebarOpen(false)}
                 onStartTour={restartTour}
+                collapsed={sidebarCollapsed}
+                onCollapsedChange={handleCollapsedChange}
             />
             {sidebarOpen && (
                 <button
