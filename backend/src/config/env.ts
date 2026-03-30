@@ -40,4 +40,6 @@ export const env = {
     googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || '',
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI?.trim() || '',
+    resendApiKey: process.env.RESEND_API_KEY?.trim() || '',
+    emailFrom: process.env.EMAIL_FROM?.trim() || 'Web Forx Time Tracker <noreply@webforxtech.com>',
 };

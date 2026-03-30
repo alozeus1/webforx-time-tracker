@@ -18,6 +18,7 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("../config/db"));
 const env_1 = require("../config/env");
+const emailService_1 = require("../services/emailService");
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     try {
@@ -92,10 +93,14 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
         yield db_1.default.passwordResetToken.create({
             data: { user_id: user.id, token, expires_at },
         });
-        // In production, send token via email service. Never log tokens.
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`[auth:dev] Password reset code generated for ${email}`);
-        }
+        // Send password reset email (fire-and-forget — response already committed to anti-enum message)
+        const resetUrl = `${env_1.env.frontendUrl}/reset-password?code=${token}`;
+        (0, emailService_1.sendPasswordResetEmail)({
+            to: user.email,
+            firstName: user.first_name,
+            resetCode: token,
+            resetUrl,
+        }).catch((err) => console.error('Failed to send password reset email:', err));
         res.status(200).json({
             message: 'If that email exists, a reset code has been sent.',
         });

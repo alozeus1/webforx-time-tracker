@@ -16,6 +16,8 @@ exports.updateMe = exports.deleteUser = exports.updateUser = exports.importUsers
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
 const wellbeingService_1 = require("../services/wellbeingService");
+const emailService_1 = require("../services/emailService");
+const env_1 = require("../config/env");
 const requireUserId = (req) => {
     var _a;
     if (!((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId)) {
@@ -256,6 +258,13 @@ const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         catch (error) {
             console.error('Failed to write user creation audit log:', error);
         }
+        // Send welcome email (fire-and-forget — never block the response)
+        (0, emailService_1.sendWelcomeEmail)({
+            to: newUser.email,
+            firstName: newUser.first_name,
+            defaultPassword: password,
+            loginUrl: `${env_1.env.frontendUrl}/login`,
+        }).catch((err) => console.error('Failed to send welcome email:', err));
         res.status(201).json(newUser);
     }
     catch (error) {
@@ -405,6 +414,13 @@ const importUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                     role: newUser.role.name,
                     assigned_projects: assignmentSet.size,
                 });
+                // Send welcome email (fire-and-forget)
+                (0, emailService_1.sendWelcomeEmail)({
+                    to: newUser.email,
+                    firstName: newUser.first_name,
+                    defaultPassword: passwordValue,
+                    loginUrl: `${env_1.env.frontendUrl}/login`,
+                }).catch((err) => console.error(`Failed to send welcome email to ${newUser.email}:`, err));
             }
             catch (error) {
                 const knownMessage = error.code === 'P2002'

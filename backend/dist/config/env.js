@@ -1,5 +1,5 @@
 "use strict";
-var _a, _b, _c, _d, _e, _f, _g, _h;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = void 0;
 require("dotenv/config");
@@ -38,4 +38,6 @@ exports.env = {
     googleClientId: ((_f = process.env.GOOGLE_CLIENT_ID) === null || _f === void 0 ? void 0 : _f.trim()) || '',
     googleClientSecret: ((_g = process.env.GOOGLE_CLIENT_SECRET) === null || _g === void 0 ? void 0 : _g.trim()) || '',
     googleRedirectUri: ((_h = process.env.GOOGLE_REDIRECT_URI) === null || _h === void 0 ? void 0 : _h.trim()) || '',
+    resendApiKey: ((_j = process.env.RESEND_API_KEY) === null || _j === void 0 ? void 0 : _j.trim()) || '',
+    emailFrom: ((_k = process.env.EMAIL_FROM) === null || _k === void 0 ? void 0 : _k.trim()) || 'Web Forx Time Tracker <noreply@webforxtech.com>',
 };

@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
 import { env } from '../config/env';
+import { sendPasswordResetEmail } from '../services/emailService';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -99,10 +100,14 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             data: { user_id: user.id, token, expires_at },
         });
 
-        // In production, send token via email service. Never log tokens.
-        if (process.env.NODE_ENV === 'development') {
-            console.log(`[auth:dev] Password reset code generated for ${email}`);
-        }
+        // Send password reset email (fire-and-forget — response already committed to anti-enum message)
+        const resetUrl = `${env.frontendUrl}/reset-password?code=${token}`;
+        sendPasswordResetEmail({
+            to: user.email,
+            firstName: user.first_name,
+            resetCode: token,
+            resetUrl,
+        }).catch((err) => console.error('Failed to send password reset email:', err));
 
         res.status(200).json({
             message: 'If that email exists, a reset code has been sent.',

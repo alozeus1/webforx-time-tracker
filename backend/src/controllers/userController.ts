@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { getUserWellbeingSummary } from '../services/wellbeingService';
+import { sendWelcomeEmail } from '../services/emailService';
+import { env } from '../config/env';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -295,6 +297,14 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             console.error('Failed to write user creation audit log:', error);
         }
 
+        // Send welcome email (fire-and-forget — never block the response)
+        sendWelcomeEmail({
+            to: newUser.email,
+            firstName: newUser.first_name,
+            defaultPassword: password,
+            loginUrl: `${env.frontendUrl}/login`,
+        }).catch((err) => console.error('Failed to send welcome email:', err));
+
         res.status(201).json(newUser);
     } catch (error) {
         respondWithUserServiceError(res, error, 'Failed to create user');
@@ -469,6 +479,15 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                     role: newUser.role.name,
                     assigned_projects: assignmentSet.size,
                 });
+
+                // Send welcome email (fire-and-forget)
+                sendWelcomeEmail({
+                    to: newUser.email,
+                    firstName: newUser.first_name,
+                    defaultPassword: passwordValue,
+                    loginUrl: `${env.frontendUrl}/login`,
+                }).catch((err) => console.error(`Failed to send welcome email to ${newUser.email}:`, err));
+
             } catch (error) {
                 const knownMessage = (error as { code?: string }).code === 'P2002'
                     ? 'User with this email already exists'
