@@ -702,6 +702,72 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
+export const permanentlyDeleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+
+        if (userId === requireUserId(req)) {
+            res.status(400).json({ message: 'Cannot delete your own account' });
+            return;
+        }
+
+        // Only allow deletion of already-deactivated users (safety gate)
+        const target = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, first_name: true, last_name: true, is_active: true },
+        });
+
+        if (!target) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        if (target.is_active) {
+            res.status(400).json({ message: 'User must be deactivated before permanent deletion' });
+            return;
+        }
+
+        // Hard delete — manually remove records that lack onDelete: Cascade,
+        // then delete the user. Wrapped in a transaction for atomicity.
+        // Hard delete — manually remove records that lack onDelete: Cascade,
+        // then delete the user. Wrapped in a transaction for atomicity.
+        await prisma.$transaction([
+            prisma.scheduledReport.deleteMany({ where: { user_id: userId } }),
+            prisma.notification.deleteMany({ where: { user_id: userId } }),
+            prisma.auditLog.deleteMany({ where: { user_id: userId } }),
+            prisma.projectMember.deleteMany({ where: { user_id: userId } }),
+            prisma.passwordResetToken.deleteMany({ where: { user_id: userId } }),
+            prisma.activeTimer.deleteMany({ where: { user_id: userId } }),
+            prisma.invoice.deleteMany({ where: { user_id: userId } }),
+            prisma.timeEntry.deleteMany({ where: { user_id: userId } }),
+            prisma.user.delete({ where: { id: userId } }),
+        ]);
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_permanently_deleted',
+                    resource: 'user',
+                    metadata: { target_user_id: userId, target_email: target.email },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write permanent deletion audit log:', error);
+        }
+
+        res.status(200).json({ message: 'User permanently deleted' });
+    } catch (error) {
+        respondWithUserServiceError(res, error, 'Failed to permanently delete user');
+    }
+};
+
 export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = requireUserId(req);

@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.getMyNotifications = exports.getMe = void 0;
+exports.updateMe = exports.permanentlyDeleteUser = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.getMyNotifications = exports.getMe = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
 const wellbeingService_1 = require("../services/wellbeingService");
@@ -613,6 +613,66 @@ const deleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
     }
 });
 exports.deleteUser = deleteUser;
+const permanentlyDeleteUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+        if (userId === requireUserId(req)) {
+            res.status(400).json({ message: 'Cannot delete your own account' });
+            return;
+        }
+        // Only allow deletion of already-deactivated users (safety gate)
+        const target = yield db_1.default.user.findUnique({
+            where: { id: userId },
+            select: { id: true, email: true, first_name: true, last_name: true, is_active: true },
+        });
+        if (!target) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+        if (target.is_active) {
+            res.status(400).json({ message: 'User must be deactivated before permanent deletion' });
+            return;
+        }
+        // Hard delete — manually remove records that lack onDelete: Cascade,
+        // then delete the user. Wrapped in a transaction for atomicity.
+        // Hard delete — manually remove records that lack onDelete: Cascade,
+        // then delete the user. Wrapped in a transaction for atomicity.
+        yield db_1.default.$transaction([
+            db_1.default.scheduledReport.deleteMany({ where: { user_id: userId } }),
+            db_1.default.notification.deleteMany({ where: { user_id: userId } }),
+            db_1.default.auditLog.deleteMany({ where: { user_id: userId } }),
+            db_1.default.projectMember.deleteMany({ where: { user_id: userId } }),
+            db_1.default.passwordResetToken.deleteMany({ where: { user_id: userId } }),
+            db_1.default.activeTimer.deleteMany({ where: { user_id: userId } }),
+            db_1.default.invoice.deleteMany({ where: { user_id: userId } }),
+            db_1.default.timeEntry.deleteMany({ where: { user_id: userId } }),
+            db_1.default.user.delete({ where: { id: userId } }),
+        ]);
+        try {
+            yield db_1.default.auditLog.create({
+                data: {
+                    user_id: requireUserId(req),
+                    action: 'user_permanently_deleted',
+                    resource: 'user',
+                    metadata: { target_user_id: userId, target_email: target.email },
+                },
+            });
+        }
+        catch (error) {
+            console.error('Failed to write permanent deletion audit log:', error);
+        }
+        res.status(200).json({ message: 'User permanently deleted' });
+    }
+    catch (error) {
+        respondWithUserServiceError(res, error, 'Failed to permanently delete user');
+    }
+});
+exports.permanentlyDeleteUser = permanentlyDeleteUser;
 const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const userId = requireUserId(req);

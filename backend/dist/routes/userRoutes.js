@@ -14,4 +14,5 @@ router.post('/', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Ma
 router.post('/import', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Manager']), userController_1.importUsers);
 router.put('/:id', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Manager']), userController_1.updateUser);
 router.delete('/:id', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin', 'Manager']), userController_1.deleteUser);
+router.delete('/:id/permanent', auth_1.authenticateToken, (0, auth_1.requireRole)(['Admin']), userController_1.permanentlyDeleteUser);
 exports.default = router;

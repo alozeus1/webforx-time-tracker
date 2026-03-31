@@ -422,9 +422,9 @@ const Team: React.FC = () => {
         }
     };
 
-    const handleDeleteUser = async (user: UserSummary) => {
+    const handleDeactivateUser = async (user: UserSummary) => {
         if (!canManageTeam) return;
-        if (!window.confirm(`Are you sure you want to deactivate ${user.first_name} ${user.last_name}? This will hide them from the active team roster.`)) return;
+        if (!window.confirm(`Deactivate ${user.first_name} ${user.last_name}? They will lose access to the app immediately.`)) return;
 
         setSaving(true);
         setFeedback(null);
@@ -438,10 +438,37 @@ const Team: React.FC = () => {
                     : member
             )));
             setStatusFilter('active');
-            setFeedback({ message: `${user.first_name} ${user.last_name} has been deactivated and removed from the active roster`, tone: 'success' });
+            setFeedback({ message: `${user.first_name} ${user.last_name} has been deactivated`, tone: 'success' });
         } catch (error) {
-            console.error('Failed to delete team member', error);
-            setFeedback({ message: 'Failed to remove team member', tone: 'error' });
+            console.error('Failed to deactivate team member', error);
+            setFeedback({ message: 'Failed to deactivate team member', tone: 'error' });
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handlePermanentDeleteUser = async (user: UserSummary) => {
+        if (!isAdmin) return;
+        if (user.is_active) {
+            setFeedback({ message: 'Deactivate this user first before permanently deleting them.', tone: 'error' });
+            return;
+        }
+        const confirmed = window.confirm(
+            `Permanently delete ${user.first_name} ${user.last_name}?\n\nThis will wipe all their data (time entries, invoices, project memberships) and cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        setSaving(true);
+        setFeedback(null);
+        setMenuOpenFor(null);
+
+        try {
+            await api.delete(`/users/${user.id}/permanent`);
+            setTeam((previous) => previous.filter((member) => member.id !== user.id));
+            setFeedback({ message: `${user.first_name} ${user.last_name} has been permanently deleted`, tone: 'success' });
+        } catch (error) {
+            console.error('Failed to permanently delete team member', error);
+            setFeedback({ message: getApiErrorMessage(error, 'Failed to permanently delete user'), tone: 'error' });
         } finally {
             setSaving(false);
         }
@@ -734,7 +761,7 @@ const Team: React.FC = () => {
                                     </span>
                                 </div>
                                 {canManageTeam && (
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className="grid gap-2" style={{ gridTemplateColumns: isAdmin ? 'repeat(3,1fr)' : 'repeat(2,1fr)' }}>
                                         <button
                                             type="button"
                                             className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -750,14 +777,17 @@ const Team: React.FC = () => {
                                         >
                                             {user.is_active ? 'Deactivate' : 'Activate'}
                                         </button>
-                                        <button
-                                            type="button"
-                                            className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/20"
-                                            onClick={() => void handleDeleteUser(user)}
-                                            disabled={saving}
-                                        >
-                                            Deactivate User
-                                        </button>
+                                        {isAdmin && !isSelf && (
+                                            <button
+                                                type="button"
+                                                className="rounded-lg border border-rose-200 px-2 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-900/20"
+                                                onClick={() => void handlePermanentDeleteUser(user)}
+                                                disabled={saving || user.is_active}
+                                                title={user.is_active ? 'Deactivate user first' : 'Permanently delete user'}
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </article>
@@ -848,24 +878,43 @@ const Team: React.FC = () => {
                                                         <span className="material-symbols-outlined text-base">edit</span>
                                                         Edit Member
                                                     </button>
-                                                    <button
-                                                        type="button"
-                                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        onClick={() => void toggleUserActive(user)}
-                                                        disabled={!canManageTeam || saving}
-                                                    >
-                                                        <span className="material-symbols-outlined text-base">{user.is_active ? 'person_off' : 'person'}</span>
-                                                        {user.is_active ? 'Deactivate' : 'Activate'}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        onClick={() => void handleDeleteUser(user)}
-                                                        disabled={!canManageTeam || saving}
-                                                    >
-                                                        <span className="material-symbols-outlined text-base">delete</span>
-                                                        Deactivate User
-                                                    </button>
+                                                    {!isSelf && (
+                                                        <button
+                                                            type="button"
+                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                                            onClick={() => void handleDeactivateUser(user)}
+                                                            disabled={!canManageTeam || saving || !user.is_active}
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">person_off</span>
+                                                            Deactivate
+                                                        </button>
+                                                    )}
+                                                    {!isSelf && (
+                                                        <button
+                                                            type="button"
+                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                                            onClick={() => void toggleUserActive(user)}
+                                                            disabled={!canManageTeam || saving || user.is_active}
+                                                        >
+                                                            <span className="material-symbols-outlined text-base">person</span>
+                                                            Reactivate
+                                                        </button>
+                                                    )}
+                                                    {isAdmin && !isSelf && (
+                                                        <>
+                                                            <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+                                                            <button
+                                                                type="button"
+                                                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 disabled:cursor-not-allowed disabled:opacity-40"
+                                                                onClick={() => void handlePermanentDeleteUser(user)}
+                                                                disabled={saving || user.is_active}
+                                                                title={user.is_active ? 'Deactivate user first' : 'Permanently delete and wipe all data'}
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">delete_forever</span>
+                                                                Delete Permanently
+                                                            </button>
+                                                        </>
+                                                    )}
                                                 </div>
                                             )}
                                         </td>

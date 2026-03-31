@@ -11,6 +11,18 @@ const getClient = (): Resend | null => {
     return resendClient;
 };
 
+/**
+ * Resend SDK v3+ returns { data, error } instead of throwing.
+ * This helper checks the result and throws if error is present,
+ * so callers can rely on standard async/await error handling.
+ */
+const send = async (client: Resend, payload: Parameters<Resend['emails']['send']>[0]): Promise<void> => {
+    const { error } = await client.emails.send(payload);
+    if (error) {
+        throw new Error(`Resend error [${error.name}]: ${error.message}`);
+    }
+};
+
 // ─── Shared brand colours / layout ────────────────────────────────────────────
 
 const BASE_HTML = (title: string, body: string) => `
@@ -105,7 +117,7 @@ export const sendWelcomeEmail = async (opts: WelcomeEmailOptions): Promise<void>
       ${MUTED(`Login URL: <a href="${opts.loginUrl}" style="color:#354ac0;">${opts.loginUrl}</a>`)}
     `;
 
-    await client.emails.send({
+    await send(client, {
         from: env.emailFrom,
         to: opts.to,
         subject: 'Your Web Forx Time Tracker account is ready',
@@ -151,7 +163,7 @@ export const sendPasswordResetEmail = async (opts: PasswordResetEmailOptions): P
       ${MUTED('This link and code expire in <strong>30 minutes</strong>. If you did not request a password reset, no action is needed.')}
     `;
 
-    await client.emails.send({
+    await send(client, {
         from: env.emailFrom,
         to: opts.to,
         subject: 'Reset your Web Forx Time Tracker password',

@@ -5,6 +5,7 @@ import {
     createUser,
     updateUser,
     deleteUser,
+    permanentlyDeleteUser,
     updateMe,
     getRoles,
     getMyNotifications,
@@ -25,5 +26,6 @@ router.post('/', authenticateToken, requireRole(['Admin', 'Manager']), createUse
 router.post('/import', authenticateToken, requireRole(['Admin', 'Manager']), importUsers);
 router.put('/:id', authenticateToken, requireRole(['Admin', 'Manager']), updateUser);
 router.delete('/:id', authenticateToken, requireRole(['Admin', 'Manager']), deleteUser);
+router.delete('/:id/permanent', authenticateToken, requireRole(['Admin']), permanentlyDeleteUser);
 
 export default router;

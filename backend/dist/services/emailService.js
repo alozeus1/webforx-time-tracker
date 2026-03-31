@@ -21,6 +21,17 @@ const getClient = () => {
     }
     return resendClient;
 };
+/**
+ * Resend SDK v3+ returns { data, error } instead of throwing.
+ * This helper checks the result and throws if error is present,
+ * so callers can rely on standard async/await error handling.
+ */
+const send = (client, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    const { error } = yield client.emails.send(payload);
+    if (error) {
+        throw new Error(`Resend error [${error.name}]: ${error.message}`);
+    }
+});
 // ─── Shared brand colours / layout ────────────────────────────────────────────
 const BASE_HTML = (title, body) => `
 <!DOCTYPE html>
@@ -98,7 +109,7 @@ const sendWelcomeEmail = (opts) => __awaiter(void 0, void 0, void 0, function* (
       ${MUTED('For your security, please change your password after your first login. Go to <strong>Profile → Change Password</strong>.')}
       ${MUTED(`Login URL: <a href="${opts.loginUrl}" style="color:#354ac0;">${opts.loginUrl}</a>`)}
     `;
-    yield client.emails.send({
+    yield send(client, {
         from: env_1.env.emailFrom,
         to: opts.to,
         subject: 'Your Web Forx Time Tracker account is ready',
@@ -133,7 +144,7 @@ const sendPasswordResetEmail = (opts) => __awaiter(void 0, void 0, void 0, funct
 
       ${MUTED('This link and code expire in <strong>30 minutes</strong>. If you did not request a password reset, no action is needed.')}
     `;
-    yield client.emails.send({
+    yield send(client, {
         from: env_1.env.emailFrom,
         to: opts.to,
         subject: 'Reset your Web Forx Time Tracker password',
