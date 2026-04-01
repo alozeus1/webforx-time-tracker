@@ -5,6 +5,7 @@ import api from '../services/api';
 import type { NotificationSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse, UserWellbeingSummary } from '../types/api';
 import { getStoredRole } from '../utils/session';
 import WorkloadInsights from '../components/WorkloadInsights';
+import { motion } from 'framer-motion';
 
 const ENTRY_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9'];
 
@@ -395,7 +396,7 @@ const Dashboard: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
                         {/* Daily Goal */}
-                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
                             <div className="flex items-center justify-between">
                                 <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Daily Goal</span>
                                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
@@ -429,10 +430,10 @@ const Dashboard: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                        </div>
+                        </motion.div>
 
                         {/* Projects */}
-                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, delay: 0.05 }} className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
                             <div className="flex items-center justify-between">
                                 <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Projects</span>
                                 <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
@@ -442,10 +443,10 @@ const Dashboard: React.FC = () => {
                             <div className="text-2xl font-bold mt-3 dark:text-slate-100">
                                 {loading ? <div className="skeleton h-8 w-12 rounded" /> : projects.length}
                             </div>
-                        </div>
+                        </motion.div>
 
                         {/* Recent Entries */}
-                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, delay: 0.1 }} className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
                             <div className="flex items-center justify-between">
                                 <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Recent Entries</span>
                                 <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-500">
@@ -455,10 +456,10 @@ const Dashboard: React.FC = () => {
                             <div className="text-2xl font-bold mt-3 dark:text-slate-100">
                                 {loading ? <div className="skeleton h-8 w-12 rounded" /> : entries.length}
                             </div>
-                        </div>
+                        </motion.div>
 
                         {/* Live Timer */}
-                        <div className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
+                        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, delay: 0.15 }} className="stat-card bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all cursor-default">
                             <span className="text-slate-500 dark:text-slate-400 text-sm font-medium">Live Timer</span>
                             <div className="text-2xl font-bold mt-3 dark:text-slate-100">
                                 {loading
@@ -484,12 +485,12 @@ const Dashboard: React.FC = () => {
                                     </button>
                                 </>
                             )}
-                        </div>
+                        </motion.div>
                     </div>
 
                     {/* Budget Alerts */}
                     {budgets.filter(b => b.budget_hours !== null).length > 0 && (
-                        <section className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
+                        <motion.section initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.2 }} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-family-display)' }}>
                                     Project Budgets
@@ -520,11 +521,11 @@ const Dashboard: React.FC = () => {
                                     </div>
                                 ))}
                             </div>
-                        </section>
+                        </motion.section>
                     )}
 
                     {/* Recent Tasks */}
-                    <section className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
+                    <motion.section initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.3 }} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
                         <div className="flex items-center justify-between mb-3">
                             <h3 className="text-base font-bold text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-family-display)' }}>
                                 Recent Tasks
@@ -551,7 +552,10 @@ const Dashboard: React.FC = () => {
                                     const dotColor = ENTRY_COLORS[index % ENTRY_COLORS.length];
                                     const duration = entry.duration ? formatHours(entry.duration) : '—';
                                     return (
-                                        <div
+                                        <motion.div
+                                            initial={{ opacity: 0, x: -10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ duration: 0.3, delay: 0.3 + (index * 0.05) }}
                                             key={entry.id}
                                             className="flex items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
                                         >
@@ -570,12 +574,12 @@ const Dashboard: React.FC = () => {
                                             <span className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap font-medium tabular-nums">
                                                 {duration}
                                             </span>
-                                        </div>
+                                        </motion.div>
                                     );
                                 })}
                             </div>
                         )}
-                    </section>
+                    </motion.section>
                 </div>
             </div>
         </div>

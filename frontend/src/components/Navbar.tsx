@@ -235,7 +235,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                     <Search size={18} className="search-icon" />
                     <input
                         type="text"
-                        placeholder="Search projects or tasks..."
+                        placeholder="Search projects or tasks... (Press ⌘K)"
                         className="search-input"
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}

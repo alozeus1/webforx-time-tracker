@@ -7,6 +7,9 @@ import HelpChatbot from './HelpChatbot';
 import { useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
 import { useWorkSignals } from '../hooks/useWorkSignals';
 
+import { motion, AnimatePresence } from 'framer-motion';
+import { CommandPalette } from './CommandPalette';
+
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -73,11 +76,23 @@ const Layout: React.FC = () => {
 
             <main className="main-content">
                 <Navbar onMenuClick={() => setSidebarOpen(true)} />
-                <div id="main-content" className="page-wrapper" tabIndex={-1}>
-                    <Outlet />
+                <div id="main-content" className="page-wrapper overflow-x-hidden" tabIndex={-1}>
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={location.pathname}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2 }}
+                            className="w-full h-full"
+                        >
+                            <Outlet />
+                        </motion.div>
+                    </AnimatePresence>
                 </div>
             </main>
 
+            <CommandPalette />
             <OnboardingTour key={tourKey} />
             <HelpChatbot />
         </div>

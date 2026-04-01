@@ -277,12 +277,22 @@ const Reports: React.FC = () => {
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
                                 <h4 className="font-bold text-slate-900 dark:text-white mb-4">Hours Logged Trend</h4>
                                 <ResponsiveContainer width="100%" height={256} minWidth={280}>
-                                        <BarChart data={analytics?.hoursTrend || []} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-slate-200, #e2e8f0)" />
-                                            <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                            <YAxis tick={{ fontSize: 11 }} unit="h" />
-                                            <Tooltip formatter={(value) => [formatHoursText(Number(value)), 'Hours']} />
-                                            <Bar dataKey="hours" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                                        <BarChart data={analytics?.hoursTrend || []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                                            <defs>
+                                                <linearGradient id="colorHours" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.9}/>
+                                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.2}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, 0.2)" />
+                                            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <Tooltip 
+                                                cursor={{ fill: 'rgba(148, 163, 184, 0.1)' }}
+                                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)', backgroundColor: 'var(--bg-glass, #ffffff)' }}
+                                                formatter={(value) => [formatHoursText(Number(value)), 'Hours']} 
+                                            />
+                                            <Bar dataKey="hours" fill="url(#colorHours)" radius={[6, 6, 0, 0]} />
                                         </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -301,10 +311,12 @@ const Reports: React.FC = () => {
                                                     nameKey="name"
                                                     cx="50%"
                                                     cy="50%"
-                                                    outerRadius={80}
-                                                    innerRadius={45}
-                                                    paddingAngle={2}
+                                                    outerRadius={85}
+                                                    innerRadius={60}
+                                                    paddingAngle={5}
+                                                    stroke="none"
                                                     label={({ name, percent }: PieLabelRenderProps) => `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}
+                                                    labelLine={false}
                                                 >
                                                     {analytics?.projectDistribution.slice(0, 6).map((_entry, idx) => (
                                                         <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
