@@ -19,6 +19,76 @@ const resolveProjectLogoSrc = (logoUrl?: string | null) => {
     return `${apiOrigin}${logoUrl}`;
 };
 
+const AUTH_EVENT_LABELS: Record<string, string> = {
+    login_attempt: 'Login attempt',
+    password_reset_request: 'Reset request',
+    password_reset_completion: 'Password reset',
+    password_change: 'Password change',
+    token_refresh: 'Session refresh',
+};
+
+const AUTH_EVENT_REASON_COPY: Record<string, string> = {
+    missing_credentials: 'Submitted the sign-in form without both an email and password.',
+    user_not_found: 'Used an email address that does not match any account on record.',
+    invalid_password: 'Entered the wrong password for this account.',
+    account_disabled: 'Tried to sign in while the account was disabled.',
+    missing_email: 'Submitted the reset flow without entering an email address.',
+    missing_reset_details: 'Submitted the reset form without both a reset code and a new password.',
+    password_too_short: 'Tried to set a password shorter than the minimum allowed length.',
+    invalid_reset_code: 'Used a reset code that does not exist.',
+    used_reset_code: 'Tried to reuse a reset code that had already been consumed.',
+    expired_reset_code: 'Used a reset code after it had expired.',
+    self_service: 'Changed the password from the profile page.',
+    manager_reset: 'An admin or manager updated this password manually.',
+    rate_limited: 'Hit the auth rate limit after too many attempts in a short window.',
+};
+
+const toTitleCase = (value: string) =>
+    value
+        .split(/[_\s-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(' ');
+
+const getAuditUserPrimary = (log: AuditLogSummary) => {
+    const fullName = [log.user?.first_name, log.user?.last_name].filter(Boolean).join(' ').trim();
+    return fullName || log.email || log.user?.email || 'Unknown user';
+};
+
+const getAuditUserSecondary = (log: AuditLogSummary) => {
+    const email = log.email || log.user?.email || null;
+    const fullName = [log.user?.first_name, log.user?.last_name].filter(Boolean).join(' ').trim();
+    return fullName && email ? email : null;
+};
+
+const getAuditActionLabel = (log: AuditLogSummary) =>
+    log.source === 'auth'
+        ? (AUTH_EVENT_LABELS[log.action] || toTitleCase(log.action))
+        : toTitleCase(log.action);
+
+const getAuditDetails = (log: AuditLogSummary) => {
+    if (log.source === 'auth') {
+        const headline =
+            AUTH_EVENT_REASON_COPY[log.reason || '']
+            || (log.outcome === 'success' ? 'Completed successfully.' : 'The request was rejected.');
+
+        const parts = ['Authentication'];
+        if (log.outcome) {
+            parts.push(toTitleCase(log.outcome));
+        }
+
+        return {
+            headline,
+            supporting: parts.join(' • '),
+        };
+    }
+
+    return {
+        headline: toTitleCase(log.resource),
+        supporting: null,
+    };
+};
+
 const Admin: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const queryTab = searchParams.get('tab');
@@ -256,9 +326,10 @@ const Admin: React.FC = () => {
                                     {activeTab === 'audit' && (
                                         <>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Timestamp</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Source</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">User</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Action</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Resource</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Details</th>
                                         </>
                                     )}
                                     {activeTab === 'notifications' && (
@@ -386,15 +457,47 @@ const Admin: React.FC = () => {
                                     </tr>
                                 )))}
                                 {activeTab === 'audit' && (auditLogs.length === 0 ? (
-                                    <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500 text-sm">No audit logs found.</td></tr>
+                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">No audit logs found.</td></tr>
                                 ) : auditLogs.map((log) => (
                                     <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                         <td className="px-6 py-4 text-sm text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
-                                        <td className="px-6 py-4 text-sm font-semibold dark:text-slate-200">{log.user.email}</td>
                                         <td className="px-6 py-4">
-                                            <span className="inline-flex px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase">{log.action}</span>
+                                            <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide ${
+                                                log.source === 'auth'
+                                                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                            }`}>
+                                                {log.source === 'auth' ? 'Auth Event' : 'Audit Log'}
+                                            </span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{log.resource}</td>
+                                        <td className="px-6 py-4">
+                                            <p className="text-sm font-semibold dark:text-slate-200">{getAuditUserPrimary(log)}</p>
+                                            {getAuditUserSecondary(log) && (
+                                                <p className="text-xs text-slate-500">{getAuditUserSecondary(log)}</p>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="inline-flex rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                                    {getAuditActionLabel(log)}
+                                                </span>
+                                                {log.source === 'auth' && log.outcome && (
+                                                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
+                                                        log.outcome === 'success'
+                                                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                                            : 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                                                    }`}>
+                                                        {log.outcome}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <p className="text-sm text-slate-700 dark:text-slate-300">{getAuditDetails(log).headline}</p>
+                                            {getAuditDetails(log).supporting && (
+                                                <p className="text-xs text-slate-500">{getAuditDetails(log).supporting}</p>
+                                            )}
+                                        </td>
                                     </tr>
                                 )))}
                                 {activeTab === 'notifications' && (notifications.length === 0 ? (

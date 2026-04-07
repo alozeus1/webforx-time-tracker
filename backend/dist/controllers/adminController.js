@@ -16,13 +16,51 @@ exports.getSystemNotifications = exports.getAuditLogs = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const getAuditLogs = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const logs = yield db_1.default.auditLog.findMany({
-            orderBy: { created_at: 'desc' },
-            take: 100,
-            include: {
-                user: { select: { email: true, first_name: true, last_name: true } }
-            }
-        });
+        const [auditLogs, authEvents] = yield Promise.all([
+            db_1.default.auditLog.findMany({
+                orderBy: { created_at: 'desc' },
+                take: 100,
+                include: {
+                    user: { select: { email: true, first_name: true, last_name: true } }
+                }
+            }),
+            db_1.default.authEvent.findMany({
+                orderBy: { created_at: 'desc' },
+                take: 100,
+                include: {
+                    user: { select: { email: true, first_name: true, last_name: true } }
+                }
+            }),
+        ]);
+        const logs = [
+            ...auditLogs.map((log) => ({
+                id: log.id,
+                source: 'audit',
+                action: log.action,
+                resource: log.resource,
+                created_at: log.created_at,
+                user: log.user,
+                email: log.user.email,
+                metadata: log.metadata,
+            })),
+            ...authEvents.map((event) => {
+                var _a, _b, _c;
+                return ({
+                    id: event.id,
+                    source: 'auth',
+                    action: event.event_type,
+                    resource: 'authentication',
+                    created_at: event.created_at,
+                    user: event.user,
+                    email: (_c = (_a = event.email) !== null && _a !== void 0 ? _a : (_b = event.user) === null || _b === void 0 ? void 0 : _b.email) !== null && _c !== void 0 ? _c : null,
+                    outcome: event.outcome,
+                    reason: event.reason,
+                    metadata: event.metadata,
+                });
+            }),
+        ]
+            .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+            .slice(0, 100);
         res.status(200).json({ logs });
     }
     catch (error) {

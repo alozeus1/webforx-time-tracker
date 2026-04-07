@@ -173,10 +173,19 @@ export interface AnalyticsDashboardResponse {
 
 export interface AuditLogSummary {
     id: string;
+    source: 'audit' | 'auth';
     action: string;
     resource: string;
     created_at: string;
-    user: { email: string; first_name: string; last_name: string };
+    user: {
+        email?: string | null;
+        first_name?: string | null;
+        last_name?: string | null;
+    } | null;
+    email?: string | null;
+    outcome?: string | null;
+    reason?: string | null;
+    metadata?: Record<string, unknown>;
 }
 
 export interface AuthEventSummary {

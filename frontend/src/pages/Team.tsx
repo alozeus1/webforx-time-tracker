@@ -113,6 +113,7 @@ const Team: React.FC = () => {
     const [teamHours, setTeamHours] = useState<TeamHoursEntry[]>([]);
     const [roleSavingFor, setRoleSavingFor] = useState<Set<string>>(new Set());
     const [selectedDiagnosticsUserId, setSelectedDiagnosticsUserId] = useState<string | null>(null);
+    const [diagnosticsSearchQuery, setDiagnosticsSearchQuery] = useState('');
     const [authEvents, setAuthEvents] = useState<AuthEventSummary[]>([]);
     const [authEventsLoading, setAuthEventsLoading] = useState(false);
     const [authEventsError, setAuthEventsError] = useState<string | null>(null);
@@ -609,6 +610,37 @@ const Team: React.FC = () => {
         [selectedDiagnosticsUserId, team],
     );
 
+    const filteredDiagnosticsUsers = useMemo(() => {
+        const query = diagnosticsSearchQuery.trim().toLowerCase();
+        if (!query) {
+            return team;
+        }
+
+        return team.filter((member) => {
+            const fullName = `${member.first_name} ${member.last_name}`.toLowerCase();
+            const roleName = member.role?.name?.toLowerCase() || '';
+            const statusName = member.is_active ? 'active' : 'inactive';
+
+            return fullName.includes(query)
+                || member.email.toLowerCase().includes(query)
+                || roleName.includes(query)
+                || statusName.includes(query);
+        });
+    }, [diagnosticsSearchQuery, team]);
+
+    const diagnosticsUserOptions = useMemo(() => {
+        if (!selectedDiagnosticsUser) {
+            return filteredDiagnosticsUsers;
+        }
+
+        const alreadyIncluded = filteredDiagnosticsUsers.some((member) => member.id === selectedDiagnosticsUser.id);
+        if (alreadyIncluded) {
+            return filteredDiagnosticsUsers;
+        }
+
+        return [selectedDiagnosticsUser, ...filteredDiagnosticsUsers];
+    }, [filteredDiagnosticsUsers, selectedDiagnosticsUser]);
+
     useEffect(() => {
         void loadAuthEvents(selectedDiagnosticsUser);
     }, [loadAuthEvents, selectedDiagnosticsUser]);
@@ -1052,27 +1084,51 @@ const Team: React.FC = () => {
                             <label htmlFor="diagnostics-user" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 Inspect team member
                             </label>
-                            <div className="flex gap-2">
-                                <select
-                                    id="diagnostics-user"
-                                    value={selectedDiagnosticsUserId || ''}
-                                    onChange={(event) => setSelectedDiagnosticsUserId(event.target.value || null)}
-                                    className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                                >
-                                    {team.map((member) => (
-                                        <option key={member.id} value={member.id}>
-                                            {member.first_name} {member.last_name} ({member.email})
-                                        </option>
-                                    ))}
-                                </select>
-                                <button
-                                    type="button"
-                                    onClick={() => void loadAuthEvents(selectedDiagnosticsUser)}
-                                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                                    disabled={authEventsLoading || !selectedDiagnosticsUser}
-                                >
-                                    Refresh
-                                </button>
+                            <div className="space-y-2">
+                                <label htmlFor="diagnostics-user-search" className="sr-only">
+                                    Search access diagnostics users
+                                </label>
+                                <input
+                                    id="diagnostics-user-search"
+                                    type="text"
+                                    value={diagnosticsSearchQuery}
+                                    onChange={(event) => setDiagnosticsSearchQuery(event.target.value)}
+                                    placeholder="Search by name, email, role, or status"
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                />
+                                <div className="flex gap-2">
+                                    <select
+                                        id="diagnostics-user"
+                                        value={selectedDiagnosticsUserId || ''}
+                                        onChange={(event) => setSelectedDiagnosticsUserId(event.target.value || null)}
+                                        className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                    >
+                                        {diagnosticsUserOptions.map((member) => (
+                                            <option key={member.id} value={member.id}>
+                                                {member.first_name} {member.last_name} ({member.email})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => void loadAuthEvents(selectedDiagnosticsUser)}
+                                        className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                        disabled={authEventsLoading || !selectedDiagnosticsUser}
+                                    >
+                                        Refresh
+                                    </button>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                    Showing {filteredDiagnosticsUsers.length} of {team.length} team members.
+                                    {selectedDiagnosticsUser && !filteredDiagnosticsUsers.some((member) => member.id === selectedDiagnosticsUser.id)
+                                        ? ' Current selection is still shown until you choose a filtered match.'
+                                        : ''}
+                                </p>
+                                {filteredDiagnosticsUsers.length === 0 && (
+                                    <p className="text-xs text-rose-600">
+                                        No team members match that search yet. Try a different name or email.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>
