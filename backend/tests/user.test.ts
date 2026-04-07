@@ -25,6 +25,10 @@ jest.mock('../src/config/db', () => ({
         auditLog: {
             create: jest.fn(),
         },
+        authEvent: {
+            findMany: jest.fn(),
+            create: jest.fn(),
+        },
     },
 }));
 
@@ -57,6 +61,8 @@ const mockRole = { id: 'role-emp-1', name: 'Employee' };
 beforeEach(() => {
     jest.clearAllMocks();
     (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
+    (prisma.authEvent.create as jest.Mock).mockResolvedValue({});
+    (prisma.authEvent.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
 });
@@ -158,6 +164,45 @@ describe('GET /api/v1/users', () => {
     it('returns 403 for Employee role', async () => {
         const res = await request(app)
             .get('/api/v1/users')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(403);
+    });
+});
+
+describe('GET /api/v1/users/:id/auth-events', () => {
+    it('returns auth events for Admin and Manager users', async () => {
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.authEvent.findMany as jest.Mock).mockResolvedValue([
+            {
+                id: 'auth-1',
+                user_id: 'user-emp-1',
+                email: 'alice@test.com',
+                event_type: 'login_attempt',
+                outcome: 'failure',
+                reason: 'invalid_password',
+                created_at: new Date('2026-04-07T08:00:00.000Z'),
+            },
+        ]);
+
+        const adminRes = await request(app)
+            .get('/api/v1/users/user-emp-1/auth-events')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(adminRes.status).toBe(200);
+        expect(adminRes.body.events).toHaveLength(1);
+
+        const managerRes = await request(app)
+            .get('/api/v1/users/user-emp-1/auth-events')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(managerRes.status).toBe(200);
+        expect(managerRes.body.user.email).toBe('alice@test.com');
+    });
+
+    it('returns 403 for Employee role', async () => {
+        const res = await request(app)
+            .get('/api/v1/users/user-emp-1/auth-events')
             .set('Authorization', `Bearer ${employeeToken}`);
 
         expect(res.status).toBe(403);

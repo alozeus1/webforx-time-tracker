@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
+import { logAuthEvent } from '../services/authEventService';
 import { getUserWellbeingSummary } from '../services/wellbeingService';
 import { sendWelcomeEmail } from '../services/emailService';
 import { env } from '../config/env';
@@ -217,6 +218,53 @@ export const getRoles = async (_req: Request, res: Response): Promise<void> => {
         res.status(200).json({ roles });
     } catch (error) {
         respondWithUserServiceError(res, error, 'Failed to load roles');
+    }
+};
+
+export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+
+        const requestedLimit = Number.parseInt(String(req.query.limit ?? '25'), 10);
+        const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 25;
+
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+                is_active: true,
+                role: { select: { name: true } },
+            },
+        });
+
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        const events = await prisma.authEvent.findMany({
+            where: {
+                OR: [
+                    { user_id: user.id },
+                    { email: user.email },
+                ],
+            },
+            orderBy: { created_at: 'desc' },
+            take: limit,
+        });
+
+        res.status(200).json({ user, events });
+    } catch (error) {
+        respondWithUserServiceError(res, error, 'Failed to load user auth events');
     }
 };
 
@@ -650,6 +698,20 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
             console.error('Failed to write user update audit log:', error);
         }
 
+        if ('password_hash' in updateData) {
+            await logAuthEvent(req, {
+                userId: updatedUser.id,
+                email: updatedUser.email,
+                eventType: 'password_change',
+                outcome: 'success',
+                reason: 'manager_reset',
+                metadata: {
+                    actor_user_id: req.user?.userId || null,
+                    actor_role: req.user?.role || null,
+                },
+            });
+        }
+
         res.status(200).json(updatedUser);
     } catch (error) {
         respondWithUserServiceError(res, error, 'Failed to update user');
@@ -816,6 +878,16 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
             });
         } catch (error) {
             console.error('Failed to write profile update audit log:', error);
+        }
+
+        if ('password_hash' in updateData) {
+            await logAuthEvent(req, {
+                userId,
+                email: updatedUser.email,
+                eventType: 'password_change',
+                outcome: 'success',
+                reason: 'self_service',
+            });
         }
 
         res.status(200).json({

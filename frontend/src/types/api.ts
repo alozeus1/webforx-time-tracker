@@ -179,6 +179,19 @@ export interface AuditLogSummary {
     user: { email: string; first_name: string; last_name: string };
 }
 
+export interface AuthEventSummary {
+    id: string;
+    user_id?: string | null;
+    email?: string | null;
+    event_type: string;
+    outcome: string;
+    reason?: string | null;
+    ip_address?: string | null;
+    user_agent?: string | null;
+    metadata?: Record<string, unknown>;
+    created_at: string;
+}
+
 export interface NotificationSummary {
     id: string;
     message: string;

@@ -36,6 +36,7 @@ const invoiceRoutes_1 = __importDefault(require("./routes/invoiceRoutes"));
 const templateRoutes_1 = __importDefault(require("./routes/templateRoutes"));
 const scheduledReportRoutes_1 = __importDefault(require("./routes/scheduledReportRoutes"));
 const publicRoutes_1 = __importDefault(require("./routes/publicRoutes"));
+const authEventService_1 = require("./services/authEventService");
 const notificationWorker_1 = require("./workers/notificationWorker");
 const idleTracker_1 = require("./workers/idleTracker");
 const burnoutTracker_1 = require("./workers/burnoutTracker");
@@ -94,6 +95,26 @@ const authLimiter = (0, express_rate_limit_1.default)({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many authentication attempts, please try again later.' },
+    handler: (req, res, _next, options) => {
+        var _a;
+        const eventType = req.path.includes('forgot-password')
+            ? 'password_reset_request'
+            : req.path.includes('reset-password')
+                ? 'password_reset_completion'
+                : req.path.includes('refresh')
+                    ? 'token_refresh'
+                    : 'login_attempt';
+        void (0, authEventService_1.logAuthEvent)(req, {
+            email: typeof ((_a = req.body) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? req.body.email.trim().toLowerCase() : null,
+            eventType,
+            outcome: 'failure',
+            reason: 'rate_limited',
+            metadata: {
+                path: req.path,
+            },
+        });
+        res.status(options.statusCode).json(options.message);
+    },
 });
 // Routes
 app.use('/api/v1/auth', authLimiter, authRoutes_1.default);

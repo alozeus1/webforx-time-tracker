@@ -22,6 +22,7 @@ import invoiceRoutes from './routes/invoiceRoutes';
 import templateRoutes from './routes/templateRoutes';
 import scheduledReportRoutes from './routes/scheduledReportRoutes';
 import publicRoutes from './routes/publicRoutes';
+import { logAuthEvent } from './services/authEventService';
 import { notificationWorker } from './workers/notificationWorker';
 import { startIdleTracker } from './workers/idleTracker';
 import { startBurnoutTracker } from './workers/burnoutTracker';
@@ -98,6 +99,27 @@ const authLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many authentication attempts, please try again later.' },
+    handler: (req, res, _next, options) => {
+        const eventType = req.path.includes('forgot-password')
+            ? 'password_reset_request'
+            : req.path.includes('reset-password')
+                ? 'password_reset_completion'
+                : req.path.includes('refresh')
+                    ? 'token_refresh'
+                    : 'login_attempt';
+
+        void logAuthEvent(req, {
+            email: typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : null,
+            eventType,
+            outcome: 'failure',
+            reason: 'rate_limited',
+            metadata: {
+                path: req.path,
+            },
+        });
+
+        res.status(options.statusCode).json(options.message);
+    },
 });
 
 // Routes

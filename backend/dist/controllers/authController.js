@@ -18,6 +18,7 @@ const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("../config/db"));
 const env_1 = require("../config/env");
+const authEventService_1 = require("../services/authEventService");
 const emailService_1 = require("../services/emailService");
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
@@ -25,6 +26,18 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         const email = typeof ((_a = req.body) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? req.body.email.trim().toLowerCase() : '';
         const password = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.password) === 'string' ? req.body.password : '';
         if (!email || !password) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                email: email || null,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'missing_credentials',
+                metadata: {
+                    missing: [
+                        !email ? 'email' : null,
+                        !password ? 'password' : null,
+                    ].filter(Boolean),
+                },
+            });
             res.status(400).json({ message: 'Email and password are required' });
             return;
         }
@@ -33,18 +46,47 @@ const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             include: { role: true }
         });
         if (!user) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                email,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'user_not_found',
+            });
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
         if (!user.is_active) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                userId: user.id,
+                email: user.email,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'account_disabled',
+            });
             res.status(401).json({ message: 'Account disabled' });
             return;
         }
         const isValidPassword = yield bcryptjs_1.default.compare(password, user.password_hash);
         if (!isValidPassword) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                userId: user.id,
+                email: user.email,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'invalid_password',
+            });
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
+        yield (0, authEventService_1.logAuthEvent)(req, {
+            userId: user.id,
+            email: user.email,
+            eventType: 'login_attempt',
+            outcome: 'success',
+            metadata: {
+                role: user.role.name,
+            },
+        });
         const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.email, role: user.role.name }, env_1.env.jwtSecret, { expiresIn: '1h' });
         const refreshToken = jsonwebtoken_1.default.sign({ userId: user.id, type: 'refresh' }, env_1.env.jwtSecret, { expiresIn: '7d' });
         res.status(200).json({
@@ -74,12 +116,23 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
     try {
         const email = typeof ((_a = req.body) === null || _a === void 0 ? void 0 : _a.email) === 'string' ? req.body.email.trim().toLowerCase() : '';
         if (!email) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                eventType: 'password_reset_request',
+                outcome: 'failure',
+                reason: 'missing_email',
+            });
             res.status(400).json({ message: 'Email is required' });
             return;
         }
         const user = yield db_1.default.user.findUnique({ where: { email } });
         // Always return success to prevent email enumeration
         if (!user) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                email,
+                eventType: 'password_reset_request',
+                outcome: 'failure',
+                reason: 'user_not_found',
+            });
             res.status(200).json({ message: 'If that email exists, a reset code has been generated.' });
             return;
         }
@@ -92,6 +145,12 @@ const forgotPassword = (req, res) => __awaiter(void 0, void 0, void 0, function*
         const expires_at = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
         yield db_1.default.passwordResetToken.create({
             data: { user_id: user.id, token, expires_at },
+        });
+        yield (0, authEventService_1.logAuthEvent)(req, {
+            userId: user.id,
+            email: user.email,
+            eventType: 'password_reset_request',
+            outcome: 'success',
         });
         // Send password reset email (fire-and-forget — response already committed to anti-enum message)
         const resetUrl = `${env_1.env.frontendUrl}/reset-password?code=${token}`;
@@ -117,10 +176,27 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         const code = typeof ((_a = req.body) === null || _a === void 0 ? void 0 : _a.code) === 'string' ? req.body.code.trim().toUpperCase() : '';
         const newPassword = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.password) === 'string' ? req.body.password : '';
         if (!code || !newPassword) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'missing_reset_details',
+                metadata: {
+                    has_code: Boolean(code),
+                    has_password: Boolean(newPassword),
+                },
+            });
             res.status(400).json({ message: 'Reset code and new password are required' });
             return;
         }
         if (newPassword.length < 6) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'password_too_short',
+                metadata: {
+                    code_length: code.length,
+                },
+            });
             res.status(400).json({ message: 'Password must be at least 6 characters' });
             return;
         }
@@ -128,7 +204,37 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
             where: { token: code },
             include: { user: true },
         });
-        if (!resetToken || resetToken.used || resetToken.expires_at < new Date()) {
+        if (!resetToken) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'invalid_reset_code',
+                metadata: {
+                    code_length: code.length,
+                },
+            });
+            res.status(400).json({ message: 'Invalid or expired reset code' });
+            return;
+        }
+        if (resetToken.used) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                userId: resetToken.user_id,
+                email: resetToken.user.email,
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'used_reset_code',
+            });
+            res.status(400).json({ message: 'Invalid or expired reset code' });
+            return;
+        }
+        if (resetToken.expires_at < new Date()) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                userId: resetToken.user_id,
+                email: resetToken.user.email,
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'expired_reset_code',
+            });
             res.status(400).json({ message: 'Invalid or expired reset code' });
             return;
         }
@@ -141,6 +247,12 @@ const resetPassword = (req, res) => __awaiter(void 0, void 0, void 0, function* 
         yield db_1.default.passwordResetToken.update({
             where: { id: resetToken.id },
             data: { used: true },
+        });
+        yield (0, authEventService_1.logAuthEvent)(req, {
+            userId: resetToken.user_id,
+            email: resetToken.user.email,
+            eventType: 'password_reset_completion',
+            outcome: 'success',
         });
         res.status(200).json({ message: 'Password has been reset successfully' });
     }

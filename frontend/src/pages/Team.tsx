@@ -1,12 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import api, { getApiErrorMessage } from '../services/api';
-import type { BulkUserImportResponse, ProjectSummary, RoleOption, UserSummary } from '../types/api';
+import type { AuthEventSummary, BulkUserImportResponse, ProjectSummary, RoleOption, UserSummary } from '../types/api';
 import { getStoredRole, getStoredUserProfile } from '../utils/session';
 import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
 import AccessibleDialog from '../components/AccessibleDialog';
 
 interface TeamHoursEntry { name: string; hours: number; }
+
+type TeamAuthEventsResponse = {
+    user: UserSummary;
+    events: AuthEventSummary[];
+};
 
 const formatHoursText = (hours: number) => {
     if (hours <= 0) return '0.0h';
@@ -14,6 +19,39 @@ const formatHoursText = (hours: number) => {
     if (hours < 1) return `${hours.toFixed(2)}h`;
     return `${hours.toFixed(1)}h`;
 };
+
+const AUTH_EVENT_LABELS: Record<string, string> = {
+    login_attempt: 'Login attempt',
+    password_reset_request: 'Reset request',
+    password_reset_completion: 'Password reset',
+    password_change: 'Password change',
+    token_refresh: 'Session refresh',
+};
+
+const AUTH_EVENT_REASON_COPY: Record<string, string> = {
+    missing_credentials: 'Submitted the sign-in form without both an email and password.',
+    user_not_found: 'Used an email address that does not match any account on record.',
+    invalid_password: 'Entered the wrong password for this account.',
+    account_disabled: 'Tried to sign in while the account was disabled.',
+    missing_email: 'Submitted the reset flow without entering an email address.',
+    missing_reset_details: 'Submitted the reset form without both a reset code and a new password.',
+    password_too_short: 'Tried to set a password shorter than the minimum allowed length.',
+    invalid_reset_code: 'Used a reset code that does not exist.',
+    used_reset_code: 'Tried to reuse a reset code that had already been consumed.',
+    expired_reset_code: 'Used a reset code after it had expired.',
+    self_service: 'Changed the password from the profile page.',
+    manager_reset: 'An admin or manager updated this password manually.',
+    rate_limited: 'Hit the auth rate limit after too many attempts in a short window.',
+};
+
+const formatAuthEventDate = (value: string) =>
+    new Date(value).toLocaleString([], {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+    });
+
+const getAuthEventHeadline = (event: AuthEventSummary) =>
+    AUTH_EVENT_REASON_COPY[event.reason || ''] || (event.outcome === 'success' ? 'Completed successfully.' : 'The request was rejected.');
 
 interface TeamFormState {
     first_name: string;
@@ -72,9 +110,12 @@ const Team: React.FC = () => {
     const [lastImportResult, setLastImportResult] = useState<BulkUserImportResponse | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('active');
-
     const [teamHours, setTeamHours] = useState<TeamHoursEntry[]>([]);
     const [roleSavingFor, setRoleSavingFor] = useState<Set<string>>(new Set());
+    const [selectedDiagnosticsUserId, setSelectedDiagnosticsUserId] = useState<string | null>(null);
+    const [authEvents, setAuthEvents] = useState<AuthEventSummary[]>([]);
+    const [authEventsLoading, setAuthEventsLoading] = useState(false);
+    const [authEventsError, setAuthEventsError] = useState<string | null>(null);
 
     const role = getStoredRole();
     const canManageTeam = role === 'Admin' || role === 'Manager';
@@ -129,6 +170,28 @@ const Team: React.FC = () => {
         }
     }, [canManageTeam]);
 
+    const loadAuthEvents = useCallback(async (user: UserSummary | null) => {
+        if (!canManageTeam || !user) {
+            setAuthEvents([]);
+            setAuthEventsError(null);
+            return;
+        }
+
+        setAuthEventsLoading(true);
+        setAuthEventsError(null);
+
+        try {
+            const response = await api.get<TeamAuthEventsResponse>(`/users/${user.id}/auth-events?limit=20`);
+            setAuthEvents(response.data.events || []);
+        } catch (error) {
+            console.error('Failed to load access diagnostics', error);
+            setAuthEvents([]);
+            setAuthEventsError(getApiErrorMessage(error, 'Failed to load access diagnostics'));
+        } finally {
+            setAuthEventsLoading(false);
+        }
+    }, [canManageTeam]);
+
     useEffect(() => {
         const load = async () => {
             setLoading(true);
@@ -145,6 +208,28 @@ const Team: React.FC = () => {
             void loadProjects();
         }
     }, [canManageTeam, importModalOpen, loadProjects, projects.length]);
+
+    useEffect(() => {
+        if (!canManageTeam) {
+            setSelectedDiagnosticsUserId(null);
+            setAuthEvents([]);
+            setAuthEventsError(null);
+            return;
+        }
+
+        if (team.length === 0) {
+            setSelectedDiagnosticsUserId(null);
+            return;
+        }
+
+        const selectedStillExists = selectedDiagnosticsUserId
+            ? team.some((member) => member.id === selectedDiagnosticsUserId)
+            : false;
+
+        if (!selectedStillExists) {
+            setSelectedDiagnosticsUserId(team[0].id);
+        }
+    }, [canManageTeam, selectedDiagnosticsUserId, team]);
 
     const activeCount = team.filter((user) => user.is_active).length;
     const inactiveCount = team.length - activeCount;
@@ -501,19 +586,6 @@ const Team: React.FC = () => {
         }
     };
 
-    const activityFeed = useMemo(() => {
-        return team
-            .slice()
-            .sort((a, b) => a.first_name.localeCompare(b.first_name))
-            .slice(0, 6)
-            .map((user) => ({
-                id: user.id,
-                icon: user.is_active ? 'check_circle' : 'pause_circle',
-                iconClass: user.is_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400',
-                text: `${user.first_name} ${user.last_name} is ${user.is_active ? 'active' : 'inactive'} as ${user.role?.name || 'Employee'}`,
-            }));
-    }, [team]);
-
     const filteredTeam = useMemo(() => {
         const query = searchQuery.trim().toLowerCase();
         return team.filter((user) => {
@@ -531,6 +603,42 @@ const Team: React.FC = () => {
             return matchesQuery && matchesStatus;
         });
     }, [searchQuery, statusFilter, team]);
+
+    const selectedDiagnosticsUser = useMemo(
+        () => team.find((member) => member.id === selectedDiagnosticsUserId) || null,
+        [selectedDiagnosticsUserId, team],
+    );
+
+    useEffect(() => {
+        void loadAuthEvents(selectedDiagnosticsUser);
+    }, [loadAuthEvents, selectedDiagnosticsUser]);
+
+    const authSummary = useMemo(() => {
+        const now = Date.now();
+        const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);
+        const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
+
+        const failedLogins = authEvents.filter((event) =>
+            event.event_type === 'login_attempt'
+            && event.outcome === 'failure'
+            && new Date(event.created_at).getTime() >= sevenDaysAgo,
+        ).length;
+
+        const resetRequests = authEvents.filter((event) =>
+            event.event_type === 'password_reset_request'
+            && new Date(event.created_at).getTime() >= thirtyDaysAgo,
+        ).length;
+
+        const lastSuccessfulLogin = authEvents.find((event) =>
+            event.event_type === 'login_attempt' && event.outcome === 'success',
+        ) || null;
+
+        return {
+            failedLogins,
+            resetRequests,
+            lastSuccessfulLogin,
+        };
+    }, [authEvents]);
 
     const handleExportTeam = () => {
         const header = 'First Name,Last Name,Email,Role,Status\n';
@@ -934,21 +1042,135 @@ const Team: React.FC = () => {
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
-                    <div className="p-6 border-b border-slate-200 dark:border-slate-800">
-                        <h3 className="text-lg font-bold">Team Activity</h3>
-                        <p className="text-xs text-slate-500 mt-1">Latest status snapshots</p>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                        {activityFeed.length === 0 && (
-                            <p className="text-sm text-slate-500">No activity yet.</p>
-                        )}
-                        {activityFeed.map((activity) => (
-                            <div key={activity.id} className="flex gap-3">
-                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                                    <span className={`material-symbols-outlined text-sm ${activity.iconClass}`}>{activity.icon}</span>
-                                </div>
-                                <p className="text-sm text-slate-700 dark:text-slate-300">{activity.text}</p>
+                    <div className="p-6 border-b border-slate-200 dark:border-slate-800 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-bold">Access Diagnostics</h3>
+                            <p className="text-xs text-slate-500 mt-1">Review password reset activity, login failures, and backend sign-in outcomes for a selected user.</p>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label htmlFor="diagnostics-user" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Inspect team member
+                            </label>
+                            <div className="flex gap-2">
+                                <select
+                                    id="diagnostics-user"
+                                    value={selectedDiagnosticsUserId || ''}
+                                    onChange={(event) => setSelectedDiagnosticsUserId(event.target.value || null)}
+                                    className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                >
+                                    {team.map((member) => (
+                                        <option key={member.id} value={member.id}>
+                                            {member.first_name} {member.last_name} ({member.email})
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => void loadAuthEvents(selectedDiagnosticsUser)}
+                                    className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                                    disabled={authEventsLoading || !selectedDiagnosticsUser}
+                                >
+                                    Refresh
+                                </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="border-b border-slate-200 dark:border-slate-800 p-6">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-rose-600">Failed Logins</p>
+                                <p className="mt-2 text-2xl font-black text-rose-700">{authSummary.failedLogins}</p>
+                                <p className="text-xs text-rose-600">Last 7 days</p>
+                            </div>
+                            <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Reset Requests</p>
+                                <p className="mt-2 text-2xl font-black text-amber-800">{authSummary.resetRequests}</p>
+                                <p className="text-xs text-amber-700">Last 30 days</p>
+                            </div>
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Last Good Login</p>
+                                <p className="mt-2 text-sm font-bold text-emerald-800">
+                                    {authSummary.lastSuccessfulLogin ? formatAuthEventDate(authSummary.lastSuccessfulLogin.created_at) : 'No recent success'}
+                                </p>
+                                <p className="text-xs text-emerald-700">Most recent successful sign-in</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {!selectedDiagnosticsUser && (
+                            <p className="text-sm text-slate-500">Select a team member to inspect their access history.</p>
+                        )}
+
+                        {selectedDiagnosticsUser && (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                    {selectedDiagnosticsUser.first_name} {selectedDiagnosticsUser.last_name}
+                                </p>
+                                <p className="mt-1 text-xs text-slate-500">{selectedDiagnosticsUser.email}</p>
+                            </div>
+                        )}
+
+                        {authEventsLoading && (
+                            <p className="text-sm text-slate-500">Loading access diagnostics...</p>
+                        )}
+
+                        {!authEventsLoading && authEventsError && (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                {authEventsError}
+                            </div>
+                        )}
+
+                        {!authEventsLoading && !authEventsError && selectedDiagnosticsUser && authEvents.length === 0 && (
+                            <p className="text-sm text-slate-500">No recent auth events were recorded for this user.</p>
+                        )}
+
+                        {!authEventsLoading && !authEventsError && authEvents.map((event) => (
+                            <article key={event.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                                event.outcome === 'success'
+                                                    ? 'bg-emerald-100 text-emerald-700'
+                                                    : 'bg-rose-100 text-rose-700'
+                                            }`}>
+                                                {event.outcome}
+                                            </span>
+                                            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                                {AUTH_EVENT_LABELS[event.event_type] || event.event_type}
+                                            </span>
+                                        </div>
+                                        <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+                                            {getAuthEventHeadline(event)}
+                                        </p>
+                                    </div>
+
+                                    <p className="text-xs text-slate-500">
+                                        {formatAuthEventDate(event.created_at)}
+                                    </p>
+                                </div>
+
+                                <div className="mt-3 grid gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                    {event.email && (
+                                        <p>
+                                            <span className="font-semibold text-slate-700 dark:text-slate-200">Email used:</span> {event.email}
+                                        </p>
+                                    )}
+                                    {event.ip_address && (
+                                        <p>
+                                            <span className="font-semibold text-slate-700 dark:text-slate-200">IP:</span> {event.ip_address}
+                                        </p>
+                                    )}
+                                    {event.user_agent && (
+                                        <p className="break-all">
+                                            <span className="font-semibold text-slate-700 dark:text-slate-200">User agent:</span> {event.user_agent}
+                                        </p>
+                                    )}
+                                </div>
+                            </article>
                         ))}
                     </div>
                 </div>

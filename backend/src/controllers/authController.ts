@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
 import { env } from '../config/env';
+import { logAuthEvent } from '../services/authEventService';
 import { sendPasswordResetEmail } from '../services/emailService';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
@@ -12,6 +13,18 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
         if (!email || !password) {
+            await logAuthEvent(req, {
+                email: email || null,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'missing_credentials',
+                metadata: {
+                    missing: [
+                        !email ? 'email' : null,
+                        !password ? 'password' : null,
+                    ].filter(Boolean),
+                },
+            });
             res.status(400).json({ message: 'Email and password are required' });
             return;
         }
@@ -22,20 +35,50 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         });
 
         if (!user) {
+            await logAuthEvent(req, {
+                email,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'user_not_found',
+            });
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
 
         if (!user.is_active) {
+            await logAuthEvent(req, {
+                userId: user.id,
+                email: user.email,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'account_disabled',
+            });
             res.status(401).json({ message: 'Account disabled' });
             return;
         }
 
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
+            await logAuthEvent(req, {
+                userId: user.id,
+                email: user.email,
+                eventType: 'login_attempt',
+                outcome: 'failure',
+                reason: 'invalid_password',
+            });
             res.status(401).json({ message: 'Invalid credentials' });
             return;
         }
+
+        await logAuthEvent(req, {
+            userId: user.id,
+            email: user.email,
+            eventType: 'login_attempt',
+            outcome: 'success',
+            metadata: {
+                role: user.role.name,
+            },
+        });
 
         const token = jwt.sign(
             { userId: user.id, email: user.email, role: user.role.name },
@@ -75,6 +118,11 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
         if (!email) {
+            await logAuthEvent(req, {
+                eventType: 'password_reset_request',
+                outcome: 'failure',
+                reason: 'missing_email',
+            });
             res.status(400).json({ message: 'Email is required' });
             return;
         }
@@ -83,6 +131,12 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
         // Always return success to prevent email enumeration
         if (!user) {
+            await logAuthEvent(req, {
+                email,
+                eventType: 'password_reset_request',
+                outcome: 'failure',
+                reason: 'user_not_found',
+            });
             res.status(200).json({ message: 'If that email exists, a reset code has been generated.' });
             return;
         }
@@ -98,6 +152,13 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
         await prisma.passwordResetToken.create({
             data: { user_id: user.id, token, expires_at },
+        });
+
+        await logAuthEvent(req, {
+            userId: user.id,
+            email: user.email,
+            eventType: 'password_reset_request',
+            outcome: 'success',
         });
 
         // Send password reset email (fire-and-forget — response already committed to anti-enum message)
@@ -124,11 +185,28 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         const newPassword = typeof req.body?.password === 'string' ? req.body.password : '';
 
         if (!code || !newPassword) {
+            await logAuthEvent(req, {
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'missing_reset_details',
+                metadata: {
+                    has_code: Boolean(code),
+                    has_password: Boolean(newPassword),
+                },
+            });
             res.status(400).json({ message: 'Reset code and new password are required' });
             return;
         }
 
         if (newPassword.length < 6) {
+            await logAuthEvent(req, {
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'password_too_short',
+                metadata: {
+                    code_length: code.length,
+                },
+            });
             res.status(400).json({ message: 'Password must be at least 6 characters' });
             return;
         }
@@ -138,7 +216,39 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
             include: { user: true },
         });
 
-        if (!resetToken || resetToken.used || resetToken.expires_at < new Date()) {
+        if (!resetToken) {
+            await logAuthEvent(req, {
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'invalid_reset_code',
+                metadata: {
+                    code_length: code.length,
+                },
+            });
+            res.status(400).json({ message: 'Invalid or expired reset code' });
+            return;
+        }
+
+        if (resetToken.used) {
+            await logAuthEvent(req, {
+                userId: resetToken.user_id,
+                email: resetToken.user.email,
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'used_reset_code',
+            });
+            res.status(400).json({ message: 'Invalid or expired reset code' });
+            return;
+        }
+
+        if (resetToken.expires_at < new Date()) {
+            await logAuthEvent(req, {
+                userId: resetToken.user_id,
+                email: resetToken.user.email,
+                eventType: 'password_reset_completion',
+                outcome: 'failure',
+                reason: 'expired_reset_code',
+            });
             res.status(400).json({ message: 'Invalid or expired reset code' });
             return;
         }
@@ -154,6 +264,13 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         await prisma.passwordResetToken.update({
             where: { id: resetToken.id },
             data: { used: true },
+        });
+
+        await logAuthEvent(req, {
+            userId: resetToken.user_id,
+            email: resetToken.user.email,
+            eventType: 'password_reset_completion',
+            outcome: 'success',
         });
 
         res.status(200).json({ message: 'Password has been reset successfully' });

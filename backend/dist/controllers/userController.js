@@ -12,9 +12,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.permanentlyDeleteUser = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.getMyNotifications = exports.getMe = void 0;
+exports.updateMe = exports.permanentlyDeleteUser = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getUserAuthEvents = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.getMyNotifications = exports.getMe = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
+const authEventService_1 = require("../services/authEventService");
 const wellbeingService_1 = require("../services/wellbeingService");
 const emailService_1 = require("../services/emailService");
 const env_1 = require("../config/env");
@@ -190,6 +191,49 @@ const getRoles = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.getRoles = getRoles;
+const getUserAuthEvents = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userIdParam = req.params.id;
+        const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
+        if (!userId) {
+            res.status(400).json({ message: 'User id is required' });
+            return;
+        }
+        const requestedLimit = Number.parseInt(String((_a = req.query.limit) !== null && _a !== void 0 ? _a : '25'), 10);
+        const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 25;
+        const user = yield db_1.default.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                email: true,
+                first_name: true,
+                last_name: true,
+                is_active: true,
+                role: { select: { name: true } },
+            },
+        });
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+        const events = yield db_1.default.authEvent.findMany({
+            where: {
+                OR: [
+                    { user_id: user.id },
+                    { email: user.email },
+                ],
+            },
+            orderBy: { created_at: 'desc' },
+            take: limit,
+        });
+        res.status(200).json({ user, events });
+    }
+    catch (error) {
+        respondWithUserServiceError(res, error, 'Failed to load user auth events');
+    }
+});
+exports.getUserAuthEvents = getUserAuthEvents;
 const resolveRoleId = (roleId, roleName) => __awaiter(void 0, void 0, void 0, function* () {
     if (roleId === null || roleId === void 0 ? void 0 : roleId.trim()) {
         return roleId.trim();
@@ -465,7 +509,7 @@ const importUsers = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.importUsers = importUsers;
 const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f;
     try {
         const userIdParam = req.params.id;
         const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
@@ -507,7 +551,7 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             try {
                 resolvedRoleId = yield resolveRoleId(role_id, role);
             }
-            catch (_e) {
+            catch (_g) {
                 res.status(400).json({ message: 'Invalid role' });
                 return;
             }
@@ -563,6 +607,19 @@ const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         }
         catch (error) {
             console.error('Failed to write user update audit log:', error);
+        }
+        if ('password_hash' in updateData) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                userId: updatedUser.id,
+                email: updatedUser.email,
+                eventType: 'password_change',
+                outcome: 'success',
+                reason: 'manager_reset',
+                metadata: {
+                    actor_user_id: ((_e = req.user) === null || _e === void 0 ? void 0 : _e.userId) || null,
+                    actor_role: ((_f = req.user) === null || _f === void 0 ? void 0 : _f.role) || null,
+                },
+            });
         }
         res.status(200).json(updatedUser);
     }
@@ -714,6 +771,15 @@ const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         catch (error) {
             console.error('Failed to write profile update audit log:', error);
+        }
+        if ('password_hash' in updateData) {
+            yield (0, authEventService_1.logAuthEvent)(req, {
+                userId,
+                email: updatedUser.email,
+                eventType: 'password_change',
+                outcome: 'success',
+                reason: 'self_service',
+            });
         }
         res.status(200).json({
             id: updatedUser.id,
