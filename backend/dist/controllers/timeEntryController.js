@@ -268,8 +268,13 @@ const getMyEntries = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 });
 exports.getMyEntries = getMyEntries;
 const pingTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d, _e, _f;
     try {
         const user_id = requireUserId(req);
+        const lastClientActivityAtRaw = (_a = req.body) === null || _a === void 0 ? void 0 : _a.last_activity_at;
+        const activeTimerId = typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.active_timer_id) === 'string' ? req.body.active_timer_id : null;
+        const visibilityState = typeof ((_c = req.body) === null || _c === void 0 ? void 0 : _c.visibility_state) === 'string' ? req.body.visibility_state : null;
+        const hasFocus = typeof ((_d = req.body) === null || _d === void 0 ? void 0 : _d.has_focus) === 'boolean' ? req.body.has_focus : null;
         const activeTimer = yield db_1.default.activeTimer.findUnique({
             where: { user_id },
         });
@@ -277,9 +282,39 @@ const pingTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             res.status(404).json({ message: 'No active timer found to ping' });
             return;
         }
+        if (activeTimerId && activeTimer.id !== activeTimerId) {
+            res.status(409).json({ message: 'Heartbeat did not match the active timer' });
+            return;
+        }
+        const lastClientActivityAt = typeof lastClientActivityAtRaw === 'string'
+            ? new Date(lastClientActivityAtRaw)
+            : null;
+        const validLastClientActivityAt = lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
+            ? lastClientActivityAt
+            : null;
         yield db_1.default.activeTimer.update({
             where: { user_id },
-            data: { last_active_ping: new Date() }
+            data: {
+                last_active_ping: new Date(),
+                last_heartbeat_at: new Date(),
+                last_client_activity_at: validLastClientActivityAt,
+                client_visibility: visibilityState,
+                client_has_focus: hasFocus,
+                heartbeat_state: Object.assign(Object.assign({}, (activeTimer.heartbeat_state || {})), { last_activity_at: (_e = validLastClientActivityAt === null || validLastClientActivityAt === void 0 ? void 0 : validLastClientActivityAt.toISOString()) !== null && _e !== void 0 ? _e : null, visibility_state: visibilityState, has_focus: hasFocus, active_timer_id: activeTimer.id, received_at: new Date().toISOString() }),
+            },
+        });
+        yield db_1.default.auditLog.create({
+            data: {
+                user_id,
+                action: 'timer_heartbeat_received',
+                resource: 'active_timer',
+                metadata: {
+                    active_timer_id: activeTimer.id,
+                    last_activity_at: (_f = validLastClientActivityAt === null || validLastClientActivityAt === void 0 ? void 0 : validLastClientActivityAt.toISOString()) !== null && _f !== void 0 ? _f : null,
+                    visibility_state: visibilityState,
+                    has_focus: hasFocus,
+                },
+            },
         });
         res.status(200).json({ message: 'Ping successful' });
     }

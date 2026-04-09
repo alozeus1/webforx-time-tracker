@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSystemNotifications = exports.getAuditLogs = void 0;
+exports.deleteSystemNotification = exports.getSystemNotifications = exports.getAuditLogs = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const getAuditLogs = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -72,6 +72,7 @@ exports.getAuditLogs = getAuditLogs;
 const getSystemNotifications = (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const notifications = yield db_1.default.notification.findMany({
+            where: { deleted_at: null },
             orderBy: { created_at: 'desc' },
             take: 100,
             include: {
@@ -86,3 +87,33 @@ const getSystemNotifications = (_req, res) => __awaiter(void 0, void 0, void 0, 
     }
 });
 exports.getSystemNotifications = getSystemNotifications;
+const deleteSystemNotification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const notificationId = String(req.params.notificationId);
+        const notification = yield db_1.default.notification.findFirst({
+            where: {
+                id: notificationId,
+                deleted_at: null,
+            },
+        });
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+        yield db_1.default.notification.update({
+            where: { id: notification.id },
+            data: {
+                deleted_at: new Date(),
+                is_read: true,
+                read_at: (_a = notification.read_at) !== null && _a !== void 0 ? _a : new Date(),
+            },
+        });
+        res.status(200).json({ message: 'Notification deleted' });
+    }
+    catch (error) {
+        console.error('Failed to delete system notification:', error);
+        res.status(500).json({ message: 'Internal server error while deleting system notification' });
+    }
+});
+exports.deleteSystemNotification = deleteSystemNotification;

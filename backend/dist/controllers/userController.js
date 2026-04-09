@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMe = exports.permanentlyDeleteUser = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getUserAuthEvents = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.getMyNotifications = exports.getMe = void 0;
+exports.updateMe = exports.permanentlyDeleteUser = exports.deleteUser = exports.updateUser = exports.importUsers = exports.createUser = exports.getUserAuthEvents = exports.getRoles = exports.getAllUsers = exports.getMyWellbeing = exports.deleteMyNotification = exports.markMyNotificationRead = exports.getMyNotification = exports.getMyNotifications = exports.getMe = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const db_1 = __importDefault(require("../config/db"));
 const authEventService_1 = require("../services/authEventService");
@@ -133,21 +133,133 @@ const getMyNotifications = (req, res) => __awaiter(void 0, void 0, void 0, funct
         const userId = requireUserId(req);
         const requestedLimit = Number.parseInt(String((_a = req.query.limit) !== null && _a !== void 0 ? _a : '20'), 10);
         const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 20;
-        const notifications = yield db_1.default.notification.findMany({
-            where: { user_id: userId },
-            orderBy: { created_at: 'desc' },
-            take: limit,
-            include: {
-                user: { select: { email: true, first_name: true, last_name: true } },
-            },
-        });
-        res.status(200).json({ notifications });
+        const includeDeleted = req.query.includeDeleted === 'true';
+        const baseWhere = Object.assign({ user_id: userId }, (includeDeleted ? {} : { deleted_at: null }));
+        const [notifications, unread_count, total_count] = yield Promise.all([
+            db_1.default.notification.findMany({
+                where: baseWhere,
+                orderBy: { created_at: 'desc' },
+                take: limit,
+                include: {
+                    user: { select: { email: true, first_name: true, last_name: true } },
+                },
+            }),
+            db_1.default.notification.count({
+                where: Object.assign(Object.assign({}, baseWhere), { is_read: false }),
+            }),
+            db_1.default.notification.count({
+                where: baseWhere,
+            }),
+        ]);
+        res.status(200).json({ notifications, unread_count, total_count });
     }
     catch (error) {
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 exports.getMyNotifications = getMyNotifications;
+const getMyNotification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = requireUserId(req);
+        const notificationId = String(req.params.notificationId);
+        const notification = yield db_1.default.notification.findFirst({
+            where: {
+                id: notificationId,
+                user_id: userId,
+                deleted_at: null,
+            },
+            include: {
+                user: { select: { email: true, first_name: true, last_name: true } },
+            },
+        });
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+        const openedAt = new Date();
+        const updated = notification.is_read
+            ? notification
+            : yield db_1.default.notification.update({
+                where: { id: notification.id },
+                data: { is_read: true, read_at: openedAt },
+                include: {
+                    user: { select: { email: true, first_name: true, last_name: true } },
+                },
+            });
+        res.status(200).json({ notification: updated });
+    }
+    catch (error) {
+        console.error('Failed to open notification:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.getMyNotification = getMyNotification;
+const markMyNotificationRead = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = requireUserId(req);
+        const notificationId = String(req.params.notificationId);
+        const notification = yield db_1.default.notification.findFirst({
+            where: {
+                id: notificationId,
+                user_id: userId,
+                deleted_at: null,
+            },
+        });
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+        const updated = yield db_1.default.notification.update({
+            where: { id: notification.id },
+            data: {
+                is_read: true,
+                read_at: (_a = notification.read_at) !== null && _a !== void 0 ? _a : new Date(),
+            },
+            include: {
+                user: { select: { email: true, first_name: true, last_name: true } },
+            },
+        });
+        res.status(200).json({ notification: updated });
+    }
+    catch (error) {
+        console.error('Failed to mark notification read:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.markMyNotificationRead = markMyNotificationRead;
+const deleteMyNotification = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const userId = requireUserId(req);
+        const notificationId = String(req.params.notificationId);
+        const notification = yield db_1.default.notification.findFirst({
+            where: {
+                id: notificationId,
+                user_id: userId,
+                deleted_at: null,
+            },
+        });
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+        yield db_1.default.notification.update({
+            where: { id: notification.id },
+            data: {
+                deleted_at: new Date(),
+                is_read: true,
+                read_at: (_a = notification.read_at) !== null && _a !== void 0 ? _a : new Date(),
+            },
+        });
+        res.status(200).json({ message: 'Notification deleted' });
+    }
+    catch (error) {
+        console.error('Failed to delete notification:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+exports.deleteMyNotification = deleteMyNotification;
 const getMyWellbeing = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const wellbeing = yield (0, wellbeingService_1.getUserWellbeingSummary)(requireUserId(req));

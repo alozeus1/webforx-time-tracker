@@ -1,5 +1,5 @@
 "use strict";
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = void 0;
 require("dotenv/config");
@@ -13,6 +13,15 @@ const requireEnv = (name) => {
 };
 const nodeEnv = ((_a = process.env.NODE_ENV) === null || _a === void 0 ? void 0 : _a.trim()) || 'development';
 const jwtSecret = requireEnv('JWT_SECRET');
+const parseMinutesEnv = (name, fallback) => {
+    var _a;
+    const raw = (_a = process.env[name]) === null || _a === void 0 ? void 0 : _a.trim();
+    if (!raw) {
+        return fallback;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 const resolveIntegrationSecret = () => {
     var _a;
     const explicit = (_a = process.env.INTEGRATION_SECRET) === null || _a === void 0 ? void 0 : _a.trim();
@@ -38,6 +47,10 @@ exports.env = {
     googleClientId: ((_f = process.env.GOOGLE_CLIENT_ID) === null || _f === void 0 ? void 0 : _f.trim()) || '',
     googleClientSecret: ((_g = process.env.GOOGLE_CLIENT_SECRET) === null || _g === void 0 ? void 0 : _g.trim()) || '',
     googleRedirectUri: ((_h = process.env.GOOGLE_REDIRECT_URI) === null || _h === void 0 ? void 0 : _h.trim()) || '',
-    resendApiKey: ((_j = process.env.RESEND_API_KEY) === null || _j === void 0 ? void 0 : _j.trim()) || '',
-    emailFrom: ((_k = process.env.EMAIL_FROM) === null || _k === void 0 ? void 0 : _k.trim()) || 'Web Forx Time Tracker <noreply@webforxtech.com>',
+    idleWarningMinutes: parseMinutesEnv('IDLE_WARNING_MINUTES', 15),
+    heartbeatIntervalMinutes: parseMinutesEnv('HEARTBEAT_INTERVAL_MINUTES', 15),
+    heartbeatStaleMinutes: parseMinutesEnv('HEARTBEAT_STALE_MINUTES', 20),
+    autoStopGraceMinutes: parseMinutesEnv('AUTO_STOP_GRACE_MINUTES', 10),
+    resendApiKey: ((_l = process.env.RESEND_API_KEY) === null || _l === void 0 ? void 0 : _l.trim()) || '',
+    emailFrom: ((_m = process.env.EMAIL_FROM) === null || _m === void 0 ? void 0 : _m.trim()) || 'Web Forx Time Tracker <noreply@webforxtech.com>',
 };
