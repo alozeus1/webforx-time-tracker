@@ -206,6 +206,8 @@ export interface NotificationSummary {
     message: string;
     type: string;
     is_read: boolean;
+    read_at?: string | null;
+    deleted_at?: string | null;
     created_at: string;
     user: { email: string; first_name: string; last_name: string };
 }

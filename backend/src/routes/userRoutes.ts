@@ -9,6 +9,9 @@ import {
     updateMe,
     getRoles,
     getMyNotifications,
+    getMyNotification,
+    markMyNotificationRead,
+    deleteMyNotification,
     getMyWellbeing,
     importUsers,
     getUserAuthEvents,
@@ -19,6 +22,9 @@ const router = Router();
 
 router.get('/me', authenticateToken, getMe);
 router.get('/me/notifications', authenticateToken, getMyNotifications);
+router.get('/me/notifications/:notificationId', authenticateToken, getMyNotification);
+router.patch('/me/notifications/:notificationId/read', authenticateToken, markMyNotificationRead);
+router.delete('/me/notifications/:notificationId', authenticateToken, deleteMyNotification);
 router.get('/me/wellbeing', authenticateToken, getMyWellbeing);
 router.put('/me', authenticateToken, updateMe);
 router.get('/', authenticateToken, requireRole(['Admin', 'Manager']), getAllUsers);

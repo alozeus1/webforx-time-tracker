@@ -164,9 +164,13 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
         const userId = requireUserId(req);
         const requestedLimit = Number.parseInt(String(req.query.limit ?? '20'), 10);
         const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 20;
+        const includeDeleted = req.query.includeDeleted === 'true';
 
         const notifications = await prisma.notification.findMany({
-            where: { user_id: userId },
+            where: {
+                user_id: userId,
+                ...(includeDeleted ? {} : { deleted_at: null }),
+            },
             orderBy: { created_at: 'desc' },
             take: limit,
             include: {
@@ -176,6 +180,112 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
 
         res.status(200).json({ notifications });
     } catch (error) {
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const getMyNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = requireUserId(req);
+        const notificationId = String(req.params.notificationId);
+        const notification = await prisma.notification.findFirst({
+            where: {
+                id: notificationId,
+                user_id: userId,
+                deleted_at: null,
+            },
+            include: {
+                user: { select: { email: true, first_name: true, last_name: true } },
+            },
+        });
+
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+
+        const openedAt = new Date();
+        const updated = notification.is_read
+            ? notification
+            : await prisma.notification.update({
+                where: { id: notification.id },
+                data: { is_read: true, read_at: openedAt },
+                include: {
+                    user: { select: { email: true, first_name: true, last_name: true } },
+                },
+            });
+
+        res.status(200).json({ notification: updated });
+    } catch (error) {
+        console.error('Failed to open notification:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const markMyNotificationRead = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = requireUserId(req);
+        const notificationId = String(req.params.notificationId);
+        const notification = await prisma.notification.findFirst({
+            where: {
+                id: notificationId,
+                user_id: userId,
+                deleted_at: null,
+            },
+        });
+
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+
+        const updated = await prisma.notification.update({
+            where: { id: notification.id },
+            data: {
+                is_read: true,
+                read_at: notification.read_at ?? new Date(),
+            },
+            include: {
+                user: { select: { email: true, first_name: true, last_name: true } },
+            },
+        });
+
+        res.status(200).json({ notification: updated });
+    } catch (error) {
+        console.error('Failed to mark notification read:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const deleteMyNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = requireUserId(req);
+        const notificationId = String(req.params.notificationId);
+        const notification = await prisma.notification.findFirst({
+            where: {
+                id: notificationId,
+                user_id: userId,
+                deleted_at: null,
+            },
+        });
+
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+
+        await prisma.notification.update({
+            where: { id: notification.id },
+            data: {
+                deleted_at: new Date(),
+                is_read: true,
+                read_at: notification.read_at ?? new Date(),
+            },
+        });
+
+        res.status(200).json({ message: 'Notification deleted' });
+    } catch (error) {
+        console.error('Failed to delete notification:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };

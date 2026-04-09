@@ -4,7 +4,8 @@ import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import OnboardingTour, { ONBOARDING_KEY } from './OnboardingTour';
 import HelpChatbot from './HelpChatbot';
-import { useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
+import AccessibleDialog from './AccessibleDialog';
+import { TIMER_IDLE_RESUMED_EVENT, TIMER_IDLE_WARNING_EVENT, useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
 import { useWorkSignals } from '../hooks/useWorkSignals';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -16,6 +17,7 @@ const Layout: React.FC = () => {
         return localStorage.getItem('wfx-sidebar-collapsed') === 'true';
     });
     const [tourKey, setTourKey] = useState(0);
+    const [idleWarning, setIdleWarning] = useState<{ inactiveForMinutes: number } | null>(null);
 
     const handleCollapsedChange = (next: boolean) => {
         setSidebarCollapsed(next);
@@ -50,6 +52,27 @@ const Layout: React.FC = () => {
         const titleRoot = routeTitles[location.pathname] ?? 'Workspace';
         document.title = `${titleRoot} | Web Forx Time Tracker`;
     }, [location.pathname]);
+
+    useEffect(() => {
+        const onIdleWarning = (event: Event) => {
+            const detail = (event as CustomEvent<{ inactiveForMinutes?: number }>).detail;
+            setIdleWarning({
+                inactiveForMinutes: detail?.inactiveForMinutes ?? 0,
+            });
+        };
+
+        const onIdleResumed = () => {
+            setIdleWarning(null);
+        };
+
+        window.addEventListener(TIMER_IDLE_WARNING_EVENT, onIdleWarning as EventListener);
+        window.addEventListener(TIMER_IDLE_RESUMED_EVENT, onIdleResumed);
+
+        return () => {
+            window.removeEventListener(TIMER_IDLE_WARNING_EVENT, onIdleWarning as EventListener);
+            window.removeEventListener(TIMER_IDLE_RESUMED_EVENT, onIdleResumed);
+        };
+    }, []);
 
     const restartTour = () => {
         localStorage.removeItem(ONBOARDING_KEY);
@@ -95,6 +118,29 @@ const Layout: React.FC = () => {
             <CommandPalette />
             <OnboardingTour key={tourKey} />
             <HelpChatbot />
+            <AccessibleDialog
+                isOpen={Boolean(idleWarning)}
+                onClose={() => setIdleWarning(null)}
+                ariaLabel="Idle timer warning"
+                panelClassName="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+            >
+                <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Timer Warning</p>
+                    <h2 className="text-xl font-bold text-slate-900">Your timer may stop soon</h2>
+                    <p className="text-sm text-slate-600">
+                        We have not detected activity for {idleWarning?.inactiveForMinutes ?? 0} minute(s). Resume activity to keep the timer running.
+                    </p>
+                    <div className="flex justify-end">
+                        <button
+                            type="button"
+                            className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                            onClick={() => setIdleWarning(null)}
+                        >
+                            Got it
+                        </button>
+                    </div>
+                </div>
+            </AccessibleDialog>
         </div>
     );
 };

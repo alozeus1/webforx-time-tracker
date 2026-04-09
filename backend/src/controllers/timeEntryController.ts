@@ -283,6 +283,10 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
 export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
+        const lastClientActivityAtRaw = req.body?.last_activity_at;
+        const activeTimerId = typeof req.body?.active_timer_id === 'string' ? req.body.active_timer_id : null;
+        const visibilityState = typeof req.body?.visibility_state === 'string' ? req.body.visibility_state : null;
+        const hasFocus = typeof req.body?.has_focus === 'boolean' ? req.body.has_focus : null;
 
         const activeTimer = await prisma.activeTimer.findUnique({
             where: { user_id },
@@ -293,9 +297,49 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
+        if (activeTimerId && activeTimer.id !== activeTimerId) {
+            res.status(409).json({ message: 'Heartbeat did not match the active timer' });
+            return;
+        }
+
+        const lastClientActivityAt = typeof lastClientActivityAtRaw === 'string'
+            ? new Date(lastClientActivityAtRaw)
+            : null;
+        const validLastClientActivityAt = lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
+            ? lastClientActivityAt
+            : null;
+
         await prisma.activeTimer.update({
             where: { user_id },
-            data: { last_active_ping: new Date() }
+            data: {
+                last_active_ping: new Date(),
+                last_heartbeat_at: new Date(),
+                last_client_activity_at: validLastClientActivityAt,
+                client_visibility: visibilityState,
+                client_has_focus: hasFocus,
+                heartbeat_state: {
+                    ...(activeTimer.heartbeat_state as Record<string, unknown> || {}),
+                    last_activity_at: validLastClientActivityAt?.toISOString() ?? null,
+                    visibility_state: visibilityState,
+                    has_focus: hasFocus,
+                    active_timer_id: activeTimer.id,
+                    received_at: new Date().toISOString(),
+                },
+            },
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                user_id,
+                action: 'timer_heartbeat_received',
+                resource: 'active_timer',
+                metadata: {
+                    active_timer_id: activeTimer.id,
+                    last_activity_at: validLastClientActivityAt?.toISOString() ?? null,
+                    visibility_state: visibilityState,
+                    has_focus: hasFocus,
+                },
+            },
         });
 
         res.status(200).json({ message: 'Ping successful' });

@@ -20,6 +20,10 @@ model User {
   role_id       String
   is_active     Boolean  @default(true)
   hourly_rate   Decimal? @default(0.00) @db.Decimal(10, 2)
+  oidc_provider String?
+  oidc_issuer   String?
+  oidc_subject  String?
+  last_login_provider String?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -84,6 +88,8 @@ model TimeEntry {
   notes            String?
   is_billable      Boolean  @default(true)
   status           String   @default("pending") // "pending", "approved", "rejected"
+  stop_reason      String?
+  auto_stopped     Boolean  @default(false)
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt
 
@@ -101,6 +107,11 @@ model ActiveTimer {
   start_time       DateTime
   persisted_state  Json      @default("{}")
   last_active_ping DateTime? @default(now())
+  last_heartbeat_at DateTime? @default(now())
+  last_client_activity_at DateTime?
+  client_visibility String?
+  client_has_focus Boolean?
+  heartbeat_state  Json      @default("{}")
 
   user    User     @relation(fields: [user_id], references: [id])
   project Project? @relation(fields: [project_id], references: [id])
@@ -112,9 +123,13 @@ model Notification {
   message    String
   type       String // "reminder" or "alert"
   is_read    Boolean  @default(false)
+  read_at    DateTime?
+  deleted_at DateTime?
   created_at DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, deleted_at, is_read, created_at])
 }
 
 model AuditLog {

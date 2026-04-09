@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { resolveApiBaseUrl } from '../utils/apiConfig';
+import { handleAuthFailure, isAuthFailureInProgress, resetAuthFailureState } from '../utils/authFailure';
 
 const configuredBaseUrl = resolveApiBaseUrl(
     import.meta.env.VITE_API_URL,
@@ -55,9 +56,58 @@ export const parseApiError = (error: unknown, fallback = 'Request failed. Please
 export const getApiErrorMessage = (error: unknown, fallback?: string) =>
     parseApiError(error, fallback).message;
 
+const PUBLIC_API_PATHS = [
+    '/auth/login',
+    '/auth/refresh',
+    '/auth/providers',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+    '/public',
+];
+
+const isPublicApiRequest = (url?: string) => {
+    if (!url) {
+        return false;
+    }
+
+    const normalizedUrl = url.startsWith('http')
+        ? new URL(url).pathname.replace(/^\/api\/v1/, '')
+        : url;
+
+    return PUBLIC_API_PATHS.some((path) => normalizedUrl.startsWith(path));
+};
+
+const buildCancelledAuthError = () => ({
+    response: {
+        status: 401,
+        data: {
+            message: 'Your session has expired. Please sign in again.',
+            error: { code: 'AUTH_SESSION_EXPIRED' },
+        },
+    },
+    message: 'Your session has expired. Please sign in again.',
+});
+
+const isAuthFailureResponse = (error: unknown) => {
+    const response = (error as { response?: { status?: number; data?: { message?: string; error?: { code?: string } } } })?.response;
+    const status = response?.status;
+    const code = response?.data?.error?.code;
+    const message = response?.data?.message?.toLowerCase() || '';
+
+    return status === 401
+        || code === 'TOKEN_INVALID'
+        || code === 'TOKEN_EXPIRED'
+        || code === 'AUTH_SESSION_EXPIRED'
+        || (status === 403 && message.includes('invalid or expired token'));
+};
+
 // Request interceptor to attach JWT token
 api.interceptors.request.use(
     (config) => {
+        if (isAuthFailureInProgress() && !isPublicApiRequest(config.url)) {
+            return Promise.reject(buildCancelledAuthError());
+        }
+
         const token = localStorage.getItem('token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -82,7 +132,11 @@ api.interceptors.response.use(
     async (error) => {
         const originalRequest = error.config;
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (originalRequest && isPublicApiRequest(originalRequest.url)) {
+            return Promise.reject(error);
+        }
+
+        if (isAuthFailureResponse(error) && originalRequest && !originalRequest._retry) {
             const refreshToken = localStorage.getItem('refreshToken');
 
             if (refreshToken && window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password') {
@@ -110,28 +164,19 @@ api.interceptors.response.use(
                     if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
 
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;
+                    resetAuthFailureState();
                     processQueue(null, newToken);
                     return api(originalRequest);
                 } catch (refreshError) {
                     processQueue(refreshError, null);
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('refreshToken');
-                    localStorage.removeItem('user_role');
-                    localStorage.removeItem('user_profile');
-                    window.location.href = '/login';
+                    handleAuthFailure('Your session has expired. Please sign in again.');
                     return Promise.reject(refreshError);
                 } finally {
                     isRefreshing = false;
                 }
             }
 
-            localStorage.removeItem('token');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('user_role');
-            localStorage.removeItem('user_profile');
-            if (window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password') {
-                window.location.href = '/login';
-            }
+            handleAuthFailure(getApiErrorMessage(error, 'Your session has expired. Please sign in again.'));
         }
 
         return Promise.reject(error);

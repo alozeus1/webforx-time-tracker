@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Mail, ShieldCheck, Timer, ChartColumnBig } from 'lucide-react';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import './Login.css';
 import { setStoredSession } from '../utils/session';
+import { consumeAuthFailureMessage, resetAuthFailureState } from '../utils/authFailure';
 import { usePageMetadata } from '../hooks/usePageMetadata';
 
 const Login: React.FC = () => {
@@ -22,6 +23,13 @@ const Login: React.FC = () => {
         noIndex: true,
     });
 
+    useEffect(() => {
+        const storedMessage = consumeAuthFailureMessage();
+        if (storedMessage) {
+            setErrorMessage(storedMessage);
+        }
+    }, []);
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -33,10 +41,11 @@ const Login: React.FC = () => {
             if (response.data.refreshToken) {
                 localStorage.setItem('refreshToken', response.data.refreshToken);
             }
+            resetAuthFailureState();
             navigate('/dashboard');
         } catch (error) {
             console.error('Login failed:', error);
-            setErrorMessage('Login failed. Please check your credentials and try again.');
+            setErrorMessage(getApiErrorMessage(error, 'Login failed. Please check your credentials and try again.'));
         } finally {
             setLoading(false);
         }

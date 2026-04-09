@@ -17,6 +17,8 @@ jest.mock('../src/config/db', () => ({
         },
         notification: {
             findMany: jest.fn(),
+            findFirst: jest.fn(),
+            update: jest.fn(),
         },
         role: {
             findMany: jest.fn(),
@@ -65,6 +67,8 @@ beforeEach(() => {
     (prisma.authEvent.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.notification.update as jest.Mock).mockResolvedValue({});
 });
 
 // ─── getMe ───────────────────────────────────────────────────────────────────
@@ -129,6 +133,84 @@ describe('GET /api/v1/users/me/wellbeing', () => {
         expect(res.body.weeklyHourLimit).toBe(40);
         expect(res.body.status).toBe('balanced');
         expect(res.body.workloadAlerts).toHaveLength(1);
+    });
+});
+
+describe('Notification lifecycle routes', () => {
+    it('lists only active notifications for the authenticated user', async () => {
+        (prisma.notification.findMany as jest.Mock).mockResolvedValue([
+            {
+                id: 'notif-1',
+                message: 'Unread notification',
+                type: 'idle_warning',
+                is_read: false,
+                read_at: null,
+                deleted_at: null,
+                created_at: new Date('2026-04-09T10:00:00.000Z'),
+                user: { email: 'alice@test.com', first_name: 'Alice', last_name: 'Smith' },
+            },
+        ]);
+
+        const res = await request(app)
+            .get('/api/v1/users/me/notifications')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.notifications).toHaveLength(1);
+        expect(prisma.notification.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: expect.objectContaining({
+                user_id: 'user-emp-1',
+                deleted_at: null,
+            }),
+        }));
+    });
+
+    it('opens a notification and marks it as read', async () => {
+        const notification = {
+            id: 'notif-1',
+            user_id: 'user-emp-1',
+            message: 'Timer stopped automatically',
+            type: 'timer_auto_stopped',
+            is_read: false,
+            read_at: null,
+            deleted_at: null,
+            created_at: new Date('2026-04-09T10:00:00.000Z'),
+            user: { email: 'alice@test.com', first_name: 'Alice', last_name: 'Smith' },
+        };
+        (prisma.notification.findFirst as jest.Mock).mockResolvedValue(notification);
+        (prisma.notification.update as jest.Mock).mockResolvedValue({ ...notification, is_read: true, read_at: new Date('2026-04-09T10:05:00.000Z') });
+
+        const res = await request(app)
+            .get('/api/v1/users/me/notifications/notif-1')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.notification.is_read).toBe(true);
+        expect(prisma.notification.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ is_read: true }),
+        }));
+    });
+
+    it('soft deletes a notification for the authenticated user', async () => {
+        (prisma.notification.findFirst as jest.Mock).mockResolvedValue({
+            id: 'notif-1',
+            user_id: 'user-emp-1',
+            is_read: false,
+            read_at: null,
+            deleted_at: null,
+        });
+
+        const res = await request(app)
+            .delete('/api/v1/users/me/notifications/notif-1')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.notification.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                deleted_at: expect.any(Date),
+                is_read: true,
+            }),
+        }));
     });
 });
 

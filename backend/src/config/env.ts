@@ -12,6 +12,15 @@ const requireEnv = (name: string): string => {
 
 const nodeEnv = process.env.NODE_ENV?.trim() || 'development';
 const jwtSecret = requireEnv('JWT_SECRET');
+const parseMinutesEnv = (name: string, fallback: number) => {
+    const raw = process.env[name]?.trim();
+    if (!raw) {
+        return fallback;
+    }
+
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 
 const resolveIntegrationSecret = () => {
     const explicit = process.env.INTEGRATION_SECRET?.trim();
@@ -40,6 +49,10 @@ export const env = {
     googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || '',
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI?.trim() || '',
+    idleWarningMinutes: parseMinutesEnv('IDLE_WARNING_MINUTES', 15),
+    heartbeatIntervalMinutes: parseMinutesEnv('HEARTBEAT_INTERVAL_MINUTES', 15),
+    heartbeatStaleMinutes: parseMinutesEnv('HEARTBEAT_STALE_MINUTES', 20),
+    autoStopGraceMinutes: parseMinutesEnv('AUTO_STOP_GRACE_MINUTES', 10),
     resendApiKey: process.env.RESEND_API_KEY?.trim() || '',
     emailFrom: process.env.EMAIL_FROM?.trim() || 'Web Forx Time Tracker <noreply@webforxtech.com>',
 };

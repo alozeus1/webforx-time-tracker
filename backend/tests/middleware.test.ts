@@ -49,12 +49,15 @@ describe('authenticateToken middleware', () => {
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({ message: expect.stringMatching(/no token/i) })
+            expect.objectContaining({
+                message: expect.stringMatching(/no token/i),
+                error: expect.objectContaining({ code: 'TOKEN_MISSING' }),
+            })
         );
         expect(next).not.toHaveBeenCalled();
     });
 
-    it('returns 403 when token is invalid/expired', () => {
+    it('returns 401 when token is invalid/expired', () => {
         const req = {
             headers: { authorization: 'Bearer totally-invalid-token' },
         } as unknown as AuthRequest;
@@ -63,14 +66,17 @@ describe('authenticateToken middleware', () => {
 
         authenticateToken(req, res, next);
 
-        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.status).toHaveBeenCalledWith(401);
         expect(res.json).toHaveBeenCalledWith(
-            expect.objectContaining({ message: expect.stringMatching(/invalid/i) })
+            expect.objectContaining({
+                message: expect.stringMatching(/invalid/i),
+                error: expect.objectContaining({ code: 'TOKEN_INVALID' }),
+            })
         );
         expect(next).not.toHaveBeenCalled();
     });
 
-    it('returns 403 when token is signed with wrong secret', () => {
+    it('returns 401 when token is signed with wrong secret', () => {
         const token = jwt.sign({ userId: 'u1', role: 'Admin' }, 'wrong-secret');
         const req = {
             headers: { authorization: `Bearer ${token}` },
@@ -80,7 +86,7 @@ describe('authenticateToken middleware', () => {
 
         authenticateToken(req, res, next);
 
-        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.status).toHaveBeenCalledWith(401);
         expect(next).not.toHaveBeenCalled();
     });
 });

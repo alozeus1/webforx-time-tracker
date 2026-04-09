@@ -5,6 +5,7 @@ import type {
     ActiveTimerSummary,
     CalendarEventSuggestion,
     CalendarStatus,
+    NotificationSummary,
     ProjectSummary,
     TimeEntrySummary,
     TimerEntriesResponse,
@@ -61,6 +62,7 @@ const Timer: React.FC = () => {
     const [availableTags, setAvailableTags] = useState<{ id: string; name: string; color: string }[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+    const [timerStatusNotice, setTimerStatusNotice] = useState<NotificationSummary | null>(null);
 
     const isRunning = timerStartedAt !== null;
     const todaysProgress = completedSeconds + time;
@@ -131,6 +133,18 @@ const Timer: React.FC = () => {
             } catch (error) {
                 console.log('Calendar sync unavailable', error);
                 setCalendarEvents([]);
+            }
+
+            try {
+                const notificationResponse = await api.get<{ notifications: NotificationSummary[] }>('/users/me/notifications', {
+                    params: { limit: 10 },
+                });
+                const latestTimerNotification = (notificationResponse.data.notifications || []).find(
+                    (notification) => notification.type === 'timer_auto_stopped' || notification.type === 'idle_warning',
+                );
+                setTimerStatusNotice(latestTimerNotification || null);
+            } catch {
+                setTimerStatusNotice(null);
             }
         } catch (error) {
             console.error('Failed to fetch timer page data', error);
@@ -479,6 +493,13 @@ const Timer: React.FC = () => {
                 <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
                         <h2 className="text-sm font-bold tracking-wide text-amber-900">Google Calendar Unavailable</h2>
                         <p className="mt-2 text-sm text-amber-700">Calendar suggestions are not enabled for this workspace yet. You can still track time normally.</p>
+                    </section>
+                )}
+
+                {timerStatusNotice && (
+                    <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+                        <h2 className="text-sm font-bold tracking-wide text-amber-900">Timer Status</h2>
+                        <p className="mt-2 text-sm text-amber-700">{timerStatusNotice.message}</p>
                     </section>
                 )}
 

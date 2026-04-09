@@ -318,13 +318,52 @@ html.dark .badge {
     overflow-y: auto;
 }
 
+.notification-group-label {
+    padding: 0.6rem 0.9rem 0.35rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
 .notification-item {
     border-bottom: 1px solid var(--border-color);
     padding: 0.65rem 0.9rem;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.notification-item-unread {
+    background: color-mix(in srgb, var(--color-primary) 6%, transparent);
 }
 
 .notification-item:last-child {
     border-bottom: none;
+}
+
+.notification-item-content {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    flex: 1;
+    cursor: pointer;
+}
+
+.notification-item-delete {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.notification-item-detail {
+    display: block;
 }
 
 .notification-item-type {

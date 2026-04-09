@@ -14,6 +14,8 @@ interface NotificationItem {
     message: string;
     type: string;
     is_read: boolean;
+    read_at?: string | null;
+    deleted_at?: string | null;
     created_at: string;
 }
 
@@ -34,6 +36,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const [alertCount, setAlertCount] = useState(0);
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
+    const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
     const [query, setQuery] = useState('');
     const [searchLoading, setSearchLoading] = useState(false);
     const [searchError, setSearchError] = useState<string | null>(null);
@@ -66,11 +69,12 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     useEffect(() => {
         const loadNotifications = async () => {
             try {
-                const endpoint = role === 'Admin' || role === 'Manager' ? '/admin/notifications' : '/users/me/notifications';
-                const response = await api.get<{ notifications: NotificationItem[] }>(endpoint);
+                const response = await api.get<{ notifications: NotificationItem[] }>('/users/me/notifications', {
+                    params: { limit: 20 },
+                });
                 const items = response.data.notifications || [];
                 const unread = items.filter((notification) => !notification.is_read).length;
-                setNotifications(items.slice(0, 8));
+                setNotifications(items);
                 setAlertCount(unread);
             } catch (error) {
                 console.error('Failed to load notifications:', error);
@@ -166,13 +170,17 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
         const onKeyDown = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
+                if (selectedNotification) {
+                    setSelectedNotification(null);
+                    return;
+                }
                 setNotificationsOpen(false);
             }
         };
 
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [notificationsOpen]);
+    }, [notificationsOpen, selectedNotification]);
 
     const selectSearchResult = (item: SearchResultItem) => {
         if (item.kind === 'project') {
@@ -213,12 +221,46 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
         }
     };
 
-    const notificationHint = useMemo(() => {
-        if (role === 'Admin' || role === 'Manager') {
-            return 'Open notifications tab';
+    const notificationHint = useMemo(() => 'View notifications', []);
+
+    const unreadNotifications = notifications.filter((notification) => !notification.is_read);
+    const readNotifications = notifications.filter((notification) => notification.is_read);
+
+    const syncNotification = (updated: NotificationItem) => {
+        setNotifications((current) => {
+            const next = current.map((notification) => (notification.id === updated.id ? updated : notification));
+            setAlertCount(next.filter((notification) => !notification.is_read).length);
+            return next;
+        });
+    };
+
+    const removeNotification = (notificationId: string) => {
+        setNotifications((current) => {
+            const next = current.filter((notification) => notification.id !== notificationId);
+            setAlertCount(next.filter((notification) => !notification.is_read).length);
+            return next;
+        });
+        setSelectedNotification((current) => (current?.id === notificationId ? null : current));
+    };
+
+    const handleOpenNotification = async (notificationId: string) => {
+        try {
+            const response = await api.get<{ notification: NotificationItem }>(`/users/me/notifications/${notificationId}`);
+            syncNotification(response.data.notification);
+            setSelectedNotification(response.data.notification);
+        } catch (error) {
+            console.error('Failed to open notification:', error);
         }
-        return 'Notifications are listed here';
-    }, [role]);
+    };
+
+    const handleDeleteNotification = async (notificationId: string) => {
+        try {
+            await api.delete(`/users/me/notifications/${notificationId}`);
+            removeNotification(notificationId);
+        } catch (error) {
+            console.error('Failed to delete notification:', error);
+        }
+    };
 
     return (
         <header className="top-navbar">
@@ -320,13 +362,56 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                 {notifications.length === 0 && (
                                     <p className="notification-empty">No recent notifications.</p>
                                 )}
-                                {notifications.map((notification) => (
-                                    <div key={notification.id} className="notification-item">
-                                        <p className="notification-item-type">{notification.type}</p>
-                                        <p className="notification-item-message">{notification.message}</p>
-                                        <p className="notification-item-date">{new Date(notification.created_at).toLocaleString()}</p>
+                                {selectedNotification && (
+                                    <div className="notification-item notification-item-detail">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="notification-item-type">{selectedNotification.type}</p>
+                                                <p className="notification-item-message">{selectedNotification.message}</p>
+                                                <p className="notification-item-date">
+                                                    {new Date(selectedNotification.created_at).toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <button type="button" onClick={() => setSelectedNotification(null)}>
+                                                Back
+                                            </button>
+                                        </div>
                                     </div>
-                                ))}
+                                )}
+                                {!selectedNotification && unreadNotifications.length > 0 && (
+                                    <>
+                                        <p className="notification-group-label">Unread</p>
+                                        {unreadNotifications.map((notification) => (
+                                            <div key={notification.id} className="notification-item notification-item-unread">
+                                                <button type="button" className="notification-item-content" onClick={() => void handleOpenNotification(notification.id)}>
+                                                    <p className="notification-item-type">{notification.type}</p>
+                                                    <p className="notification-item-message">{notification.message}</p>
+                                                    <p className="notification-item-date">{new Date(notification.created_at).toLocaleString()}</p>
+                                                </button>
+                                                <button type="button" className="notification-item-delete" onClick={() => void handleDeleteNotification(notification.id)}>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                                {!selectedNotification && readNotifications.length > 0 && (
+                                    <>
+                                        <p className="notification-group-label">Read</p>
+                                        {readNotifications.map((notification) => (
+                                            <div key={notification.id} className="notification-item">
+                                                <button type="button" className="notification-item-content" onClick={() => void handleOpenNotification(notification.id)}>
+                                                    <p className="notification-item-type">{notification.type}</p>
+                                                    <p className="notification-item-message">{notification.message}</p>
+                                                    <p className="notification-item-date">{new Date(notification.created_at).toLocaleString()}</p>
+                                                </button>
+                                                <button type="button" className="notification-item-delete" onClick={() => void handleDeleteNotification(notification.id)}>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}

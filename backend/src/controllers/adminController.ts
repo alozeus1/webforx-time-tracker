@@ -75,6 +75,7 @@ export const getAuditLogs = async (_req: AuthRequest, res: Response): Promise<vo
 export const getSystemNotifications = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
         const notifications = await prisma.notification.findMany({
+            where: { deleted_at: null },
             orderBy: { created_at: 'desc' },
             take: 100,
             include: {

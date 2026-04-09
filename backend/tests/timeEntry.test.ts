@@ -65,6 +65,12 @@ const mockActiveTimer = {
     task_description: 'Working on feature',
     start_time: new Date(Date.now() - 3600_000), // 1 hour ago
     last_active_ping: new Date(),
+    last_heartbeat_at: new Date(),
+    last_client_activity_at: new Date(),
+    client_visibility: 'visible',
+    client_has_focus: true,
+    heartbeat_state: {},
+    persisted_state: {},
 };
 
 const mockTimeEntry = {
@@ -274,10 +280,23 @@ describe('POST /api/v1/timers/ping', () => {
         const res = await request(app)
             .post('/api/v1/timers/ping')
             .set('Authorization', `Bearer ${employeeToken}`)
-            .send({});
+            .send({
+                active_timer_id: 'timer-1',
+                last_activity_at: '2026-04-09T15:00:00.000Z',
+                visibility_state: 'visible',
+                has_focus: true,
+            });
 
         expect(res.status).toBe(200);
         expect(res.body.message).toMatch(/ping successful/i);
+        expect(prisma.activeTimer.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                last_heartbeat_at: expect.any(Date),
+                last_client_activity_at: expect.any(Date),
+                client_visibility: 'visible',
+                client_has_focus: true,
+            }),
+        }));
     });
 
     it('returns 404 when no active timer to ping', async () => {
