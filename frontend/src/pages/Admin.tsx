@@ -166,6 +166,15 @@ const Admin: React.FC = () => {
         }
     }
 
+    async function handleDeleteNotification(notificationId: string) {
+        try {
+            await api.delete(`/admin/notifications/${notificationId}`);
+            setNotifications((current) => current.filter((notification) => notification.id !== notificationId));
+        } catch (error) {
+            console.error('Error deleting notification:', error);
+        }
+    }
+
     useEffect(() => {
         const loadAdminData = async () => {
             await Promise.all([
@@ -339,6 +348,7 @@ const Admin: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Type</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Message</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Read</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Action</th>
                                         </>
                                     )}
                                 </tr>
@@ -501,7 +511,7 @@ const Admin: React.FC = () => {
                                     </tr>
                                 )))}
                                 {activeTab === 'notifications' && (notifications.length === 0 ? (
-                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">No system notifications found.</td></tr>
+                                    <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">No system notifications found.</td></tr>
                                 ) : notifications.map((notif) => (
                                     <tr key={notif.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                         <td className="px-6 py-4 text-sm text-slate-500">{new Date(notif.created_at).toLocaleString()}</td>
@@ -514,6 +524,15 @@ const Admin: React.FC = () => {
                                             ) : (
                                                 <span className="material-symbols-outlined text-slate-300 text-sm">check</span>
                                             )}
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                type="button"
+                                                className="text-xs font-bold text-rose-500 hover:text-rose-600"
+                                                onClick={() => void handleDeleteNotification(notif.id)}
+                                            >
+                                                Delete
+                                            </button>
                                         </td>
                                     </tr>
                                 )))}

@@ -212,6 +212,12 @@ export interface NotificationSummary {
     user: { email: string; first_name: string; last_name: string };
 }
 
+export interface NotificationsListResponse {
+    notifications: NotificationSummary[];
+    unread_count?: number;
+    total_count?: number;
+}
+
 export interface WorkloadAlertSummary {
     id: string;
     message: string;

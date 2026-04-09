@@ -42,6 +42,8 @@ describe('Navbar notifications', () => {
             if (url === '/users/me/notifications') {
                 return Promise.resolve({
                     data: {
+                        unread_count: 50,
+                        total_count: 51,
                         notifications: [
                             {
                                 id: 'notif-1',
@@ -82,6 +84,7 @@ describe('Navbar notifications', () => {
         render(<Navbar onMenuClick={() => undefined} />);
 
         const bell = await screen.findByRole('button', { name: /view notifications/i });
+        expect(screen.getByText('50')).toBeInTheDocument();
         await userEvent.click(bell);
 
         expect(await screen.findByText('Unread')).toBeInTheDocument();
@@ -92,12 +95,18 @@ describe('Navbar notifications', () => {
         await waitFor(() => {
             expect(mockedApi.get).toHaveBeenCalledWith('/users/me/notifications/notif-1');
         });
+        await waitFor(() => {
+            expect(screen.getByText('49')).toBeInTheDocument();
+        });
         expect(screen.getByText('Back')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
     });
 
     it('deletes a notification from the active list', async () => {
         mockedApi.get.mockResolvedValue({
             data: {
+                unread_count: 1,
+                total_count: 1,
                 notifications: [
                     {
                         id: 'notif-1',
@@ -120,7 +129,7 @@ describe('Navbar notifications', () => {
         await waitFor(() => {
             expect(mockedApi.delete).toHaveBeenCalledWith('/users/me/notifications/notif-1');
         });
+        expect(screen.queryByText('1')).not.toBeInTheDocument();
         expect(screen.getByText('No recent notifications.')).toBeInTheDocument();
     });
 });
-

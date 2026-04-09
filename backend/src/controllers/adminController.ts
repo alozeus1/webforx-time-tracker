@@ -89,3 +89,34 @@ export const getSystemNotifications = async (_req: AuthRequest, res: Response): 
         res.status(500).json({ message: 'Internal server error while loading system notifications' });
     }
 };
+
+export const deleteSystemNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const notificationId = String(req.params.notificationId);
+        const notification = await prisma.notification.findFirst({
+            where: {
+                id: notificationId,
+                deleted_at: null,
+            },
+        });
+
+        if (!notification) {
+            res.status(404).json({ message: 'Notification not found' });
+            return;
+        }
+
+        await prisma.notification.update({
+            where: { id: notification.id },
+            data: {
+                deleted_at: new Date(),
+                is_read: true,
+                read_at: notification.read_at ?? new Date(),
+            },
+        });
+
+        res.status(200).json({ message: 'Notification deleted' });
+    } catch (error) {
+        console.error('Failed to delete system notification:', error);
+        res.status(500).json({ message: 'Internal server error while deleting system notification' });
+    }
+};

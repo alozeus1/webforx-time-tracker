@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Admin from '../pages/Admin';
 import api from '../services/api';
@@ -20,6 +21,7 @@ vi.mock('../services/api', async () => {
 
 type MockedApi = {
     get: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
 };
 
 const mockedApi = api as unknown as MockedApi;
@@ -79,7 +81,24 @@ describe('Admin audit logs', () => {
             }
 
             if (url === '/admin/notifications') {
-                return Promise.resolve({ data: { notifications: [] } });
+                return Promise.resolve({
+                    data: {
+                        notifications: [
+                            {
+                                id: 'notif-1',
+                                message: 'Weekly summary ready.',
+                                type: 'report',
+                                is_read: true,
+                                created_at: '2026-04-07T10:00:00.000Z',
+                                user: {
+                                    email: 'admin@webforxtech.com',
+                                    first_name: 'Admin',
+                                    last_name: 'User',
+                                },
+                            },
+                        ],
+                    },
+                });
             }
 
             return Promise.resolve({ data: {} });
@@ -100,5 +119,22 @@ describe('Admin audit logs', () => {
             expect(screen.getByText('Audit Log')).toBeInTheDocument();
             expect(screen.getByText('Project Archive')).toBeInTheDocument();
         });
+    });
+
+    it('lets admins delete a notification from the directory', async () => {
+        mockedApi.delete = vi.fn().mockResolvedValue({ data: { message: 'Notification deleted' } });
+
+        render(
+            <MemoryRouter initialEntries={['/admin?tab=notifications']}>
+                <Admin />
+            </MemoryRouter>
+        );
+
+        await userEvent.click(await screen.findByRole('button', { name: /delete/i }));
+
+        await waitFor(() => {
+            expect(mockedApi.delete).toHaveBeenCalledWith('/admin/notifications/notif-1');
+        });
+        expect(screen.queryByText('Weekly summary ready.')).not.toBeInTheDocument();
     });
 });

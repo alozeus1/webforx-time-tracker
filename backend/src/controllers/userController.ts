@@ -166,19 +166,32 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
         const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 20;
         const includeDeleted = req.query.includeDeleted === 'true';
 
-        const notifications = await prisma.notification.findMany({
-            where: {
-                user_id: userId,
-                ...(includeDeleted ? {} : { deleted_at: null }),
-            },
-            orderBy: { created_at: 'desc' },
-            take: limit,
-            include: {
-                user: { select: { email: true, first_name: true, last_name: true } },
-            },
-        });
+        const baseWhere = {
+            user_id: userId,
+            ...(includeDeleted ? {} : { deleted_at: null }),
+        };
 
-        res.status(200).json({ notifications });
+        const [notifications, unread_count, total_count] = await Promise.all([
+            prisma.notification.findMany({
+                where: baseWhere,
+                orderBy: { created_at: 'desc' },
+                take: limit,
+                include: {
+                    user: { select: { email: true, first_name: true, last_name: true } },
+                },
+            }),
+            prisma.notification.count({
+                where: {
+                    ...baseWhere,
+                    is_read: false,
+                },
+            }),
+            prisma.notification.count({
+                where: baseWhere,
+            }),
+        ]);
+
+        res.status(200).json({ notifications, unread_count, total_count });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
     }

@@ -19,6 +19,12 @@ interface NotificationItem {
     created_at: string;
 }
 
+interface NotificationsResponse {
+    notifications: NotificationItem[];
+    unread_count?: number;
+    total_count?: number;
+}
+
 interface SearchResponse {
     query: string;
     projects: Array<{ id: string; name: string }>;
@@ -46,6 +52,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const searchRef = useRef<HTMLDivElement | null>(null);
     const notificationRef = useRef<HTMLDivElement | null>(null);
     const searchRequestIdRef = useRef(0);
+    const loadNotificationsRef = useRef<(() => Promise<void>) | null>(null);
 
     const routeLabelMap: Record<string, string> = {
         '/dashboard': 'Dashboard',
@@ -69,13 +76,12 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     useEffect(() => {
         const loadNotifications = async () => {
             try {
-                const response = await api.get<{ notifications: NotificationItem[] }>('/users/me/notifications', {
+                const response = await api.get<NotificationsResponse>('/users/me/notifications', {
                     params: { limit: 20 },
                 });
                 const items = response.data.notifications || [];
-                const unread = items.filter((notification) => !notification.is_read).length;
                 setNotifications(items);
-                setAlertCount(unread);
+                setAlertCount(response.data.unread_count ?? items.filter((notification) => !notification.is_read).length);
             } catch (error) {
                 console.error('Failed to load notifications:', error);
                 setNotifications([]);
@@ -83,7 +89,11 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
             }
         };
 
+        loadNotificationsRef.current = loadNotifications;
         void loadNotifications();
+        return () => {
+            loadNotificationsRef.current = null;
+        };
     }, [role]);
 
     useEffect(() => {
@@ -164,6 +174,14 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     }, []);
 
     useEffect(() => {
+        if (!notificationsOpen || !loadNotificationsRef.current) {
+            return;
+        }
+
+        void loadNotificationsRef.current();
+    }, [notificationsOpen]);
+
+    useEffect(() => {
         if (!notificationsOpen) {
             return;
         }
@@ -228,16 +246,31 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
     const syncNotification = (updated: NotificationItem) => {
         setNotifications((current) => {
+            const previous = current.find((notification) => notification.id === updated.id);
             const next = current.map((notification) => (notification.id === updated.id ? updated : notification));
-            setAlertCount(next.filter((notification) => !notification.is_read).length);
+            setAlertCount((count) => {
+                if (!previous) {
+                    return count;
+                }
+                if (!previous.is_read && updated.is_read) {
+                    return Math.max(0, count - 1);
+                }
+                if (previous.is_read && !updated.is_read) {
+                    return count + 1;
+                }
+                return count;
+            });
             return next;
         });
     };
 
     const removeNotification = (notificationId: string) => {
         setNotifications((current) => {
+            const removed = current.find((notification) => notification.id === notificationId);
             const next = current.filter((notification) => notification.id !== notificationId);
-            setAlertCount(next.filter((notification) => !notification.is_read).length);
+            if (removed && !removed.is_read) {
+                setAlertCount((count) => Math.max(0, count - 1));
+            }
             return next;
         });
         setSelectedNotification((current) => (current?.id === notificationId ? null : current));
@@ -364,7 +397,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                 )}
                                 {selectedNotification && (
                                     <div className="notification-item notification-item-detail">
-                                        <div className="flex items-start justify-between gap-3">
+                                        <div className="notification-item-detail-header">
                                             <div>
                                                 <p className="notification-item-type">{selectedNotification.type}</p>
                                                 <p className="notification-item-message">{selectedNotification.message}</p>
@@ -372,8 +405,17 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                                                     {new Date(selectedNotification.created_at).toLocaleString()}
                                                 </p>
                                             </div>
+                                        </div>
+                                        <div className="notification-item-detail-actions">
                                             <button type="button" onClick={() => setSelectedNotification(null)}>
                                                 Back
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="notification-item-delete"
+                                                onClick={() => void handleDeleteNotification(selectedNotification.id)}
+                                            >
+                                                Delete
                                             </button>
                                         </div>
                                     </div>

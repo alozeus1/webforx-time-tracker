@@ -14,6 +14,8 @@ jest.mock('../src/config/db', () => ({
         },
         notification: {
             findMany: jest.fn(),
+            findFirst: jest.fn(),
+            update: jest.fn(),
         },
     },
 }));
@@ -36,6 +38,8 @@ beforeEach(() => {
     (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.authEvent.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.notification.update as jest.Mock).mockResolvedValue({});
 });
 
 describe('GET /api/v1/admin/audit-logs', () => {
@@ -100,6 +104,40 @@ describe('GET /api/v1/admin/audit-logs', () => {
         const res = await request(app)
             .get('/api/v1/admin/audit-logs')
             .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(403);
+    });
+});
+
+describe('DELETE /api/v1/admin/notifications/:notificationId', () => {
+    it('soft deletes a system notification for admin views', async () => {
+        (prisma.notification.findFirst as jest.Mock).mockResolvedValue({
+            id: 'notif-1',
+            is_read: false,
+            read_at: null,
+            deleted_at: null,
+        });
+
+        const res = await request(app)
+            .delete('/api/v1/admin/notifications/notif-1')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.notification.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: 'notif-1' },
+            data: expect.objectContaining({
+                deleted_at: expect.any(Date),
+                is_read: true,
+            }),
+        }));
+    });
+
+    it('returns 403 for users without admin notification access', async () => {
+        const employeeToken = makeToken('user-emp-1', 'Employee');
+
+        const res = await request(app)
+            .delete('/api/v1/admin/notifications/notif-1')
+            .set('Authorization', `Bearer ${employeeToken}`);
 
         expect(res.status).toBe(403);
     });

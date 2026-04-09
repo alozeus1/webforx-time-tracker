@@ -18,6 +18,7 @@ jest.mock('../src/config/db', () => ({
         notification: {
             findMany: jest.fn(),
             findFirst: jest.fn(),
+            count: jest.fn(),
             update: jest.fn(),
         },
         role: {
@@ -68,6 +69,7 @@ beforeEach(() => {
     (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.notification.count as jest.Mock).mockResolvedValue(0);
     (prisma.notification.update as jest.Mock).mockResolvedValue({});
 });
 
@@ -150,6 +152,9 @@ describe('Notification lifecycle routes', () => {
                 user: { email: 'alice@test.com', first_name: 'Alice', last_name: 'Smith' },
             },
         ]);
+        (prisma.notification.count as jest.Mock)
+            .mockResolvedValueOnce(7)
+            .mockResolvedValueOnce(12);
 
         const res = await request(app)
             .get('/api/v1/users/me/notifications')
@@ -157,12 +162,15 @@ describe('Notification lifecycle routes', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.notifications).toHaveLength(1);
+        expect(res.body.unread_count).toBe(7);
+        expect(res.body.total_count).toBe(12);
         expect(prisma.notification.findMany).toHaveBeenCalledWith(expect.objectContaining({
             where: expect.objectContaining({
                 user_id: 'user-emp-1',
                 deleted_at: null,
             }),
         }));
+        expect(prisma.notification.count).toHaveBeenCalledTimes(2);
     });
 
     it('opens a notification and marks it as read', async () => {
