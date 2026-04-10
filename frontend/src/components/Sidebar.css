@@ -135,6 +135,7 @@
 
 /* ── Navigation ── */
 .sidebar {
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
@@ -326,7 +327,8 @@ button.sidebar-link {
 
 .sidebar.collapsed {
     width: 72px;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 .sidebar.collapsed .sidebar-header {

@@ -4,7 +4,7 @@ import { AuthRequest } from '../types/auth';
 import { Prisma } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
-import { getOperationsInsights } from '../services/opsInsightsService';
+import { createEmptyOperationsInsights, getOperationsInsights } from '../services/opsInsightsService';
 
 const formatHoursMetric = (hours: number) => {
     if (hours > 0 && hours < 0.1) {
@@ -297,7 +297,13 @@ export const getOperationsDashboard = async (_req: AuthRequest, res: Response): 
         res.status(200).json(insights);
     } catch (error) {
         console.error('Failed to load operations dashboard:', error);
-        res.status(500).json({ message: 'Internal server error while loading operations insights' });
+        res.status(200).json({
+            ...createEmptyOperationsInsights(),
+            meta: {
+                degraded: true,
+                warnings: ['operations_dashboard'],
+            },
+        });
     }
 };
 

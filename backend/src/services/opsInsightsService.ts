@@ -9,9 +9,92 @@ export interface ApprovalIntelligence {
     reasons: string[];
 }
 
+export interface OperationsInsights {
+    managerExceptions: {
+        pendingApprovals: Array<Record<string, unknown>>;
+        idleWarnings: Array<Record<string, unknown>>;
+        overtimeAlerts: Array<Record<string, unknown>>;
+        burnoutAlerts: Array<Record<string, unknown>>;
+        rejectedEntries: Array<Record<string, unknown>>;
+        budgetAlerts: Array<{
+            project_id: string;
+            project_name: string;
+            budgetHours: number | null;
+            projectedHours: number;
+            trackedHours: number;
+        }>;
+    };
+    teamForecast: {
+        members: Array<{
+            user_id: string;
+            name: string;
+            role: string;
+            sevenDayHours: number;
+            projectedFourteenDayHours: number;
+            remainingCapacityHours: number;
+            projectedStatus: ReturnType<typeof deriveWellbeingStatus>;
+            overloadRisk: boolean;
+        }>;
+        projects: Array<{
+            project_id: string;
+            name: string;
+            budgetHours: number | null;
+            trackedHours: number;
+            approvedBillableHours: number;
+            projectedFourteenDayHours: number;
+            planningAccuracy: number | null;
+            burnRisk: boolean;
+        }>;
+    };
+    teamBenchmarks: {
+        planningAccuracyPct: number;
+        approvalLatencyHours: number;
+        billableLeakageHours: number;
+        overloadRiskCount: number;
+        byPerson: Array<{
+            user_id: string;
+            name: string;
+            role: string;
+            projectedFourteenDayHours: number;
+            remainingCapacityHours: number;
+            overloadRisk: boolean;
+        }>;
+    };
+    meta?: {
+        degraded: boolean;
+        warnings: string[];
+    };
+}
+
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const roundHours = (seconds: number) => Number((seconds / 3600).toFixed(1));
+
+export const createEmptyOperationsInsights = (): OperationsInsights => ({
+    managerExceptions: {
+        pendingApprovals: [],
+        idleWarnings: [],
+        overtimeAlerts: [],
+        burnoutAlerts: [],
+        rejectedEntries: [],
+        budgetAlerts: [],
+    },
+    teamForecast: {
+        members: [],
+        projects: [],
+    },
+    teamBenchmarks: {
+        planningAccuracyPct: 0,
+        approvalLatencyHours: 0,
+        billableLeakageHours: 0,
+        overloadRiskCount: 0,
+        byPerson: [],
+    },
+    meta: {
+        degraded: false,
+        warnings: [],
+    },
+});
 
 export const scoreTimeEntryRisk = (entry: {
     duration: number;
@@ -83,7 +166,18 @@ export const scoreTimeEntryRisk = (entry: {
     };
 };
 
-export const getOperationsInsights = async () => {
+export const getOperationsInsights = async (): Promise<OperationsInsights> => {
+    const degradedWarnings: string[] = [];
+    const safeQuery = async <T>(label: string, query: () => Promise<T>, fallback: T): Promise<T> => {
+        try {
+            return await query();
+        } catch (error) {
+            console.error(`Operations insights dataset failed: ${label}`, error);
+            degradedWarnings.push(label);
+            return fallback;
+        }
+    };
+
     const now = new Date();
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(now.getDate() - 7);
@@ -95,7 +189,7 @@ export const getOperationsInsights = async () => {
     thirtyDaysAgo.setDate(now.getDate() - 30);
 
     const [users, pendingEntries, rejectedEntries, notifications, projects, auditLogs, approvedEntries] = await Promise.all([
-        prisma.user.findMany({
+        safeQuery('users', () => prisma.user.findMany({
             where: { is_active: true },
             select: {
                 id: true,
@@ -104,16 +198,16 @@ export const getOperationsInsights = async () => {
                 weekly_hour_limit: true,
                 role: { select: { name: true } },
             },
-        }),
-        prisma.timeEntry.findMany({
+        }), []),
+        safeQuery('pending_entries', () => prisma.timeEntry.findMany({
             where: { status: 'pending' },
             include: {
                 user: { select: { id: true, first_name: true, last_name: true, email: true } },
                 project: { select: { id: true, name: true } },
             },
             orderBy: { created_at: 'desc' },
-        }),
-        prisma.timeEntry.findMany({
+        }), []),
+        safeQuery('rejected_entries', () => prisma.timeEntry.findMany({
             where: { status: 'rejected', updated_at: { gte: fourteenDaysAgo } },
             include: {
                 user: { select: { first_name: true, last_name: true } },
@@ -121,8 +215,8 @@ export const getOperationsInsights = async () => {
             },
             orderBy: { updated_at: 'desc' },
             take: 12,
-        }),
-        prisma.notification.findMany({
+        }), []),
+        safeQuery('notifications', () => prisma.notification.findMany({
             where: {
                 type: { in: ['idle_warning', 'overtime_alert', 'burnout_alert'] },
                 created_at: { gte: fourteenDaysAgo },
@@ -131,8 +225,8 @@ export const getOperationsInsights = async () => {
                 user: { select: { id: true, first_name: true, last_name: true } },
             },
             orderBy: { created_at: 'desc' },
-        }),
-        prisma.project.findMany({
+        }), []),
+        safeQuery('projects', () => prisma.project.findMany({
             where: { is_active: true },
             select: {
                 id: true,
@@ -145,15 +239,15 @@ export const getOperationsInsights = async () => {
                     },
                 },
             },
-        }),
-        prisma.auditLog.findMany({
+        }), []),
+        safeQuery('audit_logs', () => prisma.auditLog.findMany({
             where: {
                 action: { in: ['timesheet_approve', 'timesheet_reject'] },
                 created_at: { gte: thirtyDaysAgo },
             },
             orderBy: { created_at: 'desc' },
-        }),
-        prisma.timeEntry.findMany({
+        }), []),
+        safeQuery('approved_entries', () => prisma.timeEntry.findMany({
             where: { status: 'approved' },
             select: {
                 id: true,
@@ -163,14 +257,14 @@ export const getOperationsInsights = async () => {
                 created_at: true,
                 invoice_line_items: { select: { id: true } },
             },
-        }),
+        }), []),
     ]);
 
-    const sevenDayEntryRows = await prisma.timeEntry.groupBy({
+    const sevenDayEntryRows = await safeQuery('seven_day_entry_rows', () => prisma.timeEntry.groupBy({
         by: ['user_id'],
         where: { start_time: { gte: sevenDaysAgo } },
         _sum: { duration: true },
-    });
+    }), []);
 
     const hoursByUser = new Map(sevenDayEntryRows.map((row) => [row.user_id, roundHours(row._sum.duration || 0)]));
 
@@ -194,7 +288,7 @@ export const getOperationsInsights = async () => {
         return {
             user_id: user.id,
             name: `${user.first_name} ${user.last_name}`,
-            role: user.role.name,
+            role: user.role?.name || 'Employee',
             sevenDayHours,
             projectedFourteenDayHours,
             remainingCapacityHours,
@@ -244,10 +338,10 @@ export const getOperationsInsights = async () => {
     );
 
     const referencedEntries = referencedEntryIds.length > 0
-        ? await prisma.timeEntry.findMany({
+        ? await safeQuery('referenced_entries', () => prisma.timeEntry.findMany({
             where: { id: { in: referencedEntryIds } },
             select: { id: true, created_at: true },
-        })
+        }), [])
         : [];
 
     const entryCreatedAt = new Map(referencedEntries.map((entry) => [entry.id, new Date(entry.created_at)]));
@@ -314,6 +408,10 @@ export const getOperationsInsights = async () => {
                 remainingCapacityHours: member.remainingCapacityHours,
                 overloadRisk: member.overloadRisk,
             })),
+        },
+        meta: {
+            degraded: degradedWarnings.length > 0,
+            warnings: degradedWarnings,
         },
     };
 };

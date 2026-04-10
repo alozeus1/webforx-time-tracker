@@ -12,11 +12,37 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOperationsInsights = exports.scoreTimeEntryRisk = void 0;
+exports.getOperationsInsights = exports.scoreTimeEntryRisk = exports.createEmptyOperationsInsights = void 0;
 const db_1 = __importDefault(require("../config/db"));
 const wellbeingService_1 = require("./wellbeingService");
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const roundHours = (seconds) => Number((seconds / 3600).toFixed(1));
+const createEmptyOperationsInsights = () => ({
+    managerExceptions: {
+        pendingApprovals: [],
+        idleWarnings: [],
+        overtimeAlerts: [],
+        burnoutAlerts: [],
+        rejectedEntries: [],
+        budgetAlerts: [],
+    },
+    teamForecast: {
+        members: [],
+        projects: [],
+    },
+    teamBenchmarks: {
+        planningAccuracyPct: 0,
+        approvalLatencyHours: 0,
+        billableLeakageHours: 0,
+        overloadRiskCount: 0,
+        byPerson: [],
+    },
+    meta: {
+        degraded: false,
+        warnings: [],
+    },
+});
+exports.createEmptyOperationsInsights = createEmptyOperationsInsights;
 const scoreTimeEntryRisk = (entry) => {
     let score = 0;
     const reasons = [];
@@ -70,6 +96,17 @@ const scoreTimeEntryRisk = (entry) => {
 };
 exports.scoreTimeEntryRisk = scoreTimeEntryRisk;
 const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* () {
+    const degradedWarnings = [];
+    const safeQuery = (label, query, fallback) => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            return yield query();
+        }
+        catch (error) {
+            console.error(`Operations insights dataset failed: ${label}`, error);
+            degradedWarnings.push(label);
+            return fallback;
+        }
+    });
     const now = new Date();
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(now.getDate() - 7);
@@ -78,7 +115,7 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(now.getDate() - 30);
     const [users, pendingEntries, rejectedEntries, notifications, projects, auditLogs, approvedEntries] = yield Promise.all([
-        db_1.default.user.findMany({
+        safeQuery('users', () => db_1.default.user.findMany({
             where: { is_active: true },
             select: {
                 id: true,
@@ -87,16 +124,16 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
                 weekly_hour_limit: true,
                 role: { select: { name: true } },
             },
-        }),
-        db_1.default.timeEntry.findMany({
+        }), []),
+        safeQuery('pending_entries', () => db_1.default.timeEntry.findMany({
             where: { status: 'pending' },
             include: {
                 user: { select: { id: true, first_name: true, last_name: true, email: true } },
                 project: { select: { id: true, name: true } },
             },
             orderBy: { created_at: 'desc' },
-        }),
-        db_1.default.timeEntry.findMany({
+        }), []),
+        safeQuery('rejected_entries', () => db_1.default.timeEntry.findMany({
             where: { status: 'rejected', updated_at: { gte: fourteenDaysAgo } },
             include: {
                 user: { select: { first_name: true, last_name: true } },
@@ -104,8 +141,8 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
             },
             orderBy: { updated_at: 'desc' },
             take: 12,
-        }),
-        db_1.default.notification.findMany({
+        }), []),
+        safeQuery('notifications', () => db_1.default.notification.findMany({
             where: {
                 type: { in: ['idle_warning', 'overtime_alert', 'burnout_alert'] },
                 created_at: { gte: fourteenDaysAgo },
@@ -114,8 +151,8 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
                 user: { select: { id: true, first_name: true, last_name: true } },
             },
             orderBy: { created_at: 'desc' },
-        }),
-        db_1.default.project.findMany({
+        }), []),
+        safeQuery('projects', () => db_1.default.project.findMany({
             where: { is_active: true },
             select: {
                 id: true,
@@ -128,15 +165,15 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
                     },
                 },
             },
-        }),
-        db_1.default.auditLog.findMany({
+        }), []),
+        safeQuery('audit_logs', () => db_1.default.auditLog.findMany({
             where: {
                 action: { in: ['timesheet_approve', 'timesheet_reject'] },
                 created_at: { gte: thirtyDaysAgo },
             },
             orderBy: { created_at: 'desc' },
-        }),
-        db_1.default.timeEntry.findMany({
+        }), []),
+        safeQuery('approved_entries', () => db_1.default.timeEntry.findMany({
             where: { status: 'approved' },
             select: {
                 id: true,
@@ -146,13 +183,13 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
                 created_at: true,
                 invoice_line_items: { select: { id: true } },
             },
-        }),
+        }), []),
     ]);
-    const sevenDayEntryRows = yield db_1.default.timeEntry.groupBy({
+    const sevenDayEntryRows = yield safeQuery('seven_day_entry_rows', () => db_1.default.timeEntry.groupBy({
         by: ['user_id'],
         where: { start_time: { gte: sevenDaysAgo } },
         _sum: { duration: true },
-    });
+    }), []);
     const hoursByUser = new Map(sevenDayEntryRows.map((row) => [row.user_id, roundHours(row._sum.duration || 0)]));
     const pendingApprovals = pendingEntries.map((entry) => ({
         id: entry.id,
@@ -165,6 +202,7 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
         intelligence: (0, exports.scoreTimeEntryRisk)(entry),
     }));
     const memberForecast = users.map((user) => {
+        var _a;
         const sevenDayHours = hoursByUser.get(user.id) || 0;
         const projectedFourteenDayHours = Number((sevenDayHours * 2).toFixed(1));
         const threshold = user.weekly_hour_limit ? user.weekly_hour_limit * 2 : 100;
@@ -172,7 +210,7 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
         return {
             user_id: user.id,
             name: `${user.first_name} ${user.last_name}`,
-            role: user.role.name,
+            role: ((_a = user.role) === null || _a === void 0 ? void 0 : _a.name) || 'Employee',
             sevenDayHours,
             projectedFourteenDayHours,
             remainingCapacityHours,
@@ -213,10 +251,10 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
         .map((log) => (log.metadata || {}).entry_id)
         .filter((entryId) => Boolean(entryId))));
     const referencedEntries = referencedEntryIds.length > 0
-        ? yield db_1.default.timeEntry.findMany({
+        ? yield safeQuery('referenced_entries', () => db_1.default.timeEntry.findMany({
             where: { id: { in: referencedEntryIds } },
             select: { id: true, created_at: true },
-        })
+        }), [])
         : [];
     const entryCreatedAt = new Map(referencedEntries.map((entry) => [entry.id, new Date(entry.created_at)]));
     const approvalLatencies = auditLogs
@@ -278,6 +316,10 @@ const getOperationsInsights = () => __awaiter(void 0, void 0, void 0, function* 
                 remainingCapacityHours: member.remainingCapacityHours,
                 overloadRisk: member.overloadRisk,
             })),
+        },
+        meta: {
+            degraded: degradedWarnings.length > 0,
+            warnings: degradedWarnings,
         },
     };
 });

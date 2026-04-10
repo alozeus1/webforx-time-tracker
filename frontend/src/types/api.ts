@@ -294,6 +294,10 @@ export interface ManagerOperationsResponse {
             overloadRisk: boolean;
         }>;
     };
+    meta?: {
+        degraded: boolean;
+        warnings: string[];
+    };
 }
 
 export interface SharedArtifactResponse {

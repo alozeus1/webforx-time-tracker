@@ -281,7 +281,10 @@ const getOperationsDashboard = (_req, res) => __awaiter(void 0, void 0, void 0, 
     }
     catch (error) {
         console.error('Failed to load operations dashboard:', error);
-        res.status(500).json({ message: 'Internal server error while loading operations insights' });
+        res.status(200).json(Object.assign(Object.assign({}, (0, opsInsightsService_1.createEmptyOperationsInsights)()), { meta: {
+                degraded: true,
+                warnings: ['operations_dashboard'],
+            } }));
     }
 });
 exports.getOperationsDashboard = getOperationsDashboard;

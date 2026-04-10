@@ -80,6 +80,7 @@ const Workday: React.FC = () => {
     const [githubCommits, setGithubCommits] = useState<Array<{ id: string; message: string; repo: string; timestamp: string }>>([]);
     const [wellbeing, setWellbeing] = useState<UserWellbeingSummary | null>(null);
     const [operations, setOperations] = useState<ManagerOperationsResponse | null>(null);
+    const [operationsFeedback, setOperationsFeedback] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
     const [convertingId, setConvertingId] = useState<string | null>(null);
     const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -94,6 +95,7 @@ const Workday: React.FC = () => {
     const loadWorkday = useCallback(async () => {
         setLoading(true);
         setFeedback(null);
+        setOperationsFeedback(null);
 
         try {
             const [
@@ -103,7 +105,6 @@ const Workday: React.FC = () => {
                 calendarStatusResponse,
                 taskSourcesResponse,
                 githubResponse,
-                operationsResponse,
             ] = await Promise.all([
                 api.get<TimerEntriesResponse>('/timers/me'),
                 api.get<ProjectSummary[]>('/projects'),
@@ -111,9 +112,6 @@ const Workday: React.FC = () => {
                 api.get<CalendarStatus>('/calendar/status').catch(() => ({ data: null })),
                 api.get<{ sources: TaskSourceSummary[] }>('/integrations/task-sources').catch(() => ({ data: { sources: [] } })),
                 api.get<{ commits: Array<{ id: string; message: string; repo: string; timestamp: string }> }>('/integrations/github/commits').catch(() => ({ data: { commits: [] } })),
-                isManagerView
-                    ? api.get<ManagerOperationsResponse>('/reports/operations')
-                    : Promise.resolve({ data: null as ManagerOperationsResponse | null }),
             ]);
 
             const entryList = (timersResponse.data.entries || []).filter((entry) => isToday(entry.start_time));
@@ -123,8 +121,22 @@ const Workday: React.FC = () => {
             setCalendarStatus(calendarStatusResponse.data);
             setTaskSources(taskSourcesResponse.data.sources || []);
             setGithubCommits(githubResponse.data.commits || []);
-            setOperations(operationsResponse.data);
             setSelectedShareProject((previous) => previous || projectsResponse.data[0]?.id || '');
+
+            if (isManagerView) {
+                try {
+                    const operationsResponse = await api.get<ManagerOperationsResponse>('/reports/operations');
+                    setOperations(operationsResponse.data);
+                    if (operationsResponse.data?.meta?.degraded) {
+                        setOperationsFeedback('Team operations insights are partially unavailable right now. Core workday data is still available.');
+                    }
+                } catch (error) {
+                    setOperations(null);
+                    setOperationsFeedback('Team operations insights are temporarily unavailable.');
+                }
+            } else {
+                setOperations(null);
+            }
 
             if (calendarStatusResponse.data?.connected) {
                 try {
@@ -351,6 +363,12 @@ const Workday: React.FC = () => {
                             : 'border border-rose-200 bg-rose-50 text-rose-800'
                     }`}>
                         {feedback.message}
+                    </div>
+                )}
+
+                {operationsFeedback && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                        {operationsFeedback}
                     </div>
                 )}
 
