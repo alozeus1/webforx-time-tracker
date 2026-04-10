@@ -679,11 +679,12 @@ export const loginWithMockedBackend = async (
     dismissTour = true,
   }: { email?: string; password?: string; role?: AppRole; dismissTour?: boolean } = {},
 ) => {
+  const submitButtonName = /Continue with Email\/Password|Sign In/i;
   await installStableApiMocks(page, { role });
   await page.goto('/login');
   await page.getByLabel('Work Email').fill(email);
   await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.getByRole('button', { name: submitButtonName }).click();
   await expect(page).toHaveURL(/.*dashboard/);
 
   if (dismissTour) {

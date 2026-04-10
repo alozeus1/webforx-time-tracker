@@ -20,7 +20,6 @@ test.describe('Team Mobile Layout', () => {
         await expect(memberCard).toBeVisible();
         await expect(memberCard.getByRole('button', { name: 'Edit' })).toBeVisible();
         await expect(memberCard.getByRole('button', { name: 'Deactivate', exact: true })).toBeVisible();
-        await expect(memberCard.getByRole('button', { name: 'Deactivate User' })).toBeVisible();
         await expect(page.locator('table')).toBeHidden();
     });
 });

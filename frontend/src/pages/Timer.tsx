@@ -91,27 +91,40 @@ const Timer: React.FC = () => {
         setLoading(true);
 
         try {
-            const [projectResponse, timerResponse] = await Promise.all([
+            const [projectResult, timerResult] = await Promise.allSettled([
                 api.get<ProjectSummary[]>('/projects'),
                 api.get<TimerEntriesResponse>('/timers/me'),
             ]);
 
-            let resolvedTimerPayload = timerResponse.data;
-            if (expectStopped && resolvedTimerPayload.activeTimer) {
-                for (let attempt = 0; attempt < 3; attempt += 1) {
-                    await sleep(300);
-                    const retryResponse = await api.get<TimerEntriesResponse>('/timers/me');
-                    resolvedTimerPayload = retryResponse.data;
-                    if (!resolvedTimerPayload.activeTimer) {
-                        break;
-                    }
-                }
+            if (projectResult.status === 'fulfilled') {
+                setProjects(projectResult.value.data || []);
+            } else {
+                console.error('Failed to fetch projects for timer dropdown', projectResult.reason);
+                setProjects([]);
             }
 
-            setProjects(projectResponse.data || []);
-            setCompletedSeconds(getTodaysCompletedSeconds(resolvedTimerPayload.entries || []));
-            setAiSuggestions(buildTaskSuggestions(resolvedTimerPayload.entries || []));
-            syncFromActiveTimer(resolvedTimerPayload.activeTimer, clearDraft);
+            if (timerResult.status === 'fulfilled') {
+                let resolvedTimerPayload = timerResult.value.data;
+                if (expectStopped && resolvedTimerPayload.activeTimer) {
+                    for (let attempt = 0; attempt < 3; attempt += 1) {
+                        await sleep(300);
+                        const retryResponse = await api.get<TimerEntriesResponse>('/timers/me');
+                        resolvedTimerPayload = retryResponse.data;
+                        if (!resolvedTimerPayload.activeTimer) {
+                            break;
+                        }
+                    }
+                }
+
+                setCompletedSeconds(getTodaysCompletedSeconds(resolvedTimerPayload.entries || []));
+                setAiSuggestions(buildTaskSuggestions(resolvedTimerPayload.entries || []));
+                syncFromActiveTimer(resolvedTimerPayload.activeTimer, clearDraft);
+            } else {
+                console.error('Failed to fetch timer session data', timerResult.reason);
+                setCompletedSeconds(0);
+                setAiSuggestions([]);
+                syncFromActiveTimer(null, clearDraft);
+            }
 
             try {
                 const tagsResponse = await api.get<{ tags: { id: string; name: string; color: string }[] }>('/tags');

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c2VyLTEiLCJlbWFpbCI6InRlc3RAdGVzdC5jb20iLCJyb2xlIjoiRW1wbG95ZWUiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
+const LOGIN_SUBMIT_LABEL = /Continue with Email\/Password|Sign In/i;
 
 const mockLoginSuccess = async (page: import('@playwright/test').Page, role = 'Employee') => {
     // '**/auth/login' glob works cross-origin (confirmed in debug testing)
@@ -60,7 +61,7 @@ test.describe('Authentication Flows', () => {
         await page.goto('/login');
         await expect(page.getByLabel('Work Email')).toBeVisible();
         await expect(page.getByLabel('Password')).toBeVisible();
-        await expect(page.getByRole('button', { name: /Sign In/i })).toBeVisible();
+        await expect(page.getByRole('button', { name: LOGIN_SUBMIT_LABEL })).toBeVisible();
     });
 
     test('shows error message for invalid credentials', async ({ page }) => {
@@ -73,7 +74,7 @@ test.describe('Authentication Flows', () => {
         // Catch any alert dialog that may appear
         page.on('dialog', (dialog) => dialog.dismiss());
 
-        await page.getByRole('button', { name: /Sign In/i }).click();
+        await page.getByRole('button', { name: LOGIN_SUBMIT_LABEL }).click();
 
         // Should still be on login page after failed attempt
         await expect(page).toHaveURL(/.*login/);

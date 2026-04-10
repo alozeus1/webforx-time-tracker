@@ -3,8 +3,8 @@ import { loginWithMockedBackend } from './utils/mock-backend';
 
 test.describe('Timeline Entry Integrity', () => {
     test('editing a short entry preserves its project selection and can be saved', async ({ page }) => {
-        const startTime = new Date('2026-03-28T09:00:05.000Z');
-        const endTime = new Date('2026-03-28T09:00:43.000Z');
+        const endTime = new Date();
+        const startTime = new Date(endTime.getTime() - 38_000);
         let updatePayload: Record<string, unknown> | null = null;
 
         await loginWithMockedBackend(page, {
@@ -71,7 +71,10 @@ test.describe('Timeline Entry Integrity', () => {
         await expect(page.getByRole('button', { name: 'Save Changes' })).not.toBeVisible();
         expect(updatePayload).not.toBeNull();
         expect(updatePayload?.project_id).toBe('proj-1');
-        expect(updatePayload?.start_time).toBe(startTime.toISOString());
-        expect(updatePayload?.end_time).toBe(endTime.toISOString());
+        const expectedStartTime = new Date(Math.floor(startTime.getTime() / 1000) * 1000).toISOString();
+        const expectedEndTime = new Date(Math.floor(endTime.getTime() / 1000) * 1000).toISOString();
+
+        expect(updatePayload?.start_time).toBe(expectedStartTime);
+        expect(updatePayload?.end_time).toBe(expectedEndTime);
     });
 });

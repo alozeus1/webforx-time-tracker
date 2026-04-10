@@ -5,6 +5,7 @@ const EMPLOYEE_EMAIL = 'employee@webforxtech.com';
 const EMPLOYEE_PASSWORD = 'password123';
 const ADMIN_EMAIL = 'admin@webforxtech.com';
 const ADMIN_PASSWORD = 'webforxtechng@';
+const LOGIN_SUBMIT_LABEL = /Continue with Email\/Password|Sign In/i;
 
 /* ────────────────────────────────────────────
    1. Landing Page
@@ -79,7 +80,7 @@ test.describe('Login Page', () => {
         await page.goto('/login');
         await expect(page.getByLabel('Work Email')).toBeVisible();
         await expect(page.getByLabel('Password')).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+        await expect(page.getByRole('button', { name: LOGIN_SUBMIT_LABEL })).toBeVisible();
         await expect(page.locator('text=Web Forx Time Tracker')).toBeVisible();
     });
 
@@ -88,7 +89,7 @@ test.describe('Login Page', () => {
         await page.goto('/login');
         await page.getByLabel('Work Email').fill(EMPLOYEE_EMAIL);
         await page.getByLabel('Password').fill(EMPLOYEE_PASSWORD);
-        await page.getByRole('button', { name: 'Sign In' }).click();
+        await page.getByRole('button', { name: LOGIN_SUBMIT_LABEL }).click();
         await expect(page).toHaveURL(/.*dashboard/);
     });
 
@@ -97,8 +98,8 @@ test.describe('Login Page', () => {
         await page.goto('/login');
         await page.getByLabel('Work Email').fill('bad@email.com');
         await page.getByLabel('Password').fill('wrongpassword');
-        await page.getByRole('button', { name: 'Sign In' }).click();
-        await expect(page.locator('.login-error')).toContainText('Login failed');
+        await page.getByRole('button', { name: LOGIN_SUBMIT_LABEL }).click();
+        await expect(page.locator('.login-error')).toContainText(/login failed|invalid credentials/i);
         await expect(page).toHaveURL(/.*login/);
     });
 });

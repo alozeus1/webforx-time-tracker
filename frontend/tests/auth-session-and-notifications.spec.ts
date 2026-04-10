@@ -5,6 +5,7 @@ const injectSession = async (page: import('@playwright/test').Page) => {
         localStorage.setItem('token', 'mock-token');
         localStorage.setItem('refreshToken', 'mock-refresh');
         localStorage.setItem('user_role', 'Employee');
+        localStorage.setItem('onboarding_completed', 'true');
         localStorage.setItem('user_profile', JSON.stringify({
             id: 'user-1',
             email: 'employee@webforxtech.com',
@@ -100,6 +101,45 @@ test.describe('Session expiry and notifications', () => {
                 });
             }
 
+            if (url.includes('/api/v1/projects')) {
+                return route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify([]),
+                });
+            }
+
+            if (url.includes('/api/v1/reports/dashboard?range=7d')) {
+                return route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        metrics: {
+                            trends: {
+                                hours: '+0%',
+                            },
+                        },
+                    }),
+                });
+            }
+
+            if (url.includes('/api/v1/users/me/wellbeing')) {
+                return route.fulfill({
+                    status: 200,
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        sevenDayHours: 0,
+                        averageDailyHours: 0,
+                        burnoutThresholdHours: 50,
+                        cautionThresholdHours: 45,
+                        hoursUntilBurnout: 50,
+                        weeklyHourLimit: 40,
+                        status: 'balanced',
+                        workloadAlerts: [],
+                    }),
+                });
+            }
+
             if (url.includes('/api/v1/users/me')) {
                 return route.fulfill({
                     status: 200,
@@ -121,14 +161,15 @@ test.describe('Session expiry and notifications', () => {
         await injectSession(page);
         await page.goto('/dashboard');
 
-        const bell = page.getByRole('button', { name: /view notifications/i });
+        const bell = page.getByRole('button', { name: 'View notifications' });
+        await expect(bell).toBeVisible();
         await bell.click();
         await expect(page.getByText('Unread')).toBeVisible();
         await page.getByRole('button', { name: /you appear inactive/i }).click();
         await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
         await page.getByRole('button', { name: 'Back' }).click();
         await page.getByRole('button', { name: 'Delete' }).first().click();
-        await expect(page.getByText('Unread')).not.toBeVisible();
-        await expect(page.getByText('Read')).toBeVisible();
+        await expect(page.getByText('Unread', { exact: true })).not.toBeVisible();
+        await expect(page.getByText('Read', { exact: true })).toBeVisible();
     });
 });

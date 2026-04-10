@@ -157,8 +157,12 @@ api.interceptors.response.use(
 
                 try {
                     const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, { refreshToken });
-                    const newToken = res.data.token;
-                    const newRefresh = res.data.refreshToken;
+                    const newToken = typeof res.data?.token === 'string' ? res.data.token.trim() : '';
+                    const newRefresh = typeof res.data?.refreshToken === 'string' ? res.data.refreshToken.trim() : '';
+
+                    if (!newToken) {
+                        throw new Error('Refresh response did not include a valid token');
+                    }
 
                     localStorage.setItem('token', newToken);
                     if (newRefresh) localStorage.setItem('refreshToken', newRefresh);

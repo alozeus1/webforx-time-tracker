@@ -33,7 +33,7 @@ test.describe('Team Dialog Accessibility', () => {
         const lastNameInput = page.getByLabel('Last Name');
         const emailInput = page.getByLabel('Email');
         const passwordInput = page.getByLabel('Temporary Password');
-        const roleSelect = page.getByLabel('Role');
+        const roleSelect = page.getByLabel('Role', { exact: true });
 
         await expect(firstNameInput).toBeVisible();
         await expect(lastNameInput).toBeVisible();

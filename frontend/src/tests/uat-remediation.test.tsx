@@ -254,6 +254,28 @@ describe('UAT remediation regressions', () => {
         expect(dispatchSpy).toHaveBeenCalled();
     });
 
+    it('keeps project options available when timer session fetch fails', async () => {
+        mockedApi.get.mockImplementation((url: string) => {
+            if (url === '/projects') {
+                return Promise.resolve({ data: [{ id: 'p1', name: 'Web Forx Platform' }] });
+            }
+            if (url === '/timers/me') {
+                return Promise.reject(new Error('timers unavailable'));
+            }
+            if (url === '/tags') return Promise.resolve({ data: { tags: [] } });
+            if (url === '/calendar/status') return Promise.resolve({ data: { configured: false, connected: false } });
+            if (url === '/users/me/notifications') return Promise.resolve({ data: { notifications: [] } });
+            return Promise.resolve({ data: {} });
+        });
+
+        wrap(<Timer />);
+
+        const projectSelect = await screen.findByRole('combobox');
+        expect(projectSelect).toBeInTheDocument();
+        expect(await screen.findByRole('option', { name: 'Web Forx Platform' })).toBeInTheDocument();
+        expect(await screen.findByRole('button', { name: /Start Timer/i })).toBeInTheDocument();
+    });
+
     it('refreshes tracked-today dashboard totals when time entry events fire', async () => {
         localStorage.setItem('user_role', 'Employee');
         let timersMeCalls = 0;

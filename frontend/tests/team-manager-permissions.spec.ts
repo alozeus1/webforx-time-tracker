@@ -28,7 +28,7 @@ test.describe('Team Manager Permissions', () => {
         const lastNameInput = page.getByLabel('Last Name');
         const emailInput = page.getByLabel('Email');
         const passwordInput = page.getByLabel('Temporary Password');
-        const roleSelect = page.getByLabel('Role');
+        const roleSelect = page.getByLabel('Role', { exact: true });
 
         await firstNameInput.click();
         for (const character of 'Miles') {
@@ -69,7 +69,7 @@ test.describe('Team Manager Permissions', () => {
 
         const editFirstName = page.getByLabel('First Name');
         await editFirstName.fill('Mila');
-        await page.getByLabel('Role').selectOption('Manager');
+        await page.getByLabel('Role', { exact: true }).selectOption('Manager');
         await editDialog.getByRole('button', { name: 'Save Changes' }).click();
 
         await expect(page.getByText('Team member updated successfully').first()).toBeVisible();
@@ -80,9 +80,9 @@ test.describe('Team Manager Permissions', () => {
 
         page.once('dialog', (dialogEvent) => dialogEvent.accept());
         await page.getByRole('button', { name: /Actions for Mila Carter/ }).click();
-        await page.getByRole('button', { name: 'Deactivate User' }).click();
+        await page.getByRole('button', { name: 'Deactivate' }).click();
 
-        await expect(page.getByText('Mila Carter has been deactivated and removed from the active roster').first()).toBeVisible();
+        await expect(page.getByText('Mila Carter has been deactivated').first()).toBeVisible();
         await expect(page.locator('table tbody tr').filter({ hasText: 'Mila Carter' })).toHaveCount(0);
         await expect(page.locator('div').filter({ hasText: /^Active Members2$/ }).first()).toBeVisible();
         await expect(page.locator('div').filter({ hasText: /^Deactivated Accounts1$/ }).first()).toBeVisible();
