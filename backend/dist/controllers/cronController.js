@@ -41,7 +41,16 @@ const runDailyReport = (_req, res) => __awaiter(void 0, void 0, void 0, function
     try {
         console.log('[Cron] Running daily PDF report generation...');
         yield (0, reporterService_1.generateAndEmailDailyReport)();
-        res.status(200).json({ status: 'success', message: 'Daily report completed successfully' });
+        const scheduledReports = yield (0, reporterService_1.processDueScheduledReports)();
+        const status = scheduledReports.failed > 0 ? 'partial_failure' : 'success';
+        const message = scheduledReports.failed > 0
+            ? 'Daily report completed, but one or more scheduled reports failed'
+            : 'Daily report completed successfully';
+        res.status(scheduledReports.failed > 0 ? 500 : 200).json({
+            status,
+            message,
+            scheduledReports,
+        });
     }
     catch (error) {
         console.error('[Cron] Error during daily report:', error);

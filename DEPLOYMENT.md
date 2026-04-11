@@ -15,6 +15,8 @@ PORT=5005
 CORS_ORIGIN="http://localhost:5173,http://127.0.0.1:5173"
 FRONTEND_URL="http://localhost:5173,http://127.0.0.1:5173"
 ENABLE_BACKGROUND_WORKERS=true
+RESEND_API_KEY="<RESEND_API_KEY>"
+EMAIL_FROM="Web Forx Time Tracker <noreply@webforxtech.com>"
 GOOGLE_CLIENT_ID="<GOOGLE_OAUTH_CLIENT_ID>"
 GOOGLE_CLIENT_SECRET="<GOOGLE_OAUTH_CLIENT_SECRET>"
 GOOGLE_REDIRECT_URI="http://localhost:5005/api/v1/calendar/callback"
@@ -115,6 +117,8 @@ vercel env add CRON_SECRET production
 vercel env add CORS_ORIGIN production
 vercel env add FRONTEND_URL production
 vercel env add ENABLE_BACKGROUND_WORKERS production
+vercel env add RESEND_API_KEY production
+vercel env add EMAIL_FROM production
 vercel env add GOOGLE_CLIENT_ID production
 vercel env add GOOGLE_CLIENT_SECRET production
 vercel env add GOOGLE_REDIRECT_URI production
