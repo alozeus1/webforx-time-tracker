@@ -298,13 +298,13 @@ model ScheduledReport {
 }
 
 model AccessRequest {
-  id        String   @id @default(cuid())
-  fullName  String
-  workEmail String
-  company   String
-  teamSize  String
-  details   String?
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  full_name  String
+  work_email String
+  company    String
+  team_size  String
+  details    String?
+  status     String   @default("pending")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }
