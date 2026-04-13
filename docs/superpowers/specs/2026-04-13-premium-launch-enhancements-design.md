@@ -1,8 +1,9 @@
 # Premium Launch Enhancements — Design Spec
 
 Date: 2026-04-13  
+Last updated: 2026-04-13 (user review amendments)  
 Status: Approved  
-Production safety constraint: **All changes are strictly additive. Zero modifications to existing auth flows, protected routes, seeded users, CORS config, or live DB models.**
+Production safety constraint: **All changes are strictly additive. Zero modifications to existing auth flows, protected routes, seeded users, CORS config, or live DB models — except the targeted idle-pause upgrade to `ActiveTimer` and `idleTracker`.**
 
 ---
 
@@ -15,6 +16,10 @@ The marketing report (2026-04-13) identified four UX/messaging weaknesses impact
 3. AI narrative is present but under-explained in public-facing messaging
 4. Authenticated proof visuals are missing for premium launch credibility
 
+A fifth feature was added during design review:
+
+5. Idle timer currently auto-stops — should pause instead, with a visible resume prompt on return
+
 ---
 
 ## Production Safety Principles
@@ -22,7 +27,7 @@ The marketing report (2026-04-13) identified four UX/messaging weaknesses impact
 These rules apply to every task in this spec:
 
 - **No changes to existing routes** — only new routes added
-- **No changes to existing Prisma models** — only new model added via migration
+- **Minimal changes to existing Prisma models** — `ActiveTimer` gets three new nullable fields for pause support (backward-compatible migration); `AccessRequest` is a brand new model
 - **No changes to existing seed users** — demo user added as a new entry only
 - **No changes to existing auth middleware or JWT logic**
 - **No changes to `CORS_ORIGIN`, `JWT_SECRET`, or any existing env var**
@@ -91,11 +96,13 @@ Two entry points for two levels of visitor intent:
 - Demo user has Employee role only — cannot access `/admin`, `/team`, or any Manager/Admin-restricted routes
 - Banner is rendered conditionally: `if (userEmail === 'demo@webforxtech.com')`
 
-**Demo data reset:**
+**Demo data reset (24-hour rolling):**
 - New cron endpoint: `POST /api/v1/cron/reset-demo` (protected by `CRON_SECRET`)
-- Deletes all `TimeEntry` and `ActiveTimer` rows for the demo user
-- Re-seeds with a clean set of representative entries
-- Scheduled weekly via Vercel cron or external scheduler
+- Runs hourly via Vercel cron
+- Deletes all `TimeEntry`, `ActiveTimer`, and `Notification` rows for the demo user where `created_at` or `start_time` is older than 24 hours
+- Also deletes any active timer for the demo user unconditionally on each run (prevents stuck timers)
+- Re-seeds with a clean representative set of time entries spanning the current day
+- 24-hour window chosen so: a visitor who logs in at any time of day sees fresh data; data created within the last 24h is preserved for continuity within a session
 
 **Seed entry:**
 - Added to `backend/prisma/seed.ts` as a conditional block: only seeds demo user if `SEED_DEMO_USER=true` env var is set
@@ -284,13 +291,145 @@ Files go in: `frontend/public/screenshots/`
 - Images served from `/screenshots/` public directory — no build-time processing needed
 - If an image file is missing, the thumbnail renders a placeholder with the caption text (no broken img tags)
 
-**Screenshot capture guide (for team):**
-1. Log in as Admin at `https://timer.dev.webforxtech.com`
-2. Capture at 1440×900 viewport minimum
-3. Use PNG or WEBP format
-4. Name files exactly as listed in the table above
-5. Place in `frontend/public/screenshots/`
-6. No code changes needed — gallery automatically shows the images
+**Screenshots status:** All 6 images confirmed present in `frontend/public/screenshots/` (admin.png, dashboard.png, reports.png, team.png, timeline.png, workday.png). Gallery ships with real authenticated screenshots on day one — no placeholders needed.
+
+---
+
+---
+
+## Area 5 — Idle Timer Pause (new feature)
+
+### Problem
+
+The current idle behavior:
+- Frontend `useActiveTimerHeartbeat` detects inactivity → fires `wfx:timer-idle-warning`
+- `Layout.tsx` shows a dialog: *"Your timer may stop soon"* — dismiss only ("Got it")
+- Backend `idleTracker.ts` (runs every 5min) eventually calls `stopActiveTimerWithReason` — the timer is **permanently stopped**, time is lost
+
+The user loses billable time they may have intended to track. The correct behavior is to **pause** the timer and prompt the user to resume when they return.
+
+### New Idle Flow
+
+```
+User leaves browser (tab hidden / window loses focus / no input)
+    ↓ after IDLE_WARNING_MS (default 15min)
+Frontend fires wfx:timer-idle-warning
+    ↓
+Layout shows "Timer Paused" dialog (upgraded from current warning-only dialog)
+    ↓
+Backend idleTracker (next 5min tick) calls pauseActiveTimer() instead of stopActiveTimerWithReason()
+    ↓ (timer is now paused — paused_at recorded, paused_duration accumulates)
+User returns (any input / tab becomes visible)
+    ↓
+Frontend fires wfx:timer-idle-resumed
+    ↓
+Layout shows persistent "Your timer is paused" resume banner (cannot be dismissed without action)
+    ↓
+User clicks "Resume" → POST /api/v1/timers/resume → timer restarts, paused_duration excluded from total
+```
+
+### Schema Changes — `ActiveTimer`
+
+Three new nullable fields (backward-compatible migration — existing rows get `null` defaults):
+
+```prisma
+model ActiveTimer {
+  // ... existing fields unchanged ...
+  is_paused              Boolean   @default(false)
+  paused_at              DateTime?
+  paused_duration_seconds Int      @default(0)
+}
+```
+
+**Duration calculation with pause:**
+- Final duration = `(stop_time - start_time) - paused_duration_seconds`
+- `paused_duration_seconds` accumulates across multiple pause/resume cycles within a single timer session
+
+### New Backend Service Functions
+
+File: `backend/src/services/activeTimerService.ts` (additive — new exports only)
+
+**`pauseActiveTimer(userId: string, reason: string)`**
+- Sets `is_paused = true`, `paused_at = now`
+- Creates `Notification` of type `timer_paused` with message:
+  *"Your timer was paused due to inactivity. Resume when you're back."*
+- Writes `AuditLog` with reason, heartbeat age, client_visibility
+- Does NOT stop the timer — `ActiveTimer` row remains
+
+**`resumeActiveTimer(userId: string)`**
+- Reads `paused_at`, calculates elapsed seconds since pause
+- Adds to `paused_duration_seconds`
+- Clears `is_paused = false`, `paused_at = null`
+- Creates `Notification` of type `timer_resumed`
+- Writes `AuditLog`
+
+### New Backend API Endpoints
+
+**`POST /api/v1/timers/pause`** — protected (requires JWT)
+- Calls `pauseActiveTimer(userId, 'user_requested')`
+- Returns `{ ok: true, pausedAt: ISO string }`
+
+**`POST /api/v1/timers/resume`** — protected (requires JWT)
+- Calls `resumeActiveTimer(userId)`
+- Returns `{ ok: true, resumedAt: ISO string, pausedDurationSeconds: number }`
+
+Both endpoints return `404` if no active timer exists for the user.
+
+### `idleTracker.ts` Changes
+
+Replace `stopActiveTimerWithReason` call (on `browserInactive`) with `pauseActiveTimer`:
+
+```ts
+// Before
+await stopActiveTimerWithReason({ userId: timer.user_id, reason: 'browser_inactive', ... });
+
+// After
+if (!timer.is_paused) {
+    await pauseActiveTimer(timer.user_id, 'browser_inactive');
+}
+```
+
+Stop behavior is preserved for `idle_timeout` and `heartbeat_missing` reasons (non-browser-inactive cases) — these still call `stopActiveTimerWithReason`. Only the `browser_inactive` path switches to pause.
+
+### Frontend Changes
+
+**`Layout.tsx` — upgrade idle warning dialog**
+
+Current dialog (warning only):
+- Title: "Your timer may stop soon"
+- Body: "We have not detected activity for N minute(s). Resume activity to keep the timer running."
+- Button: "Got it" (dismisses, no action)
+
+New dialog (pause confirmation):
+- Title: "Timer Paused"
+- Body: "No activity detected for N minute(s). Your timer has been paused. Your time up to this point is saved — resume when you're back."
+- Primary button: "Resume Timer" → calls `POST /api/v1/timers/resume` → dismisses dialog → fires `TIME_ENTRY_CHANGED_EVENT` to refresh timer state
+- Secondary link: "I'm done for now" → calls `POST /api/v1/timers/stop` (existing endpoint) → dismisses
+
+**`Layout.tsx` — resume banner on return**
+
+When `wfx:timer-idle-resumed` fires AND the timer is in paused state (checked via `syncActiveTimer`):
+- Show a persistent top-of-page banner (not dismissible without action):
+  - Text: "Your timer is paused — tap Resume to continue tracking."
+  - Button: "Resume" → calls `POST /api/v1/timers/resume` → banner hides
+  - Button: "Discard" → calls `POST /api/v1/timers/stop` → banner hides
+
+The banner sits below the Navbar, above the page content. It uses amber/warning styling consistent with existing idle warning colours.
+
+**`useActiveTimerHeartbeat.ts`**
+
+- No behavior changes to heartbeat logic itself
+- `syncActiveTimer` response should include `is_paused` from the timer state — used by Layout to decide whether to show the resume banner
+- If `is_paused === true` on any heartbeat sync, the hook dispatches `TIMER_IDLE_WARNING_EVENT` so Layout remains in warned state across page navigations
+
+### Production Safety
+
+- Schema migration is backward-compatible: new fields are nullable with defaults
+- Existing `stop` endpoint and `stopActiveTimerWithReason` function are **unchanged**
+- Only the `browser_inactive` branch in `idleTracker.ts` changes behavior
+- `idle_timeout` and `heartbeat_missing` still auto-stop (protecting against truly abandoned sessions)
+- If `resumeActiveTimer` is called on a non-paused timer, it is a no-op (guard clause)
+- Feature is entirely within the authenticated app — no public surface changes
 
 ---
 
@@ -303,7 +442,7 @@ Files go in: `frontend/public/screenshots/`
 | `frontend/src/pages/Demo.css` | Tour styles |
 | `backend/src/routes/contactRoutes.ts` | Request-access API route |
 | `backend/src/controllers/contactController.ts` | Request-access handler |
-| `backend/prisma/migrations/*/migration.sql` | AccessRequest table |
+| `backend/prisma/migrations/*/migration.sql` | AccessRequest table + ActiveTimer pause fields |
 
 ### Modified files
 | File | Change | Risk |
@@ -312,11 +451,15 @@ Files go in: `frontend/public/screenshots/`
 | `frontend/src/pages/Landing.tsx` | Add AI section + gallery section + demo CTAs | Additive only |
 | `frontend/src/pages/Landing.css` | Add styles for new sections | Additive only |
 | `frontend/src/pages/RequestAccess.tsx` | Replace mailto: with fetch() | Isolated to this page |
-| `frontend/src/components/Layout.tsx` | Add conditional demo banner | Conditional render, no logic change |
-| `backend/src/app.ts` (or routes index) | Mount contactRoutes | Additive only |
-| `backend/prisma/schema.prisma` | Add AccessRequest model | New model, no existing model changes |
+| `frontend/src/components/Layout.tsx` | Upgrade idle dialog (pause/resume) + resume banner + demo banner | Targeted, no structural change |
+| `frontend/src/hooks/useActiveTimerHeartbeat.ts` | Expose `is_paused` from sync, dispatch warning if paused on return | Additive logic only |
+| `backend/src/app.ts` (or routes index) | Mount contactRoutes, add timers/pause and timers/resume | Additive only |
+| `backend/prisma/schema.prisma` | Add AccessRequest model + 3 pause fields on ActiveTimer | Backward-compatible migration |
 | `backend/prisma/seed.ts` | Add demo user seeding (behind env flag) | Guarded by `SEED_DEMO_USER=true` |
-| `backend/src/routes/cronRoutes.ts` | Add demo reset endpoint | Additive only |
+| `backend/src/routes/cronRoutes.ts` | Add demo reset endpoint (24h rolling) | Additive only |
+| `backend/src/routes/timerRoutes.ts` | Add pause + resume endpoints | Additive only |
+| `backend/src/services/activeTimerService.ts` | Add `pauseActiveTimer` + `resumeActiveTimer` exports | Additive only |
+| `backend/src/workers/idleTracker.ts` | `browser_inactive` path → pause instead of stop | Targeted change, 3 lines |
 
 ### New env vars required
 | Var | Where | Required? |
@@ -340,14 +483,39 @@ Files go in: `frontend/public/screenshots/`
 
 ---
 
+## New Env Vars Required
+| Var | Where | Required? |
+|---|---|---|
+| `SEED_DEMO_USER` | Backend | No (defaults false) |
+| `SEED_DEMO_PASSWORD` | Backend | Only if SEED_DEMO_USER=true |
+| `RESEND_API_KEY` | Backend | Already exists in prod |
+
+---
+
+## Deployment Order
+
+1. Deploy backend with new migration (`prisma migrate deploy`)
+2. Set `SEED_DEMO_USER=true` and `SEED_DEMO_PASSWORD=<value>` in backend prod env
+3. Run seed to create demo user
+4. Verify `/api/v1/health`, `POST /api/v1/contact/request-access`, `POST /api/v1/timers/pause`, `POST /api/v1/timers/resume`
+5. Deploy frontend
+6. Smoke check: `/demo` tour, request-access form, landing AI section, gallery (all 6 images), idle pause dialog, resume banner
+
+---
+
 ## Success Criteria
 
 - [ ] `/demo` is publicly accessible without auth, tour navigates all 6 stops
 - [ ] Demo login pre-fills credentials and shows demo banner inside the app
-- [ ] Request-access form submits without opening mail client, admin receives Resend email, visitor receives receipt
-- [ ] `AccessRequest` rows visible in DB after submission
-- [ ] AI section visible on landing page between Demo and Roles sections
-- [ ] Gallery renders with role tabs and lightbox; placeholder shown for missing images
-- [ ] No existing routes, auth flows, or DB models are altered
+- [ ] Demo data older than 24 hours is deleted on each hourly cron run; fresh seed entries replace them
+- [ ] Request-access form submits without opening mail client; admin receives Resend notification; visitor receives receipt email; `AccessRequest` row persists in DB
+- [ ] AI section visible on landing page between Demo Walkthrough and User Roles sections — 4 cards + trust line
+- [ ] Gallery renders with role tabs and lightbox; all 6 authenticated screenshots display correctly
+- [ ] When browser goes idle with an active timer, the timer is paused (not stopped); `is_paused=true` set in DB
+- [ ] Idle dialog updated to show "Timer Paused" with Resume and "I'm done" actions
+- [ ] On browser return, resume banner appears if timer is paused; clicking Resume calls `/timers/resume` and restores tracking
+- [ ] Paused duration is excluded from final time entry duration on stop
+- [ ] `idle_timeout` and `heartbeat_missing` paths still auto-stop (unchanged behavior)
+- [ ] No existing routes, auth flows, or non-targeted DB models are altered
 - [ ] Frontend and backend build with zero errors
 - [ ] Existing e2e and unit tests pass unchanged
