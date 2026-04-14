@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { checkBurnout } from '../workers/burnoutTracker';
 import { checkIdleTimers } from '../workers/idleTracker';
 import { generateAndEmailDailyReport, processDueScheduledReports } from '../services/reporterService';
+import prisma from '../config/db';
 
 export const runIdleChecks = async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -43,5 +44,42 @@ export const runDailyReport = async (_req: Request, res: Response): Promise<void
     } catch (error) {
         console.error('[Cron] Error during daily report:', error);
         res.status(500).json({ status: 'error', message: 'Failed to run daily report' });
+    }
+};
+
+export const resetDemoData = async (_req: Request, res: Response): Promise<void> => {
+    const DEMO_EMAIL = 'demo@webforxtech.com';
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
+
+    try {
+        const demoUser = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+        if (!demoUser) {
+            res.status(200).json({ status: 'skipped', message: 'Demo user not found.' });
+            return;
+        }
+
+        const userId = demoUser.id;
+
+        // Always delete active timer for demo user (prevents stuck timers)
+        await prisma.activeTimer.deleteMany({ where: { user_id: userId } });
+
+        // Delete time entries older than 24h
+        const deletedEntries = await prisma.timeEntry.deleteMany({
+            where: { user_id: userId, start_time: { lt: cutoff } },
+        });
+
+        // Delete notifications older than 24h
+        await prisma.notification.deleteMany({
+            where: { user_id: userId, created_at: { lt: cutoff } },
+        });
+
+        console.log(`[Cron] Demo reset: deleted ${deletedEntries.count} entries for ${DEMO_EMAIL}`);
+        res.status(200).json({
+            status: 'success',
+            deletedEntries: deletedEntries.count,
+        });
+    } catch (error) {
+        console.error('[Cron] Demo reset failed:', error);
+        res.status(500).json({ status: 'error', message: 'Demo reset failed.' });
     }
 };
