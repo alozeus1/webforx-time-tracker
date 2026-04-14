@@ -48,8 +48,8 @@ describe('POST /api/v1/contact/request-access', () => {
         expect(prisma.accessRequest.create).toHaveBeenCalledWith(
             expect.objectContaining({
                 data: expect.objectContaining({
-                    full_name: 'Test User',
-                    work_email: 'test@company.com',
+                    fullName: 'Test User',
+                    workEmail: 'test@company.com',
                     company: 'Acme Corp',
                 }),
             }),

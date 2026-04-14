@@ -28,16 +28,12 @@ export const submitAccessRequest = async (req: Request, res: Response): Promise<
     }
 
     try {
-        // Prisma generates camelCase client fields from snake_case schema names.
-        // The DB columns and schema fields are snake_case; we cast to bypass the
-        // generated type mismatch so the column names are passed through correctly.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (prisma.accessRequest.create as any)({
+        await prisma.accessRequest.create({
             data: {
-                full_name: fullName.trim(),
-                work_email: workEmail.trim().toLowerCase(),
+                fullName: fullName.trim(),
+                workEmail: workEmail.trim().toLowerCase(),
                 company: company.trim(),
-                team_size: teamSize,
+                teamSize,
                 details: typeof details === 'string' ? details.trim() : undefined,
             },
         });
