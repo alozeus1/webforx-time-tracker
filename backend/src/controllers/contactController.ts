@@ -30,10 +30,10 @@ export const submitAccessRequest = async (req: Request, res: Response): Promise<
     try {
         await prisma.accessRequest.create({
             data: {
-                fullName: fullName.trim(),
-                workEmail: workEmail.trim().toLowerCase(),
+                full_name: fullName.trim(),
+                work_email: workEmail.trim().toLowerCase(),
                 company: company.trim(),
-                teamSize,
+                team_size: teamSize,
                 details: typeof details === 'string' ? details.trim() : undefined,
             },
         });
