@@ -16,10 +16,12 @@ jest.mock('../src/config/db', () => ({
 
 jest.mock('../src/services/activeTimerService', () => ({
     stopActiveTimerWithReason: jest.fn(),
+    pauseActiveTimer: jest.fn(),
+    resumeActiveTimer: jest.fn(),
 }));
 
 import prisma from '../src/config/db';
-import { stopActiveTimerWithReason } from '../src/services/activeTimerService';
+import { stopActiveTimerWithReason, pauseActiveTimer } from '../src/services/activeTimerService';
 import { checkIdleTimers } from '../src/workers/idleTracker';
 
 describe('checkIdleTimers', () => {
@@ -38,6 +40,8 @@ describe('checkIdleTimers', () => {
                 last_client_activity_at: new Date(Date.now() - 16 * 60 * 1000),
                 client_visibility: 'visible',
                 client_has_focus: true,
+                is_paused: false,
+                paused_duration_seconds: 0,
             },
         ]);
         (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
@@ -61,6 +65,8 @@ describe('checkIdleTimers', () => {
                 last_client_activity_at: new Date(Date.now() - 40 * 60 * 1000),
                 client_visibility: 'visible',
                 client_has_focus: true,
+                is_paused: false,
+                paused_duration_seconds: 0,
             },
         ]);
 
@@ -70,5 +76,27 @@ describe('checkIdleTimers', () => {
             userId: 'user-1',
             reason: 'idle_timeout',
         }));
+    });
+
+    it('pauses timers when browser is inactive', async () => {
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([
+            {
+                id: 'timer-1',
+                user_id: 'user-1',
+                start_time: new Date(Date.now() - 2 * 60 * 60 * 1000),
+                last_active_ping: new Date(Date.now() - 40 * 60 * 1000),
+                last_heartbeat_at: new Date(Date.now() - 40 * 60 * 1000),
+                last_client_activity_at: new Date(Date.now() - 40 * 60 * 1000),
+                client_visibility: 'hidden',
+                client_has_focus: false,
+                is_paused: false,
+                paused_duration_seconds: 0,
+            },
+        ]);
+
+        await checkIdleTimers();
+
+        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'browser_inactive');
+        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
     });
 });
