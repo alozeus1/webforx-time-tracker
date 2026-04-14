@@ -1,15 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import OnboardingTour, { ONBOARDING_KEY } from './OnboardingTour';
 import HelpChatbot from './HelpChatbot';
 import AccessibleDialog from './AccessibleDialog';
+import ResumeConfirmDialog from './ResumeConfirmDialog';
 import { TIMER_IDLE_RESUMED_EVENT, TIMER_IDLE_WARNING_EVENT, TIMER_PAUSED_EVENT, useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
 import { useWorkSignals } from '../hooks/useWorkSignals';
+import api from '../services/api';
+import type { TimerEntriesResponse } from '../types/api';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from './CommandPalette';
+
+interface PausedTimerState {
+    taskDescription: string;
+    projectName?: string;
+}
 
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -18,8 +26,11 @@ const Layout: React.FC = () => {
     });
     const [tourKey, setTourKey] = useState(0);
     const [idleWarning, setIdleWarning] = useState<{ inactiveForMinutes: number } | null>(null);
-    const [showResumeBanner, setShowResumeBanner] = useState(false);
+    const [showResumeDialog, setShowResumeDialog] = useState(false);
+    const [pausedTimer, setPausedTimer] = useState<PausedTimerState | null>(null);
     const isDemoSession = localStorage.getItem('wfx-email') === 'demo@webforxtech.com';
+
+    const navigate = useNavigate();
 
     const handleCollapsedChange = (next: boolean) => {
         setSidebarCollapsed(next);
@@ -69,7 +80,20 @@ const Layout: React.FC = () => {
 
         const onTimerPaused = () => {
             setIdleWarning(null);
-            setShowResumeBanner(true);
+            // Fetch the active timer to show task/project name in the confirmation dialog
+            void api.get<TimerEntriesResponse>('/timers/me').then(({ data }) => {
+                if (data.activeTimer) {
+                    setPausedTimer({
+                        taskDescription: data.activeTimer.task_description,
+                        projectName: data.activeTimer.project?.name ?? undefined,
+                    });
+                } else {
+                    setPausedTimer({ taskDescription: 'your current task' });
+                }
+            }).catch(() => {
+                setPausedTimer({ taskDescription: 'your current task' });
+            });
+            setShowResumeDialog(true);
         };
 
         window.addEventListener(TIMER_IDLE_WARNING_EVENT, onIdleWarning as EventListener);
@@ -95,7 +119,8 @@ const Layout: React.FC = () => {
         } catch {
             // silently fail — state reconciles on next heartbeat sync
         }
-        setShowResumeBanner(false);
+        setShowResumeDialog(false);
+        setPausedTimer(null);
         setIdleWarning(null);
         window.dispatchEvent(new Event('wfx:timer-entry-changed'));
     };
@@ -112,8 +137,14 @@ const Layout: React.FC = () => {
         } catch {
             // silently fail
         }
-        setShowResumeBanner(false);
+        setShowResumeDialog(false);
+        setPausedTimer(null);
         setIdleWarning(null);
+    };
+
+    const handleSwitchTask = async () => {
+        await handleDiscardTimer();
+        navigate('/timer');
     };
 
     const restartTour = () => {
@@ -155,41 +186,6 @@ const Layout: React.FC = () => {
                     </div>
                 )}
 
-                {showResumeBanner && (
-                    <div role="alert" style={{
-                        background: '#78350f', color: '#fef3c7',
-                        fontSize: '0.875rem', padding: '0.625rem 1.25rem',
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        gap: '1rem', flexWrap: 'wrap', borderBottom: '1px solid #92400e',
-                    }}>
-                        <span>⏸ Your timer is paused — resume when you're ready.</span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button
-                                type="button"
-                                onClick={handleResumeTimer}
-                                style={{
-                                    background: '#d97706', border: 'none', color: '#fff',
-                                    padding: '0.3rem 0.875rem', borderRadius: '5px',
-                                    fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer',
-                                }}
-                            >
-                                Resume Timer
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleDiscardTimer}
-                                style={{
-                                    background: 'transparent', border: '1px solid rgba(255,255,255,0.3)',
-                                    color: '#fef3c7', padding: '0.3rem 0.875rem', borderRadius: '5px',
-                                    fontSize: '0.8125rem', cursor: 'pointer',
-                                }}
-                            >
-                                I'm done
-                            </button>
-                        </div>
-                    </div>
-                )}
-
                 <div id="main-content" className="page-wrapper overflow-x-hidden" tabIndex={-1}>
                     <AnimatePresence mode="wait">
                         <motion.div
@@ -209,6 +205,8 @@ const Layout: React.FC = () => {
             <CommandPalette />
             <OnboardingTour key={tourKey} />
             <HelpChatbot />
+
+            {/* Idle warning dialog — shown when frontend detects 5+ min of inactivity */}
             <AccessibleDialog
                 isOpen={Boolean(idleWarning)}
                 onClose={() => setIdleWarning(null)}
@@ -240,6 +238,16 @@ const Layout: React.FC = () => {
                     </div>
                 </div>
             </AccessibleDialog>
+
+            {/* Resume confirmation — shown when server signals timer was auto-paused */}
+            <ResumeConfirmDialog
+                isOpen={showResumeDialog && Boolean(pausedTimer)}
+                taskDescription={pausedTimer?.taskDescription ?? 'your current task'}
+                projectName={pausedTimer?.projectName}
+                onResume={handleResumeTimer}
+                onSwitchTask={handleSwitchTask}
+                onStop={handleDiscardTimer}
+            />
         </div>
     );
 };
