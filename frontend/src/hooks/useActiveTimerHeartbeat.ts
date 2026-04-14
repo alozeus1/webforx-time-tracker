@@ -6,6 +6,7 @@ import { TIME_ENTRY_CHANGED_EVENT, TIME_ENTRY_CHANGED_STORAGE_KEY } from '../uti
 
 export const TIMER_IDLE_WARNING_EVENT = 'wfx:timer-idle-warning';
 export const TIMER_IDLE_RESUMED_EVENT = 'wfx:timer-idle-resumed';
+export const TIMER_PAUSED_EVENT = 'wfx:timer-paused';
 
 const resolveMinutes = (value: string | undefined, fallback: number) => {
     const parsed = Number.parseInt(value || '', 10);
@@ -23,6 +24,7 @@ const isDocumentVisible = () =>
 export const useActiveTimerHeartbeat = () => {
     const hasActiveTimerRef = useRef(false);
     const activeTimerIdRef = useRef<string | null>(null);
+    const isPausedRef = useRef(false);
     const lastHeartbeatAtRef = useRef(0);
     const lastActivitySampleAtRef = useRef(0);
     const lastActivityAtRef = useRef(Date.now());
@@ -45,9 +47,17 @@ export const useActiveTimerHeartbeat = () => {
                 const response = await api.get<TimerEntriesResponse>('/timers/me');
                 hasActiveTimerRef.current = Boolean(response.data.activeTimer?.start_time);
                 activeTimerIdRef.current = response.data.activeTimer?.id || null;
+
+                const newIsPaused = Boolean(response.data.activeTimer?.is_paused);
+                if (newIsPaused && !isPausedRef.current) {
+                    window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT));
+                }
+                isPausedRef.current = newIsPaused;
+
                 if (!hasActiveTimerRef.current) {
                     lastHeartbeatAtRef.current = 0;
                     idleWarningShownRef.current = false;
+                    isPausedRef.current = false;
                 }
             } catch (error) {
                 console.error('Failed to sync active timer heartbeat state:', error);
