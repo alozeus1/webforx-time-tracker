@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users,
   ShieldCheck, Plug, CheckCircle2, ArrowRight,
   Eye, Briefcase, UserCheck, LockKeyhole,
+  Brain, AlertTriangle, Zap, TrendingUp,
 } from 'lucide-react';
 import { usePageMetadata } from '../hooks/usePageMetadata';
 import './Landing.css';
@@ -285,6 +286,29 @@ const benefits = [
   { title: 'Streamlined Reporting', desc: 'Generate payroll, client, or compliance reports in seconds.' },
 ];
 
+const aiFeatures = [
+  {
+    icon: <Brain size={20} />,
+    title: 'Workday Reconstruction',
+    desc: 'When gaps appear in the daily log, the system analyses calendar events and activity signals to suggest missing time blocks — reducing context loss at end of day.',
+  },
+  {
+    icon: <AlertTriangle size={20} />,
+    title: 'Burnout Risk Detection',
+    desc: 'Weekly hours are monitored per team member. Alerts surface when anyone approaches healthy workload thresholds — before damage is done.',
+  },
+  {
+    icon: <Zap size={20} />,
+    title: 'Approval Intelligence',
+    desc: 'Timesheet entries are scored for anomalies — unusual durations, project mismatches, submission timing — so managers prioritise review on what matters.',
+  },
+  {
+    icon: <TrendingUp size={20} />,
+    title: '14-Day Capacity Forecast',
+    desc: "Using the last 7 days of tracked data, the platform projects each team member's load and overload risk over the next two weeks — enabling proactive planning.",
+  },
+];
+
 const heroMetrics = [
   { label: 'Daily Entries Logged', value: '25K+' },
   { label: 'Teams Supported', value: '150+' },
@@ -447,6 +471,7 @@ const Landing: React.FC = () => {
         </Link>
         <div className="landing-nav-actions">
           <button type="button" className="btn btn-outline" onClick={() => scrollTo('features')}>Features</button>
+          <button type="button" className="btn btn-outline" onClick={() => scrollTo('ai-features')}>AI</button>
           <button type="button" className="btn btn-outline" onClick={() => scrollTo('demo')}>Demo</button>
           <Link to="/login" className="btn btn-primary">Sign In</Link>
         </div>
@@ -641,6 +666,27 @@ const Landing: React.FC = () => {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* ── 5b. AI Features ── */}
+        <section className="landing-section section-center" id="ai-features">
+          <p className="section-label">AI-Powered Operations</p>
+          <h2 className="section-heading">Intelligence Built Into Every Workflow</h2>
+          <p className="section-subheading">
+            Every insight is derived from real tracked time — not estimates or guesses.
+          </p>
+          <div className="ai-features-grid">
+            {aiFeatures.map((f) => (
+              <div className="ai-feature-card" key={f.title}>
+                <div className="ai-feature-icon">{f.icon}</div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+          <p className="ai-trust-line">
+            Built on real signals, not predictions. Every AI insight is derived from your team's actual tracked time data.
+          </p>
         </section>
 
         {/* ── 6. User Roles ── */}

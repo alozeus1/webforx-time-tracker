@@ -1336,3 +1336,58 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── AI Features ── */
+.ai-features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+}
+
+.ai-feature-card {
+  background: var(--card-bg, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: left;
+  transition: box-shadow 0.2s;
+}
+
+.ai-feature-card:hover {
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.1);
+}
+
+.ai-feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #354ac0, #4f46e5);
+  border-radius: 10px;
+  color: #ffffff;
+  margin-bottom: 1rem;
+}
+
+.ai-feature-card h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.5rem;
+}
+
+.ai-feature-card p {
+  font-size: 0.875rem;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ai-trust-line {
+  margin-top: 2rem;
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-style: italic;
+  text-align: center;
+}
