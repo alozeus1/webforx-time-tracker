@@ -20,6 +20,10 @@
     {
       "path": "/api/v1/cron/daily",
       "schedule": "59 23 * * *"
+    },
+    {
+      "path": "/api/v1/cron/reset-demo",
+      "schedule": "0 0 * * *"
     }
   ]
 }
