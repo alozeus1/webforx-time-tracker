@@ -315,6 +315,17 @@ const heroMetrics = [
   { label: 'Avg. Approval Time', value: '< 8 hrs' },
 ];
 
+type GalleryTab = 'all' | 'employee' | 'manager' | 'admin';
+
+const galleryImages: Array<{ src: string; caption: string; role: GalleryTab }> = [
+  { src: '/screenshots/dashboard.png', caption: 'Dashboard — daily totals and active timer', role: 'employee' },
+  { src: '/screenshots/workday.png', caption: 'Workday — AI-assisted activity reconstruction', role: 'employee' },
+  { src: '/screenshots/timeline.png', caption: 'Timeline — chronological daily log', role: 'employee' },
+  { src: '/screenshots/reports.png', caption: 'Reports — team analytics and utilization', role: 'manager' },
+  { src: '/screenshots/team.png', caption: 'Team — member directory and activity overview', role: 'manager' },
+  { src: '/screenshots/admin.png', caption: 'Admin — organization controls and audit visibility', role: 'admin' },
+];
+
 /* ───────────────────── video modal ───────────────────── */
 
 const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose, source }) => {
@@ -426,6 +437,8 @@ const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose
 const Landing: React.FC = () => {
   const [activeDemo, setActiveDemo] = useState('dashboard');
   const [showVideo, setShowVideo] = useState(false);
+  const [galleryTab, setGalleryTab] = useState<GalleryTab>('all');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const currentDemo = demoTabs.find((t) => t.key === activeDemo) ?? demoTabs[0];
@@ -441,6 +454,23 @@ const Landing: React.FC = () => {
 
   const openVideo = useCallback(() => setShowVideo(true), []);
   const closeVideo = useCallback(() => setShowVideo(false), []);
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxIndex(null);
+      if (e.key === 'ArrowRight') setLightboxIndex((i) => (i === null ? null : (i + 1) % filtered.length));
+      if (e.key === 'ArrowLeft') setLightboxIndex((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length));
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [lightboxIndex, galleryTab]);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -731,6 +761,71 @@ const Landing: React.FC = () => {
             ))}
           </div>
         </section>
+
+        {/* ── 7b. Screenshot Gallery ── */}
+        <section className="landing-section section-center" id="gallery">
+          <p className="section-label">In Action</p>
+          <h2 className="section-heading">See the Platform</h2>
+          <p className="section-subheading">Real views from the product — captured from a live workspace.</p>
+
+          <div className="gallery-tabs" role="tablist" aria-label="Screenshot gallery tabs">
+            {(['all', 'employee', 'manager', 'admin'] as GalleryTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={galleryTab === tab}
+                className={`gallery-tab ${galleryTab === tab ? 'active' : ''}`}
+                onClick={() => setGalleryTab(tab)}
+              >
+                {tab === 'all' ? 'All Views' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="gallery-grid">
+            {galleryImages
+              .filter((img) => galleryTab === 'all' || img.role === galleryTab)
+              .map((img, idx) => (
+                <button
+                  key={img.src}
+                  type="button"
+                  className="gallery-thumb"
+                  onClick={() => setLightboxIndex(idx)}
+                  aria-label={`View screenshot: ${img.caption}`}
+                >
+                  <img src={img.src} alt={img.caption} loading="lazy" />
+                  <div className="gallery-thumb-caption">{img.caption}</div>
+                </button>
+              ))}
+          </div>
+        </section>
+
+        {lightboxIndex !== null && (() => {
+          const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
+          const current = filtered[lightboxIndex];
+          if (!current) return null;
+          return (
+            <div
+              className="lightbox-backdrop"
+              onClick={() => setLightboxIndex(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={current.caption}
+            >
+              <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="lightbox-close" onClick={() => setLightboxIndex(null)} aria-label="Close">✕</button>
+                <img src={current.src} alt={current.caption} className="lightbox-image" />
+                <p className="lightbox-caption">{current.caption}</p>
+                <div className="lightbox-nav">
+                  <button type="button" onClick={() => setLightboxIndex((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length))} aria-label="Previous">←</button>
+                  <span>{lightboxIndex + 1} / {filtered.length}</span>
+                  <button type="button" onClick={() => setLightboxIndex((i) => (i === null ? null : (i + 1) % filtered.length))} aria-label="Next">→</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── 8. CTA Banner ── */}
         <section className="cta-banner">
