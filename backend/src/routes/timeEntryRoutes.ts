@@ -1,8 +1,12 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, pingTimer, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry } from '../controllers/timeEntryController';
+import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry } from '../controllers/timeEntryController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
+
+// Must be registered before authenticateToken — navigator.sendBeacon cannot set headers.
+// Auth is handled inside the controller by reading the token from the request body.
+router.post('/pause-beacon', pauseBeacon);
 
 router.use(authenticateToken);
 

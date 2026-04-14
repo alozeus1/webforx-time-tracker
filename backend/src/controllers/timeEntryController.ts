@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
+import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
 import { emitWebhookEvent } from '../services/webhookService';
 import { scoreTimeEntryRisk } from '../services/opsInsightsService';
@@ -340,9 +342,21 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         const lastClientActivityAt = typeof lastClientActivityAtRaw === 'string'
             ? new Date(lastClientActivityAtRaw)
             : null;
-        const validLastClientActivityAt = lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
-            ? lastClientActivityAt
-            : null;
+
+        // Validate recency: reject timestamps older than 2× heartbeat interval or in the future (clock skew).
+        // Prevents clients from sending stale or forged activity timestamps.
+        const heartbeatIntervalMs = env.heartbeatIntervalMinutes * 60_000;
+        const MAX_ACTIVITY_AGE_MS = 2 * heartbeatIntervalMs;
+        let validLastClientActivityAt: Date | null =
+            lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
+                ? lastClientActivityAt
+                : null;
+        if (validLastClientActivityAt) {
+            const ageMs = Date.now() - validLastClientActivityAt.getTime();
+            if (ageMs > MAX_ACTIVITY_AGE_MS || ageMs < -60_000) {
+                validLastClientActivityAt = null;
+            }
+        }
 
         await prisma.activeTimer.update({
             where: { user_id },
@@ -382,6 +396,34 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         console.error('Failed to ping timer:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
+};
+
+// --- pauseBeacon ---
+// Called by navigator.sendBeacon on tab/window close. Cannot use Authorization header,
+// so the JWT is passed in the request body. Always returns 200 — beacon doesn't retry.
+export const pauseBeacon = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const rawToken = req.body?.token;
+        if (!rawToken || typeof rawToken !== 'string') {
+            res.status(200).end();
+            return;
+        }
+
+        let userId: string;
+        try {
+            const payload = jwt.verify(rawToken, env.jwtSecret) as { userId: string };
+            userId = payload.userId;
+            if (!userId) throw new Error('No userId in token');
+        } catch {
+            res.status(200).end();
+            return;
+        }
+
+        await pauseActiveTimer(userId, 'tab_closed');
+    } catch (error) {
+        console.error('[pauseBeacon] error:', error);
+    }
+    res.status(200).end();
 };
 
 // --- Timesheet Approvals (Managers/Admins) ---
