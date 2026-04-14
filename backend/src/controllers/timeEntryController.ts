@@ -3,6 +3,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { emitWebhookEvent } from '../services/webhookService';
 import { scoreTimeEntryRisk } from '../services/opsInsightsService';
+import { pauseActiveTimer, resumeActiveTimer } from '../services/activeTimerService';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -77,9 +78,11 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
         }
 
         const end_time = new Date();
-        const duration = Math.floor((end_time.getTime() - new Date(activeTimer.start_time).getTime()) / 1000);
+        const rawDuration = Math.floor((end_time.getTime() - new Date(activeTimer.start_time).getTime()) / 1000);
+        const pausedSeconds = activeTimer.paused_duration_seconds ?? 0;
+        const duration = Math.max(rawDuration - pausedSeconds, 1);
 
-        if (duration <= 0) {
+        if (rawDuration <= 0) {
             res.status(400).json({ message: 'Timer duration was invalid. Please try again.' });
             return;
         }
@@ -171,6 +174,38 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
     } catch (error) {
         console.error('Failed to stop timer:', error);
         res.status(500).json({ message: 'Internal server error while stopping timer' });
+    }
+};
+
+export const pauseTimer = async (req: AuthRequest, res: Response): Promise<void> => {
+    const user_id = requireUserId(req);
+
+    try {
+        const timer = await prisma.activeTimer.findUnique({ where: { user_id } });
+        if (!timer) { res.status(404).json({ message: 'No active timer found.' }); return; }
+        if (timer.is_paused) { res.status(200).json({ ok: true, message: 'Timer already paused.', pausedAt: timer.paused_at }); return; }
+
+        await pauseActiveTimer(user_id, 'user_requested');
+        res.status(200).json({ ok: true, pausedAt: new Date().toISOString() });
+    } catch (error) {
+        console.error('[pauseTimer]', error);
+        res.status(500).json({ message: 'Failed to pause timer.' });
+    }
+};
+
+export const resumeTimer = async (req: AuthRequest, res: Response): Promise<void> => {
+    const user_id = requireUserId(req);
+
+    try {
+        const timer = await prisma.activeTimer.findUnique({ where: { user_id } });
+        if (!timer) { res.status(404).json({ message: 'No active timer found.' }); return; }
+        if (!timer.is_paused) { res.status(200).json({ ok: true, message: 'Timer is not paused.' }); return; }
+
+        const totalPausedSeconds = await resumeActiveTimer(user_id);
+        res.status(200).json({ ok: true, resumedAt: new Date().toISOString(), pausedDurationSeconds: totalPausedSeconds });
+    } catch (error) {
+        console.error('[resumeTimer]', error);
+        res.status(500).json({ message: 'Failed to resume timer.' });
     }
 };
 
