@@ -49,10 +49,22 @@ export const env = {
     googleClientId: process.env.GOOGLE_CLIENT_ID?.trim() || '',
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET?.trim() || '',
     googleRedirectUri: process.env.GOOGLE_REDIRECT_URI?.trim() || '',
-    idleWarningMinutes: parseMinutesEnv('IDLE_WARNING_MINUTES', 15),
-    heartbeatIntervalMinutes: parseMinutesEnv('HEARTBEAT_INTERVAL_MINUTES', 15),
-    heartbeatStaleMinutes: parseMinutesEnv('HEARTBEAT_STALE_MINUTES', 20),
-    autoStopGraceMinutes: parseMinutesEnv('AUTO_STOP_GRACE_MINUTES', 10),
+    idleWarningMinutes: parseMinutesEnv('IDLE_WARNING_MINUTES', 5),
+    heartbeatIntervalMinutes: parseMinutesEnv('HEARTBEAT_INTERVAL_MINUTES', 3),
+    heartbeatStaleMinutes: parseMinutesEnv('HEARTBEAT_STALE_MINUTES', 8),
+    autoStopGraceMinutes: parseMinutesEnv('AUTO_STOP_GRACE_MINUTES', 2),
+    maxPauseHours: (() => {
+        const raw = process.env.MAX_PAUSE_HOURS?.trim();
+        const parsed = Number.parseFloat(raw || '');
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
+    })(),
+    authentikEnabled: process.env.AUTHENTIK_ENABLED?.trim().toLowerCase() === 'true',
+    authentikIssuerUrl: process.env.AUTHENTIK_ISSUER_URL?.trim() || '',
+    authentikClientId: process.env.AUTHENTIK_CLIENT_ID?.trim() || '',
+    authentikClientSecret: process.env.AUTHENTIK_CLIENT_SECRET?.trim() || '',
+    authentikRedirectUri: process.env.AUTHENTIK_REDIRECT_URI?.trim() || '',
+    authentikPostLogoutRedirectUri: process.env.AUTHENTIK_POST_LOGOUT_REDIRECT_URI?.trim() || '',
+    authentikScopes: process.env.AUTHENTIK_SCOPES?.trim() || 'openid profile email',
     resendApiKey: process.env.RESEND_API_KEY?.trim() || '',
     emailFrom: process.env.EMAIL_FROM?.trim() || 'Web Forx Time Tracker <noreply@webforxtech.com>',
 };
