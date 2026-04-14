@@ -1,6 +1,6 @@
 import prisma from '../config/db';
 
-type AutoStopReason = 'idle_timeout' | 'heartbeat_missing' | 'browser_inactive';
+type AutoStopReason = 'idle_timeout' | 'heartbeat_missing' | 'browser_inactive' | 'pause_expired';
 
 export const stopActiveTimerWithReason = async ({
     userId,

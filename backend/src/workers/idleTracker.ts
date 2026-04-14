@@ -12,20 +12,46 @@ export const checkIdleTimers = async () => {
         const staleThresholdMs = env.heartbeatStaleMinutes * 60 * 1000;
         const autoStopThresholdMs = staleThresholdMs + (env.autoStopGraceMinutes * 60 * 1000);
 
+        // Threshold: if no ping received in 2× heartbeat interval, don't trust last-known browser state
+        const pingFrequencyThresholdMs = env.heartbeatIntervalMinutes * 2 * 60_000;
+        const maxPauseMs = env.maxPauseHours * 60 * 60 * 1000;
+
         for (const timer of activeTimers) {
+            // --- Guard 1: max pause duration ---
+            // A paused timer that has been paused longer than maxPauseHours is auto-stopped.
+            // This runs before all other checks; paused-but-not-expired timers are skipped entirely.
+            if (timer.is_paused) {
+                if (timer.paused_at) {
+                    const pausedForMs = now.getTime() - new Date(timer.paused_at).getTime();
+                    if (pausedForMs >= maxPauseMs) {
+                        await stopActiveTimerWithReason({ userId: timer.user_id, reason: 'pause_expired', triggeredAt: now });
+                        console.log(`[Worker] Timer auto-stopped (pause_expired, ${Math.round(pausedForMs / 3600000)}h paused) for user ${timer.user_id}`);
+                    }
+                }
+                continue; // Never run idle checks against a paused timer
+            }
+
             const lastHeartbeat = timer.last_heartbeat_at
                 ? new Date(timer.last_heartbeat_at)
                 : (timer.last_active_ping ? new Date(timer.last_active_ping) : new Date(timer.start_time));
             const lastClientActivity = timer.last_client_activity_at ? new Date(timer.last_client_activity_at) : null;
             const heartbeatAgeMs = now.getTime() - lastHeartbeat.getTime();
             const clientActivityAgeMs = lastClientActivity ? now.getTime() - lastClientActivity.getTime() : Number.POSITIVE_INFINITY;
-            const browserInactive = timer.client_visibility === 'hidden' || timer.client_has_focus === false;
+
+            // --- Guard 2: ping-frequency enforcement ---
+            // If no ping received in 2× heartbeat interval, the last-known browser state is stale.
+            // Treat as inactive regardless of what the last ping reported.
+            const pingIsTooOld = heartbeatAgeMs >= pingFrequencyThresholdMs;
+            const browserInactive =
+                pingIsTooOld ||
+                timer.client_visibility === 'hidden' ||
+                timer.client_has_focus === false;
 
             if (clientActivityAgeMs >= autoStopThresholdMs || heartbeatAgeMs >= autoStopThresholdMs) {
-                if (browserInactive && !timer.is_paused) {
+                if (browserInactive) {
                     await pauseActiveTimer(timer.user_id, 'browser_inactive');
                     console.log(`[Worker] Timer paused (browser inactive) for user ${timer.user_id}`);
-                } else if (!browserInactive) {
+                } else {
                     const reason = clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
                     await stopActiveTimerWithReason({ userId: timer.user_id, reason, triggeredAt: now });
                     console.log(`[Worker] Timer auto-stopped (${reason}) for user ${timer.user_id}`);
