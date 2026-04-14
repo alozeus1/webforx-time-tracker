@@ -156,6 +156,35 @@ async function main() {
         console.log(`✅ Employee user seeded: ${employeeUser.email}`);
     }
 
+    // ── Demo user (self-serve public demo) ───────────────────────────
+    if (process.env.SEED_DEMO_USER === 'true') {
+        const demoPassword = process.env.SEED_DEMO_PASSWORD;
+        if (!demoPassword) {
+            throw new Error('SEED_DEMO_USER=true but SEED_DEMO_PASSWORD is not set.');
+        }
+
+        if (employeeRole) {
+            const demoUser = await prisma.user.upsert({
+                where: { email: 'demo@webforxtech.com' },
+                update: {
+                    first_name: 'Demo',
+                    last_name: 'User',
+                    role_id: employeeRole.id,
+                    is_active: true,
+                },
+                create: {
+                    email: 'demo@webforxtech.com',
+                    first_name: 'Demo',
+                    last_name: 'User',
+                    password_hash: await bcrypt.hash(demoPassword, 10),
+                    role_id: employeeRole.id,
+                    is_active: true,
+                },
+            });
+            console.log(`✅ Demo user seeded: ${demoUser.email}`);
+        }
+    }
+
     const initialProjects = [
         {
             name: 'EDUSUC',

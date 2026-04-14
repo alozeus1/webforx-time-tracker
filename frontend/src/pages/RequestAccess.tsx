@@ -4,10 +4,10 @@ import { ArrowLeft, Building2, Mail, Send, ShieldCheck, Users } from 'lucide-rea
 import { usePageMetadata } from '../hooks/usePageMetadata';
 import './Login.css';
 
-const REQUEST_ACCESS_EMAIL = 'admin@webforxtech.com';
-
 const RequestAccess: React.FC = () => {
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({
     fullName: '',
     workEmail: '',
@@ -28,28 +28,29 @@ const RequestAccess: React.FC = () => {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setLoading(true);
+    setError(null);
 
-    const subject = encodeURIComponent(`Access request for ${form.company || 'Web Forx Time Tracker'}`);
-    const body = encodeURIComponent(
-      [
-        'Hello Web Forx team,',
-        '',
-        'I would like to request access to Web Forx Time Tracker.',
-        '',
-        `Full name: ${form.fullName}`,
-        `Work email: ${form.workEmail}`,
-        `Company/Team: ${form.company}`,
-        `Team size: ${form.teamSize}`,
-        '',
-        'Additional details:',
-        form.details || 'N/A',
-      ].join('\n'),
-    );
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/contact/request-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
 
-    window.location.href = `mailto:${REQUEST_ACCESS_EMAIL}?subject=${subject}&body=${body}`;
-    setSubmitted(true);
+      if (data.ok) {
+        setSubmitted(true);
+      } else {
+        setError(data.error ?? 'Something went wrong. Please try again.');
+      }
+    } catch {
+      setError('Could not connect to the server. Please check your connection and try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -174,9 +175,14 @@ const RequestAccess: React.FC = () => {
                 />
               </div>
 
-              <button type="submit" className="btn btn-primary login-btn">
+              {error && (
+                <p role="alert" style={{ color: '#dc2626', fontSize: '0.875rem', marginBottom: '8px' }}>
+                  {error}
+                </p>
+              )}
+              <button type="submit" className="btn btn-primary login-btn" disabled={loading}>
                 <Send size={16} />
-                Send Access Request
+                {loading ? 'Sending...' : 'Send Access Request'}
               </button>
             </form>
           </>
@@ -185,10 +191,10 @@ const RequestAccess: React.FC = () => {
             <div className="request-access-success-icon">
               <ShieldCheck size={28} color="#16a34a" />
             </div>
-            <h1>Request Draft Ready</h1>
+            <h1>Request Submitted</h1>
             <p>
-              Your mail client should open with a prefilled request. If it did not,
-              send your request details to <a href={`mailto:${REQUEST_ACCESS_EMAIL}`}>{REQUEST_ACCESS_EMAIL}</a>.
+              Your request has been received. Check your email for a confirmation.
+              Our team will reach out within 1–2 business days.
             </p>
             <Link to="/login" className="btn btn-primary login-btn">
               Continue to Sign In

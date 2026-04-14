@@ -22,6 +22,7 @@ import invoiceRoutes from './routes/invoiceRoutes';
 import templateRoutes from './routes/templateRoutes';
 import scheduledReportRoutes from './routes/scheduledReportRoutes';
 import publicRoutes from './routes/publicRoutes';
+import contactRoutes from './routes/contactRoutes';
 import { logAuthEvent } from './services/authEventService';
 import { notificationWorker } from './workers/notificationWorker';
 import { startIdleTracker } from './workers/idleTracker';
@@ -125,6 +126,7 @@ const authLimiter = rateLimit({
 // Routes
 app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/public', publicRoutes);
+app.use('/api/v1/contact', contactRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/projects', projectRoutes);
 app.use('/api/v1/timers', timeEntryRoutes);

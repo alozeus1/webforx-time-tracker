@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import prisma from '../config/db';
 import { env } from '../config/env';
-import { stopActiveTimerWithReason } from '../services/activeTimerService';
+import { stopActiveTimerWithReason, pauseActiveTimer } from '../services/activeTimerService';
 
 export const checkIdleTimers = async () => {
     console.log('[Worker] Running Idle Tracker Checks...');
@@ -22,14 +22,14 @@ export const checkIdleTimers = async () => {
             const browserInactive = timer.client_visibility === 'hidden' || timer.client_has_focus === false;
 
             if (clientActivityAgeMs >= autoStopThresholdMs || heartbeatAgeMs >= autoStopThresholdMs) {
-                await stopActiveTimerWithReason({
-                    userId: timer.user_id,
-                    reason: browserInactive
-                        ? 'browser_inactive'
-                        : (clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing'),
-                    triggeredAt: now,
-                });
-                console.log(`[Worker] Timer auto-stopped for user ${timer.user_id}`);
+                if (browserInactive && !timer.is_paused) {
+                    await pauseActiveTimer(timer.user_id, 'browser_inactive');
+                    console.log(`[Worker] Timer paused (browser inactive) for user ${timer.user_id}`);
+                } else if (!browserInactive) {
+                    const reason = clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
+                    await stopActiveTimerWithReason({ userId: timer.user_id, reason, triggeredAt: now });
+                    console.log(`[Worker] Timer auto-stopped (${reason}) for user ${timer.user_id}`);
+                }
                 continue;
             }
 

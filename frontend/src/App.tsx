@@ -23,6 +23,7 @@ import Templates from './pages/Templates';
 import Webhooks from './pages/Webhooks';
 import ScheduledReports from './pages/ScheduledReports';
 import SharedArtifact from './pages/SharedArtifact';
+import Demo from './pages/Demo';
 import { getStoredRole, getStoredToken } from './utils/session';
 
 // Auth Guard
@@ -69,6 +70,7 @@ const App: React.FC = () => {
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/terms" element={<Terms />} />
         <Route path="/share/:token" element={<SharedArtifact />} />
+        <Route path="/demo" element={<Demo />} />
 
         {/* Protected app routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>

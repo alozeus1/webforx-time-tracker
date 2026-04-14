@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Clock, Calendar, FileText, BarChart2, Users,
   ShieldCheck, Plug, CheckCircle2, ArrowRight,
   Eye, Briefcase, UserCheck, LockKeyhole,
+  Brain, AlertTriangle, Zap, TrendingUp,
 } from 'lucide-react';
 import { usePageMetadata } from '../hooks/usePageMetadata';
 import './Landing.css';
@@ -285,10 +286,44 @@ const benefits = [
   { title: 'Streamlined Reporting', desc: 'Generate payroll, client, or compliance reports in seconds.' },
 ];
 
+const aiFeatures = [
+  {
+    icon: <Brain size={20} />,
+    title: 'Workday Reconstruction',
+    desc: 'When gaps appear in the daily log, the system analyses calendar events and activity signals to suggest missing time blocks — reducing context loss at end of day.',
+  },
+  {
+    icon: <AlertTriangle size={20} />,
+    title: 'Burnout Risk Detection',
+    desc: 'Weekly hours are monitored per team member. Alerts surface when anyone approaches healthy workload thresholds — before damage is done.',
+  },
+  {
+    icon: <Zap size={20} />,
+    title: 'Approval Intelligence',
+    desc: 'Timesheet entries are scored for anomalies — unusual durations, project mismatches, submission timing — so managers prioritise review on what matters.',
+  },
+  {
+    icon: <TrendingUp size={20} />,
+    title: '14-Day Capacity Forecast',
+    desc: "Using the last 7 days of tracked data, the platform projects each team member's load and overload risk over the next two weeks — enabling proactive planning.",
+  },
+];
+
 const heroMetrics = [
   { label: 'Daily Entries Logged', value: '25K+' },
   { label: 'Teams Supported', value: '150+' },
   { label: 'Avg. Approval Time', value: '< 8 hrs' },
+];
+
+type GalleryTab = 'all' | 'employee' | 'manager' | 'admin';
+
+const galleryImages: Array<{ src: string; caption: string; role: GalleryTab }> = [
+  { src: '/screenshots/dashboard.png', caption: 'Dashboard — daily totals and active timer', role: 'employee' },
+  { src: '/screenshots/workday.png', caption: 'Workday — AI-assisted activity reconstruction', role: 'employee' },
+  { src: '/screenshots/timeline.png', caption: 'Timeline — chronological daily log', role: 'employee' },
+  { src: '/screenshots/reports.png', caption: 'Reports — team analytics and utilization', role: 'manager' },
+  { src: '/screenshots/team.png', caption: 'Team — member directory and activity overview', role: 'manager' },
+  { src: '/screenshots/admin.png', caption: 'Admin — organization controls and audit visibility', role: 'admin' },
 ];
 
 /* ───────────────────── video modal ───────────────────── */
@@ -402,6 +437,8 @@ const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose
 const Landing: React.FC = () => {
   const [activeDemo, setActiveDemo] = useState('dashboard');
   const [showVideo, setShowVideo] = useState(false);
+  const [galleryTab, setGalleryTab] = useState<GalleryTab>('all');
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const currentDemo = demoTabs.find((t) => t.key === activeDemo) ?? demoTabs[0];
@@ -417,6 +454,23 @@ const Landing: React.FC = () => {
 
   const openVideo = useCallback(() => setShowVideo(true), []);
   const closeVideo = useCallback(() => setShowVideo(false), []);
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxIndex(null);
+      if (e.key === 'ArrowRight') setLightboxIndex((i) => (i === null ? null : (i + 1) % filtered.length));
+      if (e.key === 'ArrowLeft') setLightboxIndex((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length));
+    };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [lightboxIndex, galleryTab]);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -447,6 +501,7 @@ const Landing: React.FC = () => {
         </Link>
         <div className="landing-nav-actions">
           <button type="button" className="btn btn-outline" onClick={() => scrollTo('features')}>Features</button>
+          <button type="button" className="btn btn-outline" onClick={() => scrollTo('ai-features')}>AI</button>
           <button type="button" className="btn btn-outline" onClick={() => scrollTo('demo')}>Demo</button>
           <Link to="/login" className="btn btn-primary">Sign In</Link>
         </div>
@@ -472,6 +527,9 @@ const Landing: React.FC = () => {
           <div className="hero-actions">
             <Link className="btn btn-primary btn-lg" to="/login">
               Get Started <ArrowRight size={18} style={{ marginLeft: 6 }} />
+            </Link>
+            <Link className="btn btn-secondary btn-lg" to="/demo">
+              Try Demo
             </Link>
             <button type="button" className="btn btn-secondary btn-lg" onClick={() => scrollTo('how-it-works')}>
               See How It Works
@@ -643,6 +701,27 @@ const Landing: React.FC = () => {
           </div>
         </section>
 
+        {/* ── 5b. AI Features ── */}
+        <section className="landing-section section-center" id="ai-features">
+          <p className="section-label">AI-Powered Operations</p>
+          <h2 className="section-heading">Intelligence Built Into Every Workflow</h2>
+          <p className="section-subheading">
+            Every insight is derived from real tracked time — not estimates or guesses.
+          </p>
+          <div className="ai-features-grid">
+            {aiFeatures.map((f) => (
+              <div className="ai-feature-card" key={f.title}>
+                <div className="ai-feature-icon">{f.icon}</div>
+                <h3>{f.title}</h3>
+                <p>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+          <p className="ai-trust-line">
+            Built on real signals, not predictions. Every AI insight is derived from your team's actual tracked time data.
+          </p>
+        </section>
+
         {/* ── 6. User Roles ── */}
         <div className="landing-section-alt">
           <section className="landing-section section-center" style={{ paddingTop: 0, paddingBottom: 0 }}>
@@ -686,6 +765,71 @@ const Landing: React.FC = () => {
           </div>
         </section>
 
+        {/* ── 7b. Screenshot Gallery ── */}
+        <section className="landing-section section-center" id="gallery">
+          <p className="section-label">In Action</p>
+          <h2 className="section-heading">See the Platform</h2>
+          <p className="section-subheading">Real views from the product — captured from a live workspace.</p>
+
+          <div className="gallery-tabs" role="tablist" aria-label="Screenshot gallery tabs">
+            {(['all', 'employee', 'manager', 'admin'] as GalleryTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={galleryTab === tab}
+                className={`gallery-tab ${galleryTab === tab ? 'active' : ''}`}
+                onClick={() => setGalleryTab(tab)}
+              >
+                {tab === 'all' ? 'All Views' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <div className="gallery-grid">
+            {galleryImages
+              .filter((img) => galleryTab === 'all' || img.role === galleryTab)
+              .map((img, idx) => (
+                <button
+                  key={img.src}
+                  type="button"
+                  className="gallery-thumb"
+                  onClick={() => setLightboxIndex(idx)}
+                  aria-label={`View screenshot: ${img.caption}`}
+                >
+                  <img src={img.src} alt={img.caption} loading="lazy" />
+                  <div className="gallery-thumb-caption">{img.caption}</div>
+                </button>
+              ))}
+          </div>
+        </section>
+
+        {lightboxIndex !== null && (() => {
+          const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
+          const current = filtered[lightboxIndex];
+          if (!current) return null;
+          return (
+            <div
+              className="lightbox-backdrop"
+              onClick={() => setLightboxIndex(null)}
+              role="dialog"
+              aria-modal="true"
+              aria-label={current.caption}
+            >
+              <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="lightbox-close" onClick={() => setLightboxIndex(null)} aria-label="Close">✕</button>
+                <img src={current.src} alt={current.caption} className="lightbox-image" />
+                <p className="lightbox-caption">{current.caption}</p>
+                <div className="lightbox-nav">
+                  <button type="button" onClick={() => setLightboxIndex((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length))} aria-label="Previous">←</button>
+                  <span>{lightboxIndex + 1} / {filtered.length}</span>
+                  <button type="button" onClick={() => setLightboxIndex((i) => (i === null ? null : (i + 1) % filtered.length))} aria-label="Next">→</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* ── 8. CTA Banner ── */}
         <section className="cta-banner">
           <h2 className="section-heading">Start Tracking Time Smarter</h2>
@@ -699,6 +843,9 @@ const Landing: React.FC = () => {
             </Link>
             <Link className="btn btn-lg btn-ghost" to="/request-access">
               Request Access
+            </Link>
+            <Link className="btn btn-lg btn-ghost" to="/demo">
+              Try Demo
             </Link>
           </div>
         </section>

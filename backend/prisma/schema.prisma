@@ -112,6 +112,9 @@ model ActiveTimer {
   client_visibility String?
   client_has_focus Boolean?
   heartbeat_state  Json      @default("{}")
+  is_paused              Boolean   @default(false)
+  paused_at              DateTime?
+  paused_duration_seconds Int       @default(0)
 
   user    User     @relation(fields: [user_id], references: [id])
   project Project? @relation(fields: [project_id], references: [id])
@@ -292,4 +295,16 @@ model ScheduledReport {
   created_at   DateTime  @default(now())
 
   user User @relation(fields: [user_id], references: [id])
+}
+
+model AccessRequest {
+  id         String   @id @default(uuid())
+  full_name  String
+  work_email String
+  company    String
+  team_size  String
+  details    String?
+  status     String   @default("pending")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 }

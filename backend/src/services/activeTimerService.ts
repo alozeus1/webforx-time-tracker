@@ -18,7 +18,9 @@ export const stopActiveTimerWithReason = async ({
 
     const startTime = new Date(activeTimer.start_time);
     const endTime = triggeredAt > startTime ? triggeredAt : new Date(startTime.getTime() + 1000);
-    const duration = Math.max(Math.floor((endTime.getTime() - startTime.getTime()) / 1000), 1);
+    const rawDuration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+    const pausedSeconds = activeTimer.paused_duration_seconds ?? 0;
+    const duration = Math.max(rawDuration - pausedSeconds, 1);
     const persistedState = (activeTimer.persisted_state as Record<string, unknown>) || {};
     const isBillable = persistedState.is_billable !== false;
     const existingNotes = typeof persistedState.notes === 'string' ? persistedState.notes.trim() : '';
@@ -93,4 +95,67 @@ export const stopActiveTimerWithReason = async ({
     }
 
     return timeEntry;
+};
+
+export const pauseActiveTimer = async (userId: string, reason: string): Promise<void> => {
+    const timer = await prisma.activeTimer.findUnique({ where: { user_id: userId } });
+    if (!timer || timer.is_paused) return;
+
+    await prisma.activeTimer.update({
+        where: { user_id: userId },
+        data: {
+            is_paused: true,
+            paused_at: new Date(),
+        },
+    });
+
+    await prisma.notification.create({
+        data: {
+            user_id: userId,
+            message: `Your timer was paused due to inactivity. Resume when you're back — your time is saved.`,
+            type: 'timer_paused',
+        },
+    });
+
+    await prisma.auditLog.create({
+        data: {
+            user_id: userId,
+            action: 'timer_paused',
+            resource: 'active_timer',
+            metadata: { reason, active_timer_id: timer.id },
+        },
+    });
+};
+
+export const resumeActiveTimer = async (userId: string): Promise<number> => {
+    const timer = await prisma.activeTimer.findUnique({ where: { user_id: userId } });
+    if (!timer || !timer.is_paused || !timer.paused_at) return 0;
+
+    const now = new Date();
+    const newPausedSeconds = Math.floor((now.getTime() - timer.paused_at.getTime()) / 1000);
+    const totalPausedSeconds = timer.paused_duration_seconds + newPausedSeconds;
+
+    await prisma.activeTimer.update({
+        where: { user_id: userId },
+        data: {
+            is_paused: false,
+            paused_at: null,
+            paused_duration_seconds: totalPausedSeconds,
+        },
+    });
+
+    await prisma.auditLog.create({
+        data: {
+            user_id: userId,
+            action: 'timer_resumed',
+            resource: 'active_timer',
+            metadata: {
+                active_timer_id: timer.id,
+                new_paused_seconds: newPausedSeconds,
+                total_paused_seconds: totalPausedSeconds,
+            },
+        },
+    });
+
+    return totalPausedSeconds;
 };
