@@ -13,10 +13,10 @@ const resolveMinutes = (value: string | undefined, fallback: number) => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
-export const HEARTBEAT_INTERVAL_MS = resolveMinutes(import.meta.env.VITE_HEARTBEAT_INTERVAL_MINUTES, 15) * 60_000;
+export const HEARTBEAT_INTERVAL_MS = resolveMinutes(import.meta.env.VITE_HEARTBEAT_INTERVAL_MINUTES, 3) * 60_000;
 export const ACTIVE_TIMER_REFRESH_MS = 120_000;
 export const ACTIVITY_SAMPLE_MS = 15_000;
-export const IDLE_WARNING_MS = resolveMinutes(import.meta.env.VITE_IDLE_WARNING_MINUTES, 15) * 60_000;
+export const IDLE_WARNING_MS = resolveMinutes(import.meta.env.VITE_IDLE_WARNING_MINUTES, 5) * 60_000;
 
 const isDocumentVisible = () =>
     typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -147,6 +147,21 @@ export const useActiveTimerHeartbeat = () => {
             }
         };
 
+        // Pause via sendBeacon when the tab/window is closing.
+        // pagehide is more reliable than beforeunload (works on mobile and bfcache navigation).
+        // Only fires if there is an active, unpaused timer.
+        const onPageHide = () => {
+            if (!hasActiveTimerRef.current || isPausedRef.current) return;
+            const token = getStoredToken();
+            if (!token) return;
+
+            const blob = new Blob([JSON.stringify({ token })], { type: 'application/json' });
+            navigator.sendBeacon(
+                `${import.meta.env.VITE_API_URL}/timers/pause-beacon`,
+                blob,
+            );
+        };
+
         const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'scroll', 'touchstart', 'mousemove'];
         activityEvents.forEach((eventName) => {
             window.addEventListener(eventName, onActivity, { passive: true });
@@ -177,9 +192,12 @@ export const useActiveTimerHeartbeat = () => {
         }, 30_000);
 
         window.addEventListener('focus', onVisibility);
-        window.addEventListener('blur', onActivity);
+        // Fix: blur signals inactivity (tab lost focus), not activity.
+        // Previously mapped to onActivity which incorrectly reset the idle counter.
+        window.addEventListener('blur', onVisibility);
         window.addEventListener(TIME_ENTRY_CHANGED_EVENT, onEntryChanged as EventListener);
         window.addEventListener('storage', onStorage);
+        window.addEventListener('pagehide', onPageHide);
         document.addEventListener('visibilitychange', onVisibility);
 
         const refreshInterval = window.setInterval(() => {
@@ -197,9 +215,10 @@ export const useActiveTimerHeartbeat = () => {
             window.clearInterval(heartbeatInterval);
             window.clearInterval(idleWarningInterval);
             window.removeEventListener('focus', onVisibility);
-            window.removeEventListener('blur', onActivity);
+            window.removeEventListener('blur', onVisibility);
             window.removeEventListener(TIME_ENTRY_CHANGED_EVENT, onEntryChanged as EventListener);
             window.removeEventListener('storage', onStorage);
+            window.removeEventListener('pagehide', onPageHide);
             document.removeEventListener('visibilitychange', onVisibility);
             window.clearInterval(refreshInterval);
         };
