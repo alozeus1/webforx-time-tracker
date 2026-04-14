@@ -528,6 +528,9 @@ const Landing: React.FC = () => {
             <Link className="btn btn-primary btn-lg" to="/login">
               Get Started <ArrowRight size={18} style={{ marginLeft: 6 }} />
             </Link>
+            <Link className="btn btn-secondary btn-lg" to="/demo">
+              Try Demo
+            </Link>
             <button type="button" className="btn btn-secondary btn-lg" onClick={() => scrollTo('how-it-works')}>
               See How It Works
             </button>
@@ -840,6 +843,9 @@ const Landing: React.FC = () => {
             </Link>
             <Link className="btn btn-lg btn-ghost" to="/request-access">
               Request Access
+            </Link>
+            <Link className="btn btn-lg btn-ghost" to="/demo">
+              Try Demo
             </Link>
           </div>
         </section>
