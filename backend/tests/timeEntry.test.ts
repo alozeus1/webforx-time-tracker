@@ -282,7 +282,7 @@ describe('POST /api/v1/timers/ping', () => {
             .set('Authorization', `Bearer ${employeeToken}`)
             .send({
                 active_timer_id: 'timer-1',
-                last_activity_at: '2026-04-09T15:00:00.000Z',
+                last_activity_at: new Date().toISOString(), // fresh timestamp — within validation window
                 visibility_state: 'visible',
                 has_focus: true,
             });
@@ -380,5 +380,99 @@ describe('POST /api/v1/timers/approvals/:entryId', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/invalid action/i);
+    });
+});
+
+// ─── pauseBeacon ────────────────────────────────────────────────────────────
+
+describe('POST /api/v1/timers/pause-beacon', () => {
+    it('pauses the active timer when a valid token is provided in the body', async () => {
+        // pauseBeacon calls pauseActiveTimer which: findUnique → update → notification.create → auditLog.create
+        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.activeTimer.update as jest.Mock).mockResolvedValue({ ...mockActiveTimer, is_paused: true });
+
+        const validToken = makeToken('user-emp-1', 'Employee');
+
+        const res = await request(app)
+            .post('/api/v1/timers/pause-beacon')
+            .send({ token: validToken });
+
+        expect(res.status).toBe(200);
+        expect(prisma.activeTimer.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { user_id: 'user-emp-1' },
+            data: expect.objectContaining({ is_paused: true }),
+        }));
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                action: 'timer_paused',
+                metadata: expect.objectContaining({ reason: 'tab_closed' }),
+            }),
+        }));
+    });
+
+    it('returns 200 even when the token is invalid (beacon always gets 200)', async () => {
+        const res = await request(app)
+            .post('/api/v1/timers/pause-beacon')
+            .send({ token: 'not-a-valid-jwt' });
+
+        expect(res.status).toBe(200);
+        expect(prisma.activeTimer.update).not.toHaveBeenCalled();
+    });
+
+    it('returns 200 when no token is provided in the body', async () => {
+        const res = await request(app)
+            .post('/api/v1/timers/pause-beacon')
+            .send({});
+
+        expect(res.status).toBe(200);
+        expect(prisma.activeTimer.update).not.toHaveBeenCalled();
+    });
+});
+
+// ─── pingTimer timestamp validation ─────────────────────────────────────────
+
+describe('POST /api/v1/timers/ping — timestamp validation', () => {
+    beforeEach(() => {
+        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.activeTimer.update as jest.Mock).mockResolvedValue({ ...mockActiveTimer });
+    });
+
+    it('stores null for last_client_activity_at when last_activity_at is older than 2× heartbeat interval', async () => {
+        // Default heartbeatIntervalMinutes=3, so threshold=6min. 10min is clearly stale.
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+
+        const res = await request(app)
+            .post('/api/v1/timers/ping')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                active_timer_id: 'timer-1',
+                last_activity_at: tenMinutesAgo,
+                visibility_state: 'visible',
+                has_focus: true,
+            });
+
+        expect(res.status).toBe(200);
+        expect(prisma.activeTimer.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ last_client_activity_at: null }),
+        }));
+    });
+
+    it('stores null for last_client_activity_at when last_activity_at is in the future (clock skew)', async () => {
+        const twoMinutesAhead = new Date(Date.now() + 2 * 60_000).toISOString();
+
+        const res = await request(app)
+            .post('/api/v1/timers/ping')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                active_timer_id: 'timer-1',
+                last_activity_at: twoMinutesAhead,
+                visibility_state: 'visible',
+                has_focus: true,
+            });
+
+        expect(res.status).toBe(200);
+        expect(prisma.activeTimer.update).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ last_client_activity_at: null }),
+        }));
     });
 });
