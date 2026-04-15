@@ -127,12 +127,17 @@ export const useActiveTimerHeartbeat = () => {
         };
 
         const onVisibility = () => {
-            if (!isDocumentVisible()) {
-                return;
+            const visible = isDocumentVisible();
+            const hasFocus = typeof document === 'undefined' ? true : document.hasFocus();
+
+            // Only treat regaining foreground focus as user activity.
+            // Blur/hidden transitions should not reset idle timers.
+            if (visible && hasFocus) {
+                const now = Date.now();
+                lastActivityAtRef.current = now;
+                lastActivitySampleAtRef.current = now;
             }
 
-            lastActivityAtRef.current = Date.now();
-            lastActivitySampleAtRef.current = Date.now();
             void syncActiveTimer().then(() => sendHeartbeat(true));
         };
 

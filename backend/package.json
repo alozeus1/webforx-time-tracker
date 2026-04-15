@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "schema:check": "node scripts/schema-drift-check.cjs",
-    "release:preflight": "npm run schema:check",
+    "cron:check": "node scripts/cron-config-check.cjs",
+    "release:preflight": "npm run schema:check && npm run cron:check",
     "release:smoke:login": "node scripts/release-smoke-login.cjs",
     "release:verify": "npm run release:preflight && npm run release:smoke:login",
     "start": "npm run schema:check && node dist/index.js",
