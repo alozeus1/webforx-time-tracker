@@ -310,6 +310,47 @@ describe('POST /api/v1/timers/ping', () => {
         expect(res.status).toBe(404);
         expect(res.body.message).toMatch(/no active timer/i);
     });
+
+    it('returns 404 and hard-stops stale unattended timers', async () => {
+        const staleTimer = {
+            ...mockActiveTimer,
+            last_heartbeat_at: new Date(Date.now() - 11 * 60_000),
+            last_client_activity_at: new Date(Date.now() - 11 * 60_000),
+            client_visibility: 'visible',
+            client_has_focus: true,
+            paused_duration_seconds: 0,
+            is_paused: false,
+            paused_at: null,
+            persisted_state: {},
+        };
+
+        (prisma.activeTimer.findUnique as jest.Mock)
+            .mockResolvedValueOnce(staleTimer) // pingTimer lookup
+            .mockResolvedValueOnce(staleTimer); // stopActiveTimerWithReason lookup
+
+        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+            const tx = {
+                timeEntry: { create: jest.fn().mockResolvedValue(mockTimeEntry) },
+                timeEntryTag: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
+                activeTimer: { delete: jest.fn().mockResolvedValue({}) },
+            };
+            return fn(tx);
+        });
+
+        const res = await request(app)
+            .post('/api/v1/timers/ping')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                active_timer_id: 'timer-1',
+                last_activity_at: new Date(Date.now() - 20 * 60_000).toISOString(),
+                visibility_state: 'visible',
+                has_focus: true,
+            });
+
+        expect(res.status).toBe(404);
+        expect(res.body.message).toMatch(/no active timer/i);
+        expect(prisma.activeTimer.update).not.toHaveBeenCalled();
+    });
 });
 
 // ─── getPendingTimesheets ────────────────────────────────────────────────────

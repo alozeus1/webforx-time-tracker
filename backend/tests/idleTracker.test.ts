@@ -117,11 +117,11 @@ describe('checkIdleTimers', () => {
 
     // ─── Browser inactive → pause ──────────────────────────────────────────────
 
-    it('pauses timers when browser is inactive (visibility hidden)', async () => {
+    it('pauses timers when browser is explicitly inactive and heartbeat is still fresh', async () => {
         (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
             ...baseTimer,
-            last_heartbeat_at: ago(40 * MIN),
-            last_client_activity_at: ago(40 * MIN),
+            last_heartbeat_at: ago(5 * MIN),
+            last_client_activity_at: ago(11 * MIN),
             client_visibility: 'hidden',
             client_has_focus: false,
         }]);
@@ -134,9 +134,9 @@ describe('checkIdleTimers', () => {
 
     // ─── Ping-frequency enforcement ────────────────────────────────────────────
 
-    it('pauses timer when ping is stale (> 2× heartbeat interval) even if browser was reported visible', async () => {
-        // heartbeat 7min ago → pingIsTooOld (> 6min) → browserInactive=true even though client_visibility='visible'
-        // clientActivity 11min ago → > autoStopThreshold (10min) → enters auto-stop block → PAUSE
+    it('auto-stops timer when ping is stale (> 2× heartbeat interval) even if browser was reported visible', async () => {
+        // heartbeat 7min ago → pingIsTooOld (> 6min), browser signal is stale
+        // clientActivity 11min ago → > autoStopThreshold (10min) → enters auto-stop block → STOP
         (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
             ...baseTimer,
             last_heartbeat_at: ago(7 * MIN),
@@ -147,8 +147,11 @@ describe('checkIdleTimers', () => {
 
         await checkIdleTimers();
 
-        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'browser_inactive');
-        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
+        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
+            userId: 'user-1',
+            reason: 'idle_timeout',
+        }));
+        expect(pauseActiveTimer).not.toHaveBeenCalled();
     });
 
     // ─── Max pause duration ────────────────────────────────────────────────────

@@ -5,7 +5,20 @@ import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
 import { emitWebhookEvent } from '../services/webhookService';
 import { scoreTimeEntryRisk } from '../services/opsInsightsService';
-import { pauseActiveTimer, resumeActiveTimer } from '../services/activeTimerService';
+import { pauseActiveTimer, resumeActiveTimer, stopActiveTimerWithReason } from '../services/activeTimerService';
+
+type GuardrailActiveTimer = {
+    id: string;
+    user_id: string;
+    start_time: Date;
+    last_active_ping: Date | null;
+    last_heartbeat_at: Date | null;
+    last_client_activity_at: Date | null;
+    client_visibility: string | null;
+    client_has_focus: boolean | null;
+    is_paused: boolean;
+    paused_at: Date | null;
+};
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -13,6 +26,96 @@ const requireUserId = (req: AuthRequest): string => {
     }
 
     return req.user.userId;
+};
+
+const getTimerGuardrailThresholds = () => {
+    const staleThresholdMs = env.heartbeatStaleMinutes * 60_000;
+    return {
+        staleThresholdMs,
+        autoStopThresholdMs: staleThresholdMs + (env.autoStopGraceMinutes * 60_000),
+        pingFrequencyThresholdMs: env.heartbeatIntervalMinutes * 2 * 60_000,
+        maxPauseMs: env.maxPauseHours * 60 * 60 * 1000,
+    };
+};
+
+const resolveInactivitySource = ({
+    timer,
+    visibilityState,
+    hasFocus,
+}: {
+    timer: GuardrailActiveTimer;
+    visibilityState?: string | null;
+    hasFocus?: boolean | null;
+}) => {
+    const effectiveVisibility = visibilityState ?? timer.client_visibility;
+    const effectiveHasFocus = typeof hasFocus === 'boolean' ? hasFocus : timer.client_has_focus;
+    return { effectiveVisibility, effectiveHasFocus };
+};
+
+const enforceTimerGuardrails = async ({
+    timer,
+    now,
+    visibilityState,
+    hasFocus,
+    lastClientActivityAtOverride,
+}: {
+    timer: GuardrailActiveTimer;
+    now?: Date;
+    visibilityState?: string | null;
+    hasFocus?: boolean | null;
+    lastClientActivityAtOverride?: Date | null;
+}): Promise<'none' | 'paused' | 'stopped'> => {
+    const checkTime = now ?? new Date();
+    const thresholds = getTimerGuardrailThresholds();
+
+    if (timer.is_paused) {
+        if (timer.paused_at) {
+            const pausedForMs = checkTime.getTime() - new Date(timer.paused_at).getTime();
+            if (pausedForMs >= thresholds.maxPauseMs) {
+                await stopActiveTimerWithReason({
+                    userId: timer.user_id,
+                    reason: 'pause_expired',
+                    triggeredAt: checkTime,
+                });
+                return 'stopped';
+            }
+        }
+        return 'none';
+    }
+
+    const lastHeartbeat = timer.last_heartbeat_at
+        ? new Date(timer.last_heartbeat_at)
+        : (timer.last_active_ping ? new Date(timer.last_active_ping) : new Date(timer.start_time));
+    const lastClientActivity = lastClientActivityAtOverride ?? (
+        timer.last_client_activity_at ? new Date(timer.last_client_activity_at) : null
+    );
+
+    const heartbeatAgeMs = checkTime.getTime() - lastHeartbeat.getTime();
+    const clientActivityAgeMs = lastClientActivity
+        ? checkTime.getTime() - lastClientActivity.getTime()
+        : Number.POSITIVE_INFINITY;
+    const pingIsTooOld = heartbeatAgeMs >= thresholds.pingFrequencyThresholdMs;
+    const { effectiveVisibility, effectiveHasFocus } = resolveInactivitySource({ timer, visibilityState, hasFocus });
+    const browserExplicitlyInactive = effectiveVisibility === 'hidden' || effectiveHasFocus === false;
+
+    if (clientActivityAgeMs >= thresholds.autoStopThresholdMs || heartbeatAgeMs >= thresholds.autoStopThresholdMs) {
+        // Only soft-pause when we have an explicit, fresh browser inactivity signal.
+        // If heartbeat has gone stale entirely, stop the timer as abandoned.
+        if (browserExplicitlyInactive && !pingIsTooOld) {
+            await pauseActiveTimer(timer.user_id, 'browser_inactive');
+            return 'paused';
+        }
+
+        const reason = clientActivityAgeMs >= thresholds.autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
+        await stopActiveTimerWithReason({
+            userId: timer.user_id,
+            reason,
+            triggeredAt: checkTime,
+        });
+        return 'stopped';
+    }
+
+    return 'none';
 };
 
 export const startTimer = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -288,7 +391,26 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
         const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
         const skip = (page - 1) * limit;
 
-        const [entries, total, activeTimer] = await Promise.all([
+        let activeTimer = await prisma.activeTimer.findUnique({
+            where: { user_id },
+            include: { project: { select: { id: true, name: true } } },
+        });
+
+        if (activeTimer) {
+            const guardrailResult = await enforceTimerGuardrails({
+                timer: activeTimer,
+                now: new Date(),
+            });
+
+            if (guardrailResult !== 'none') {
+                activeTimer = await prisma.activeTimer.findUnique({
+                    where: { user_id },
+                    include: { project: { select: { id: true, name: true } } },
+                });
+            }
+        }
+
+        const [entries, total] = await Promise.all([
             prisma.timeEntry.findMany({
                 where: { user_id },
                 orderBy: { start_time: 'desc' },
@@ -300,10 +422,6 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
                 take: limit,
             }),
             prisma.timeEntry.count({ where: { user_id } }),
-            prisma.activeTimer.findUnique({
-                where: { user_id },
-                include: { project: { select: { id: true, name: true } } },
-            }),
         ]);
 
         res.status(200).json({
@@ -339,6 +457,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
+        const requestReceivedAt = new Date();
         const lastClientActivityAt = typeof lastClientActivityAtRaw === 'string'
             ? new Date(lastClientActivityAtRaw)
             : null;
@@ -358,11 +477,24 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
             }
         }
 
+        const guardrailOutcome = await enforceTimerGuardrails({
+            timer: activeTimer,
+            now: requestReceivedAt,
+            visibilityState,
+            hasFocus,
+            lastClientActivityAtOverride: validLastClientActivityAt,
+        });
+
+        if (guardrailOutcome === 'stopped') {
+            res.status(404).json({ message: 'No active timer found to ping' });
+            return;
+        }
+
         await prisma.activeTimer.update({
             where: { user_id },
             data: {
-                last_active_ping: new Date(),
-                last_heartbeat_at: new Date(),
+                last_active_ping: requestReceivedAt,
+                last_heartbeat_at: requestReceivedAt,
                 last_client_activity_at: validLastClientActivityAt,
                 client_visibility: visibilityState,
                 client_has_focus: hasFocus,
@@ -372,7 +504,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
                     visibility_state: visibilityState,
                     has_focus: hasFocus,
                     active_timer_id: activeTimer.id,
-                    received_at: new Date().toISOString(),
+                    received_at: requestReceivedAt.toISOString(),
                 },
             },
         });
@@ -391,7 +523,10 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
             },
         });
 
-        res.status(200).json({ message: 'Ping successful' });
+        res.status(200).json({
+            message: guardrailOutcome === 'paused' ? 'Ping successful, timer paused for inactivity' : 'Ping successful',
+            state: guardrailOutcome === 'paused' ? 'paused' : 'running',
+        });
     } catch (error) {
         console.error('Failed to ping timer:', error);
         res.status(500).json({ message: 'Internal server error' });

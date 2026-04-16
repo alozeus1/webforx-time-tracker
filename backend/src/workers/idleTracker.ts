@@ -39,16 +39,17 @@ export const checkIdleTimers = async () => {
             const clientActivityAgeMs = lastClientActivity ? now.getTime() - lastClientActivity.getTime() : Number.POSITIVE_INFINITY;
 
             // --- Guard 2: ping-frequency enforcement ---
-            // If no ping received in 2× heartbeat interval, the last-known browser state is stale.
-            // Treat as inactive regardless of what the last ping reported.
+            // If no ping is received in 2× heartbeat interval, browser state is stale.
+            // Do not rely on old hidden/focus signals for soft-pause decisions.
             const pingIsTooOld = heartbeatAgeMs >= pingFrequencyThresholdMs;
-            const browserInactive =
-                pingIsTooOld ||
+            const browserExplicitlyInactive =
                 timer.client_visibility === 'hidden' ||
                 timer.client_has_focus === false;
 
             if (clientActivityAgeMs >= autoStopThresholdMs || heartbeatAgeMs >= autoStopThresholdMs) {
-                if (browserInactive) {
+                // Pause only when inactivity signal is explicit and heartbeat is still fresh.
+                // Stale heartbeat means the session is abandoned and should be stopped.
+                if (browserExplicitlyInactive && !pingIsTooOld) {
                     await pauseActiveTimer(timer.user_id, 'browser_inactive');
                     console.log(`[Worker] Timer paused (browser inactive) for user ${timer.user_id}`);
                 } else {
