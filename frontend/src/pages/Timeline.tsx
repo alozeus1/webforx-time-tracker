@@ -461,16 +461,43 @@ const Timeline: React.FC = () => {
                                             <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
                                                 {formatDuration(getEntryDurationSeconds(entry))}
                                             </span>
+                                            {(entry.entry_type === 'manual' || entry.entry_type === 'ai_suggested') && entry.status === 'pending' && (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" title="Manual entries require manager approval">
+                                                    <span className="material-symbols-outlined text-[12px]">pending_actions</span>
+                                                    Pending Approval
+                                                </span>
+                                            )}
                                             {(entry as unknown as Record<string, unknown>).is_billable === false && (
                                                 <span className="text-[10px] font-semibold text-slate-400">Non-billable</span>
                                             )}
                                             <button
                                                 type="button"
-                                                className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors"
+                                                className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
                                                 title="Edit entry"
                                                 onClick={() => openEditEntry(entry)}
                                             >
                                                 <span className="material-symbols-outlined text-[18px]">edit</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="rounded p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors text-emerald-600 dark:text-emerald-500"
+                                                title="Resume Task (Starts a new timer with these details)"
+                                                onClick={async () => {
+                                                    try {
+                                                        await api.post('/timers/start', {
+                                                            project_id: entry.project?.id || undefined,
+                                                            task_description: entry.task_description,
+                                                            is_billable: (entry as unknown as Record<string, unknown>).is_billable,
+                                                            tag_ids: (entry as unknown as Record<string, unknown>).tags ? ((entry as unknown as Record<string, unknown>).tags as {tag_id: string}[]).map(t => t.tag_id) : []
+                                                        });
+                                                        emitTimeEntryChanged();
+                                                        navigate('/timer');
+                                                    } catch (err) {
+                                                        setFeedback({ tone: 'error', message: getApiErrorMessage(err, 'Failed to resume task') });
+                                                    }
+                                                }}
+                                            >
+                                                <span className="material-symbols-outlined text-[18px]">play_arrow</span>
                                             </button>
                                         </div>
                                     </div>
@@ -564,6 +591,13 @@ const Timeline: React.FC = () => {
                         <div className="mb-4">
                             <p className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">Timeline Entry</p>
                             <h3 className="text-xl font-black tracking-tight text-slate-900 dark:text-slate-100">{editingEntryId ? 'Edit Entry' : 'Add Entry'}</h3>
+                        </div>
+                        <div className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800/50 dark:text-amber-300">
+                            <div className="flex items-center gap-1.5 font-bold mb-1">
+                                <span className="material-symbols-outlined text-sm">info</span>
+                                Managerial Approval Required
+                            </div>
+                            Manual timeline adjustments require your manager's approval before being added to your final timesheet.
                         </div>
                         <div className="space-y-3">
                             {editorError && (

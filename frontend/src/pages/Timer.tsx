@@ -507,14 +507,36 @@ const Timer: React.FC = () => {
                                 </div>
                             )}
 
-                            <button
-                                onClick={() => void handleToggle()}
-                                disabled={submitting}
-                                className={`mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white shadow-lg transition-all disabled:cursor-not-allowed disabled:opacity-70 ${isRunning ? 'bg-rose-500 shadow-rose-500/20 hover:bg-rose-600' : 'bg-emerald-500 shadow-emerald-500/20 hover:bg-emerald-600'}`}
-                            >
-                                <span className="material-symbols-outlined">{isRunning ? 'stop' : 'play_arrow'}</span>
-                                {submitting ? 'Saving...' : (isRunning ? 'Stop Timer' : 'Start Timer')}
-                            </button>
+                            {isRunning ? (
+                                <div className="mt-2 grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => void handleToggle()}
+                                        disabled={submitting}
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-slate-700 bg-slate-100 shadow-sm transition-all hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                                        title="Saves to timeline so you can start a new task"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">pause</span>
+                                        Pause Task
+                                    </button>
+                                    <button
+                                        onClick={() => void handleToggle()}
+                                        disabled={submitting}
+                                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white bg-rose-500 shadow-lg shadow-rose-500/20 transition-all hover:bg-rose-600 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="material-symbols-outlined text-[20px]">stop</span>
+                                        Stop Timer
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => void handleToggle()}
+                                    disabled={submitting}
+                                    className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-600 disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">play_arrow</span>
+                                    {submitting ? 'Saving...' : 'Start Timer'}
+                                </button>
+                            )}
                         </div>
                     </div>
 
