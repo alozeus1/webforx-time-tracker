@@ -10,10 +10,25 @@ import type {
     TimeEntrySummary,
     TimerEntriesResponse,
 } from '../types/api';
-import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
+import { emitTimeEntryChanged, TIME_ENTRY_CHANGED_EVENT } from '../utils/timeEntryEvents';
+import { TIMER_IDLE_WARNING_EVENT, TIMER_IDLE_RESUMED_EVENT, TIMER_PAUSED_EVENT } from '../hooks/useActiveTimerHeartbeat';
 
-const getElapsedSeconds = (startTime: string) =>
-    Math.max(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000), 0);
+const getElapsedSeconds = (
+    startTime: string,
+    pausedDurationSeconds = 0,
+    isPaused = false,
+    pausedAt?: string | null,
+) => {
+    const startMs = new Date(startTime).getTime();
+    if (!Number.isFinite(startMs)) {
+        return 0;
+    }
+
+    const pauseCutoffMs = isPaused && pausedAt ? new Date(pausedAt).getTime() : null;
+    const endMs = pauseCutoffMs !== null && Number.isFinite(pauseCutoffMs) ? pauseCutoffMs : Date.now();
+    const rawSeconds = Math.max(Math.floor((endMs - startMs) / 1000), 0);
+    return Math.max(rawSeconds - pausedDurationSeconds, 0);
+};
 
 const getTodaysCompletedSeconds = (entries: TimeEntrySummary[]) => {
     const todayStart = new Date();
@@ -49,6 +64,8 @@ const Timer: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const [time, setTime] = useState(0);
     const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null);
+    const [timerPaused, setTimerPaused] = useState(false);
+    const [timerPausedDurationSeconds, setTimerPausedDurationSeconds] = useState(0);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [selectedProject, setSelectedProject] = useState('');
     const [task, setTask] = useState('');
@@ -65,18 +82,26 @@ const Timer: React.FC = () => {
     const [timerStatusNotice, setTimerStatusNotice] = useState<NotificationSummary | null>(null);
 
     const isRunning = timerStartedAt !== null;
+    const isActivelyRecording = isRunning && !timerPaused;
     const todaysProgress = completedSeconds + time;
 
     const syncFromActiveTimer = useCallback((activeTimer?: ActiveTimerSummary | null, clearDraft = false) => {
         if (activeTimer) {
+            const isPaused = Boolean(activeTimer.is_paused);
+            const pausedAt = activeTimer.paused_at ?? null;
+            const pausedDurationSeconds = Number(activeTimer.paused_duration_seconds ?? 0);
             setTimerStartedAt(activeTimer.start_time);
-            setTime(getElapsedSeconds(activeTimer.start_time));
+            setTimerPaused(isPaused);
+            setTimerPausedDurationSeconds(pausedDurationSeconds);
+            setTime(getElapsedSeconds(activeTimer.start_time, pausedDurationSeconds, isPaused, pausedAt));
             setTask(activeTimer.task_description);
             setSelectedProject(activeTimer.project_id || '');
             return;
         }
 
         setTimerStartedAt(null);
+        setTimerPaused(false);
+        setTimerPausedDurationSeconds(0);
         setTime(0);
 
         if (clearDraft) {
@@ -171,6 +196,33 @@ const Timer: React.FC = () => {
     }, [loadTimerPageData]);
 
     useEffect(() => {
+        const handleTimeEntryChange = () => {
+            void loadTimerPageData();
+        };
+
+        const handleIdleWarning = () => {
+            setTimerPaused(true);
+        };
+
+        const handleIdleResumed = () => {
+            setTimerPaused(false);
+            void loadTimerPageData();
+        };
+
+        window.addEventListener(TIME_ENTRY_CHANGED_EVENT, handleTimeEntryChange as EventListener);
+        window.addEventListener(TIMER_PAUSED_EVENT, handleTimeEntryChange as EventListener);
+        window.addEventListener(TIMER_IDLE_WARNING_EVENT, handleIdleWarning as EventListener);
+        window.addEventListener(TIMER_IDLE_RESUMED_EVENT, handleIdleResumed as EventListener);
+        
+        return () => {
+            window.removeEventListener(TIME_ENTRY_CHANGED_EVENT, handleTimeEntryChange as EventListener);
+            window.removeEventListener(TIMER_PAUSED_EVENT, handleTimeEntryChange as EventListener);
+            window.removeEventListener(TIMER_IDLE_WARNING_EVENT, handleIdleWarning as EventListener);
+            window.removeEventListener(TIMER_IDLE_RESUMED_EVENT, handleIdleResumed as EventListener);
+        };
+    }, [loadTimerPageData]);
+
+    useEffect(() => {
         if (loading || isRunning) {
             return;
         }
@@ -197,9 +249,9 @@ const Timer: React.FC = () => {
     useEffect(() => {
         let interval: number | undefined;
 
-        if (timerStartedAt) {
+        if (timerStartedAt && !timerPaused) {
             interval = window.setInterval(() => {
-                setTime(getElapsedSeconds(timerStartedAt));
+                setTime(getElapsedSeconds(timerStartedAt, timerPausedDurationSeconds, false, null));
             }, 1000);
         }
 
@@ -208,7 +260,7 @@ const Timer: React.FC = () => {
                 window.clearInterval(interval);
             }
         };
-    }, [timerStartedAt]);
+    }, [timerStartedAt, timerPaused, timerPausedDurationSeconds]);
 
     // Keyboard shortcut: Ctrl+Enter to start/stop timer
     useEffect(() => {
@@ -248,6 +300,8 @@ const Timer: React.FC = () => {
             if (isRunning) {
                 // Optimistically reset the visual state while stop request is in flight.
                 setTimerStartedAt(null);
+                setTimerPaused(false);
+                setTimerPausedDurationSeconds(0);
                 setTime(0);
                 await api.post('/timers/stop');
                 await loadTimerPageData(true, true);
@@ -330,10 +384,16 @@ const Timer: React.FC = () => {
                             <span className="h-2 w-2 rounded-full bg-emerald-500" />
                             {Math.round(progressPercentage)}% of 8h goal
                         </div>
-                        {isRunning && (
+                        {isActivelyRecording && (
                             <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-rose-600">
                                 <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" />
                                 Recording
+                            </div>
+                        )}
+                        {isRunning && timerPaused && (
+                            <div className="inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-amber-700">
+                                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                                Paused
                             </div>
                         )}
                     </div>

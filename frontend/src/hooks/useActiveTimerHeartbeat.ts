@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import api from '../services/api';
 import type { TimerEntriesResponse } from '../types/api';
 import { getStoredToken } from '../utils/session';
-import { TIME_ENTRY_CHANGED_EVENT, TIME_ENTRY_CHANGED_STORAGE_KEY } from '../utils/timeEntryEvents';
+import { TIME_ENTRY_CHANGED_EVENT, TIME_ENTRY_CHANGED_STORAGE_KEY, emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
 export const TIMER_IDLE_WARNING_EVENT = 'wfx:timer-idle-warning';
 export const TIMER_IDLE_RESUMED_EVENT = 'wfx:timer-idle-resumed';
@@ -188,6 +188,12 @@ export const useActiveTimerHeartbeat = () => {
             const inactiveForMs = Date.now() - lastActivityAtRef.current;
             if (inactiveForMs >= IDLE_WARNING_MS && !idleWarningShownRef.current) {
                 idleWarningShownRef.current = true;
+
+                // Explicitly pause the backend. The UI says it's paused, we must ensure it is.
+                api.post('/timers/pause')
+                    .then(() => emitTimeEntryChanged())
+                    .catch((err) => console.error('Failed to auto-pause timer:', err));
+
                 window.dispatchEvent(new CustomEvent(TIMER_IDLE_WARNING_EVENT, {
                     detail: {
                         inactiveForMinutes: Math.floor(inactiveForMs / 60_000),
