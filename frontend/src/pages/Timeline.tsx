@@ -174,9 +174,10 @@ const Timeline: React.FC = () => {
     const activity = useMemo<ActivityItem[]>(() => {
         const items: ActivityItem[] = [];
         if (activeTimer) {
+            const statusPrefix = activeTimer.is_paused ? 'Paused' : 'Running';
             items.push({
                 id: `active-${activeTimer.id}`,
-                text: `Running: ${activeTimer.task_description}${activeTimer.project?.name ? ` on ${activeTimer.project.name}` : ''}`,
+                text: `${statusPrefix}: ${activeTimer.task_description}${activeTimer.project?.name ? ` on ${activeTimer.project.name}` : ''}`,
                 timestamp: activeTimer.start_time,
             });
         }

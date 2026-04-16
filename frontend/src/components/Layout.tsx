@@ -10,6 +10,8 @@ import { TIMER_IDLE_RESUMED_EVENT, TIMER_IDLE_WARNING_EVENT, TIMER_PAUSED_EVENT,
 import { useWorkSignals } from '../hooks/useWorkSignals';
 import api from '../services/api';
 import type { TimerEntriesResponse } from '../types/api';
+import { getStoredToken } from '../utils/session';
+import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from './CommandPalette';
@@ -109,37 +111,32 @@ const Layout: React.FC = () => {
 
     const handleResumeTimer = async () => {
         try {
-            await fetch(`${import.meta.env.VITE_API_URL}/timers/resume`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('wfx-token') ?? ''}`,
-                },
-            });
+            const token = getStoredToken();
+            if (token) {
+                await api.post('/timers/resume');
+            }
         } catch {
             // silently fail — state reconciles on next heartbeat sync
         }
         setShowResumeDialog(false);
         setPausedTimer(null);
         setIdleWarning(null);
-        window.dispatchEvent(new Event('wfx:timer-entry-changed'));
+        emitTimeEntryChanged();
     };
 
     const handleDiscardTimer = async () => {
         try {
-            await fetch(`${import.meta.env.VITE_API_URL}/timers/stop`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('wfx-token') ?? ''}`,
-                },
-            });
+            const token = getStoredToken();
+            if (token) {
+                await api.post('/timers/stop');
+            }
         } catch {
             // silently fail
         }
         setShowResumeDialog(false);
         setPausedTimer(null);
         setIdleWarning(null);
+        emitTimeEntryChanged();
     };
 
     const handleSwitchTask = async () => {

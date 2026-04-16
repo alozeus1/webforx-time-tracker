@@ -336,4 +336,73 @@ describe('UAT remediation regressions', () => {
 
         expect(await screen.findByText('1h 0m / 8h')).toBeInTheDocument();
     });
+
+    it('does not inflate dashboard live hours while an active timer is paused', async () => {
+        localStorage.setItem('user_role', 'Employee');
+
+        const now = new Date();
+
+        mockedApi.get.mockImplementation((url: string) => {
+            if (url === '/timers/me') {
+                return Promise.resolve({
+                    data: {
+                        entries: [],
+                        activeTimer: {
+                            id: 'active-paused',
+                            start_time: new Date(now.getTime() - 9 * 60 * 60 * 1000).toISOString(),
+                            task_description: 'Deep focus task',
+                            project_id: null,
+                            project: null,
+                            is_paused: true,
+                            paused_at: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+                            paused_duration_seconds: 7 * 60 * 60,
+                        },
+                    },
+                });
+            }
+
+            if (url === '/projects') return Promise.resolve({ data: [] });
+            if (url === '/reports/dashboard?range=7d') {
+                return Promise.resolve({
+                    data: {
+                        metrics: {
+                            totalHours: '1.0',
+                            activeProjects: 0,
+                            avgProductivity: 100,
+                            billableAmount: '0.00',
+                            trends: { hours: '+0%', projects: '0%', productivity: '+0%', billable: '0%' },
+                        },
+                        hoursTrend: [],
+                        projectDistribution: [],
+                        userBreakdown: [],
+                    },
+                });
+            }
+            if (url === '/users/me/wellbeing') {
+                return Promise.resolve({
+                    data: {
+                        sevenDayHours: 8,
+                        averageDailyHours: 1.14,
+                        burnoutThresholdHours: 50,
+                        cautionThresholdHours: 45,
+                        hoursUntilBurnout: 42,
+                        weeklyHourLimit: 40,
+                        status: 'balanced',
+                        workloadAlerts: [],
+                    },
+                });
+            }
+            if (url === '/users/me/notifications') return Promise.resolve({ data: { notifications: [] } });
+            return Promise.resolve({ data: {} });
+        });
+
+        wrap(<Dashboard />);
+        expect(await screen.findByText('1h 0m / 8h')).toBeInTheDocument();
+        expect(screen.getByText('Timer Paused')).toBeInTheDocument();
+
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        await waitFor(() => {
+            expect(screen.getByText('1h 0m / 8h')).toBeInTheDocument();
+        });
+    });
 });

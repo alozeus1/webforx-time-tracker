@@ -9,8 +9,22 @@ import { motion } from 'framer-motion';
 
 const ENTRY_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9'];
 
-const getElapsedSeconds = (startTime: string) =>
-    Math.max(Math.floor((Date.now() - new Date(startTime).getTime()) / 1000), 0);
+const getElapsedSeconds = (
+    startTime: string,
+    pausedDurationSeconds = 0,
+    isPaused = false,
+    pausedAt?: string | null,
+) => {
+    const startMs = new Date(startTime).getTime();
+    if (!Number.isFinite(startMs)) {
+        return 0;
+    }
+
+    const pauseCutoffMs = isPaused && pausedAt ? new Date(pausedAt).getTime() : null;
+    const endMs = pauseCutoffMs !== null && Number.isFinite(pauseCutoffMs) ? pauseCutoffMs : Date.now();
+    const rawSeconds = Math.max(Math.floor((endMs - startMs) / 1000), 0);
+    return Math.max(rawSeconds - pausedDurationSeconds, 0);
+};
 
 const getEntryDurationSeconds = (entry: TimeEntrySummary) => {
     const storedDuration = Number(entry.duration || 0);
@@ -48,6 +62,9 @@ const Dashboard: React.FC = () => {
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [activeTimerStart, setActiveTimerStart] = useState<string | null>(null);
+    const [activeTimerPaused, setActiveTimerPaused] = useState(false);
+    const [activeTimerPausedAt, setActiveTimerPausedAt] = useState<string | null>(null);
+    const [activeTimerPausedDurationSeconds, setActiveTimerPausedDurationSeconds] = useState(0);
     const [liveSeconds, setLiveSeconds] = useState(0);
     const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
     const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -75,10 +92,21 @@ const Dashboard: React.FC = () => {
             setProjects(projectsResponse.data || []);
 
             if (timersResponse.data.activeTimer?.start_time) {
-                setActiveTimerStart(timersResponse.data.activeTimer.start_time);
-                setLiveSeconds(getElapsedSeconds(timersResponse.data.activeTimer.start_time));
+                const activeTimer = timersResponse.data.activeTimer;
+                const isPaused = Boolean(activeTimer.is_paused);
+                const pausedAt = activeTimer.paused_at ?? null;
+                const pausedDurationSeconds = Number(activeTimer.paused_duration_seconds ?? 0);
+
+                setActiveTimerStart(activeTimer.start_time);
+                setActiveTimerPaused(isPaused);
+                setActiveTimerPausedAt(pausedAt);
+                setActiveTimerPausedDurationSeconds(pausedDurationSeconds);
+                setLiveSeconds(getElapsedSeconds(activeTimer.start_time, pausedDurationSeconds, isPaused, pausedAt));
             } else {
                 setActiveTimerStart(null);
+                setActiveTimerPaused(false);
+                setActiveTimerPausedAt(null);
+                setActiveTimerPausedDurationSeconds(0);
                 setLiveSeconds(0);
             }
 
@@ -167,12 +195,17 @@ const Dashboard: React.FC = () => {
             return;
         }
 
+        if (activeTimerPaused) {
+            setLiveSeconds(getElapsedSeconds(activeTimerStart, activeTimerPausedDurationSeconds, true, activeTimerPausedAt));
+            return;
+        }
+
         const interval = window.setInterval(() => {
-            setLiveSeconds(getElapsedSeconds(activeTimerStart));
+            setLiveSeconds(getElapsedSeconds(activeTimerStart, activeTimerPausedDurationSeconds, false, null));
         }, 1000);
 
         return () => window.clearInterval(interval);
-    }, [activeTimerStart]);
+    }, [activeTimerStart, activeTimerPaused, activeTimerPausedAt, activeTimerPausedDurationSeconds]);
 
     useEffect(() => {
         if (!notificationsOpen) {
@@ -257,10 +290,16 @@ const Dashboard: React.FC = () => {
                         <p className="text-[0.68rem] font-bold uppercase tracking-[0.12em] text-slate-500">Overview</p>
                         <h1 className="text-xl font-black text-slate-900 dark:text-slate-100" style={{ fontFamily: 'var(--font-family-display)' }}>Dashboard</h1>
                     </div>
-                    {activeTimerStart && (
+                    {activeTimerStart && !activeTimerPaused && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
                             Timer Running
+                        </span>
+                    )}
+                    {activeTimerStart && activeTimerPaused && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-400">
+                            <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                            Timer Paused
                         </span>
                     )}
                 </div>
@@ -465,7 +504,9 @@ const Dashboard: React.FC = () => {
                                 {loading
                                     ? <div className="skeleton h-8 w-20 rounded" />
                                     : activeTimerStart
-                                        ? `${formatClock(liveSeconds).hh}:${formatClock(liveSeconds).mm}`
+                                        ? activeTimerPaused
+                                            ? `Paused ${formatClock(liveSeconds).hh}:${formatClock(liveSeconds).mm}`
+                                            : `${formatClock(liveSeconds).hh}:${formatClock(liveSeconds).mm}`
                                         : 'Stopped'
                                 }
                             </div>
