@@ -34,9 +34,13 @@ export const checkIdleTimers = async () => {
             const lastHeartbeat = timer.last_heartbeat_at
                 ? new Date(timer.last_heartbeat_at)
                 : (timer.last_active_ping ? new Date(timer.last_active_ping) : new Date(timer.start_time));
-            const lastClientActivity = timer.last_client_activity_at ? new Date(timer.last_client_activity_at) : null;
+            
+            const baseActivityTime = timer.last_client_activity_at 
+                ? new Date(timer.last_client_activity_at) 
+                : new Date(timer.start_time);
+                
             const heartbeatAgeMs = now.getTime() - lastHeartbeat.getTime();
-            const clientActivityAgeMs = lastClientActivity ? now.getTime() - lastClientActivity.getTime() : Number.POSITIVE_INFINITY;
+            const clientActivityAgeMs = now.getTime() - baseActivityTime.getTime();
 
             // --- Guard 2: ping-frequency enforcement ---
             // If no ping is received in 2× heartbeat interval, browser state is stale.

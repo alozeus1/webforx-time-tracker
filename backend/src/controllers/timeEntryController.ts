@@ -86,14 +86,15 @@ const enforceTimerGuardrails = async ({
     const lastHeartbeat = timer.last_heartbeat_at
         ? new Date(timer.last_heartbeat_at)
         : (timer.last_active_ping ? new Date(timer.last_active_ping) : new Date(timer.start_time));
-    const lastClientActivity = lastClientActivityAtOverride ?? (
-        timer.last_client_activity_at ? new Date(timer.last_client_activity_at) : null
-    );
+    
+    const baseActivityTime = timer.last_client_activity_at
+        ? new Date(timer.last_client_activity_at)
+        : new Date(timer.start_time);
+
+    const lastClientActivity = lastClientActivityAtOverride ?? baseActivityTime;
 
     const heartbeatAgeMs = checkTime.getTime() - lastHeartbeat.getTime();
-    const clientActivityAgeMs = lastClientActivity
-        ? checkTime.getTime() - lastClientActivity.getTime()
-        : Number.POSITIVE_INFINITY;
+    const clientActivityAgeMs = checkTime.getTime() - lastClientActivity.getTime();
     const pingIsTooOld = heartbeatAgeMs >= thresholds.pingFrequencyThresholdMs;
     const { effectiveVisibility, effectiveHasFocus } = resolveInactivitySource({ timer, visibilityState, hasFocus });
     const browserExplicitlyInactive = effectiveVisibility === 'hidden' || effectiveHasFocus === false;
