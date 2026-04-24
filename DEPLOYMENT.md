@@ -15,6 +15,12 @@ PORT=5005
 CORS_ORIGIN="http://localhost:5173,http://127.0.0.1:5173"
 FRONTEND_URL="http://localhost:5173,http://127.0.0.1:5173"
 ENABLE_BACKGROUND_WORKERS=true
+IDLE_WARNING_MINUTES=5
+HEARTBEAT_INTERVAL_MINUTES=3
+HEARTBEAT_STALE_MINUTES=8
+AUTO_STOP_GRACE_MINUTES=2
+MAX_PAUSE_HOURS=4
+MAX_ACTIVE_TIMER_HOURS=8
 RESEND_API_KEY="<RESEND_API_KEY>"
 EMAIL_FROM="Web Forx Time Tracker <noreply@webforxtech.com>"
 GOOGLE_CLIENT_ID="<GOOGLE_OAUTH_CLIENT_ID>"
@@ -24,10 +30,15 @@ GOOGLE_REDIRECT_URI="http://localhost:5005/api/v1/calendar/callback"
 Update `frontend/.env` if your backend isn't running on localhost:5005:
 ```
 VITE_API_URL="http://localhost:5005/api/v1"
+VITE_HEARTBEAT_INTERVAL_MINUTES=3
+VITE_IDLE_WARNING_MINUTES=5
+VITE_MAX_ACTIVE_TIMER_HOURS=8
 ```
 If `INTEGRATION_SECRET` is omitted, the backend temporarily reuses `JWT_SECRET` only in non-production.
 In production, `INTEGRATION_SECRET` is required.
 For Google Calendar, add `http://localhost:5005/api/v1/calendar/callback` as an authorized redirect URI in Google Cloud Console.
+
+For a sanitized engineering handoff that does not include production access, see [docs/engineering-handoff.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs/engineering-handoff.md).
 
 ## 3. Launching the Backend API
 ```bash
@@ -176,6 +187,35 @@ If your release pipeline uses GitHub Actions, run `.github/workflows/release-gua
 - Create a timer entry and confirm it persists.
 - Verify reports page loads users and projects filters.
 - Verify cron endpoints reject unauthenticated calls in production.
+
+## 7. Engineering-Owned Deployment
+
+If a new engineering team is taking over this codebase without access to the existing Vercel projects:
+
+- do not reuse the current production secrets
+- create a new PostgreSQL database they control
+- create a new backend deployment target they control
+- create a new frontend deployment target they control
+- point their frontend `VITE_API_URL` to their own backend `/api/v1` URL
+- add their own CI/CD secrets in the new repository
+
+The repo is structured so that a team can fully run and deploy it from source with:
+
+```bash
+cd backend
+npm install
+npm run schema:check
+npx prisma db push
+npx prisma db seed
+npm run build
+npm test
+
+cd ../frontend
+npm install
+npm run build
+npm run lint
+npm run test:unit
+```
 
 ---
 
