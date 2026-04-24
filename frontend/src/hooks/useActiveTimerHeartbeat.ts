@@ -17,6 +17,7 @@ export const HEARTBEAT_INTERVAL_MS = resolveMinutes(import.meta.env.VITE_HEARTBE
 export const ACTIVE_TIMER_REFRESH_MS = 120_000;
 export const ACTIVITY_SAMPLE_MS = 15_000;
 export const IDLE_WARNING_MS = resolveMinutes(import.meta.env.VITE_IDLE_WARNING_MINUTES, 5) * 60_000;
+export const MAX_ACTIVE_TIMER_MS = resolveMinutes(import.meta.env.VITE_MAX_ACTIVE_TIMER_HOURS, 8) * 60 * 60_000;
 
 const isDocumentVisible = () =>
     typeof document === 'undefined' || document.visibilityState === 'visible';
@@ -24,6 +25,7 @@ const isDocumentVisible = () =>
 export const useActiveTimerHeartbeat = () => {
     const hasActiveTimerRef = useRef(false);
     const activeTimerIdRef = useRef<string | null>(null);
+    const activeTimerStartedAtRef = useRef<number | null>(null);
     const isPausedRef = useRef(false);
     const lastHeartbeatAtRef = useRef(0);
     const lastActivitySampleAtRef = useRef(0);
@@ -47,6 +49,9 @@ export const useActiveTimerHeartbeat = () => {
                 const response = await api.get<TimerEntriesResponse>('/timers/me');
                 hasActiveTimerRef.current = Boolean(response.data.activeTimer?.start_time);
                 activeTimerIdRef.current = response.data.activeTimer?.id || null;
+                activeTimerStartedAtRef.current = response.data.activeTimer?.start_time
+                    ? new Date(response.data.activeTimer.start_time).getTime()
+                    : null;
 
                 const newIsPaused = Boolean(response.data.activeTimer?.is_paused);
                 if (newIsPaused && !isPausedRef.current) {
@@ -58,6 +63,7 @@ export const useActiveTimerHeartbeat = () => {
                     lastHeartbeatAtRef.current = 0;
                     idleWarningShownRef.current = false;
                     isPausedRef.current = false;
+                    activeTimerStartedAtRef.current = null;
                 }
             } catch (error) {
                 console.error('Failed to sync active timer heartbeat state:', error);
@@ -69,8 +75,48 @@ export const useActiveTimerHeartbeat = () => {
         return syncInFlightRef.current;
     }, []);
 
+    const enforceActiveTimerCap = useCallback(async () => {
+        if (!getStoredToken() || !hasActiveTimerRef.current || !activeTimerStartedAtRef.current) {
+            return false;
+        }
+
+        if (Date.now() - activeTimerStartedAtRef.current < MAX_ACTIVE_TIMER_MS) {
+            return false;
+        }
+
+        try {
+            await api.post('/timers/stop');
+            hasActiveTimerRef.current = false;
+            activeTimerIdRef.current = null;
+            activeTimerStartedAtRef.current = null;
+            isPausedRef.current = false;
+            lastHeartbeatAtRef.current = 0;
+            idleWarningShownRef.current = false;
+            emitTimeEntryChanged();
+            return true;
+        } catch (error) {
+            const status = (error as { response?: { status?: number } })?.response?.status;
+            if (status === 404) {
+                hasActiveTimerRef.current = false;
+                activeTimerIdRef.current = null;
+                activeTimerStartedAtRef.current = null;
+                isPausedRef.current = false;
+                lastHeartbeatAtRef.current = 0;
+                idleWarningShownRef.current = false;
+                return true;
+            }
+
+            console.error('Failed to enforce max active timer cap:', error);
+            return false;
+        }
+    }, []);
+
     const sendHeartbeat = useCallback(async (force = false) => {
         if (!getStoredToken() || !hasActiveTimerRef.current || !isDocumentVisible()) {
+            return;
+        }
+
+        if (await enforceActiveTimerCap()) {
             return;
         }
 
@@ -97,7 +143,7 @@ export const useActiveTimerHeartbeat = () => {
 
             console.error('Failed to send active timer heartbeat:', error);
         }
-    }, []);
+    }, [enforceActiveTimerCap]);
 
     const handleActivity = useCallback(() => {
         lastActivityAtRef.current = Date.now();
@@ -177,8 +223,17 @@ export const useActiveTimerHeartbeat = () => {
                 return;
             }
 
+            void enforceActiveTimerCap();
             void sendHeartbeat(true);
         }, HEARTBEAT_INTERVAL_MS);
+
+        const capInterval = window.setInterval(() => {
+            if (!hasActiveTimerRef.current) {
+                return;
+            }
+
+            void enforceActiveTimerCap();
+        }, 60_000);
 
         const idleWarningInterval = window.setInterval(() => {
             if (!hasActiveTimerRef.current || !isDocumentVisible()) {
@@ -224,6 +279,7 @@ export const useActiveTimerHeartbeat = () => {
                 window.removeEventListener(eventName, onActivity);
             });
             window.clearInterval(heartbeatInterval);
+            window.clearInterval(capInterval);
             window.clearInterval(idleWarningInterval);
             window.removeEventListener('focus', onVisibility);
             window.removeEventListener('blur', onVisibility);
@@ -233,5 +289,5 @@ export const useActiveTimerHeartbeat = () => {
             document.removeEventListener('visibilitychange', onVisibility);
             window.clearInterval(refreshInterval);
         };
-    }, [handleActivity, sendHeartbeat, syncActiveTimer]);
+    }, [enforceActiveTimerCap, handleActivity, sendHeartbeat, syncActiveTimer]);
 };
