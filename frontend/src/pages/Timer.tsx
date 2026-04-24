@@ -262,18 +262,6 @@ const Timer: React.FC = () => {
         };
     }, [timerStartedAt, timerPaused, timerPausedDurationSeconds]);
 
-    // Keyboard shortcut: Ctrl+Enter to start/stop timer
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitting) {
-                e.preventDefault();
-                void handleToggle();
-            }
-        };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    });
-
     const formatTime = (seconds: number) => {
         const h = Math.floor(seconds / 3600).toString().padStart(2, '0');
         const m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
@@ -287,8 +275,8 @@ const Timer: React.FC = () => {
         return `${h}h ${m}m`;
     };
 
-    const handleToggle = async () => {
-        if (!isRunning && !task.trim()) {
+    const handleStartTimer = useCallback(async () => {
+        if (!task.trim()) {
             setTaskError('Task name is required before starting the timer.');
             return;
         }
@@ -297,45 +285,109 @@ const Timer: React.FC = () => {
         setSubmitting(true);
 
         try {
-            if (isRunning) {
-                // Optimistically reset the visual state while stop request is in flight.
-                setTimerStartedAt(null);
-                setTimerPaused(false);
-                setTimerPausedDurationSeconds(0);
-                setTime(0);
-                await api.post('/timers/stop');
-                await loadTimerPageData(true, true);
-                emitTimeEntryChanged();
-            } else {
-                const response = await api.post<ActiveTimerSummary>('/timers/start', {
-                    project_id: selectedProject || undefined,
-                    task_description: task.trim(),
-                    is_billable: isBillable,
-                    tag_ids: selectedTagIds,
-                });
+            const response = await api.post<ActiveTimerSummary>('/timers/start', {
+                project_id: selectedProject || undefined,
+                task_description: task.trim(),
+                is_billable: isBillable,
+                tag_ids: selectedTagIds,
+            });
 
-                syncFromActiveTimer(response.data);
-                emitTimeEntryChanged();
-            }
+            syncFromActiveTimer(response.data);
+            emitTimeEntryChanged();
         } catch (error) {
-            console.error(isRunning ? 'Failed to stop timer' : 'Failed to start timer', error);
-            const fallback = isRunning ? 'Failed to stop timer' : 'Failed to start timer';
-            const message = extractErrorMessage(error, fallback);
+            console.error('Failed to start timer', error);
+            alert(extractErrorMessage(error, 'Failed to start timer'));
+            await loadTimerPageData(false);
+        } finally {
+            setSubmitting(false);
+        }
+    }, [isBillable, loadTimerPageData, selectedProject, selectedTagIds, syncFromActiveTimer, task]);
 
-            if (isRunning && message.toLowerCase().includes('no active timer found')) {
-                // Keep UI in sync if the timer has already been cleared server-side.
-                await loadTimerPageData(true);
+    const handleStopTimer = useCallback(async (clearDraft = true) => {
+        setTaskError(null);
+        setSubmitting(true);
+
+        try {
+            setTimerStartedAt(null);
+            setTimerPaused(false);
+            setTimerPausedDurationSeconds(0);
+            setTime(0);
+            await api.post('/timers/stop');
+            await loadTimerPageData(clearDraft, true);
+            emitTimeEntryChanged();
+        } catch (error) {
+            console.error('Failed to stop timer', error);
+            const message = extractErrorMessage(error, 'Failed to stop timer');
+
+            if (message.toLowerCase().includes('no active timer found')) {
+                await loadTimerPageData(clearDraft);
                 emitTimeEntryChanged();
                 alert('Timer was already stopped. The page has been refreshed.');
                 return;
             }
 
             alert(message);
-            await loadTimerPageData();
+            await loadTimerPageData(false);
+        } finally {
+            setSubmitting(false);
+        }
+    }, [loadTimerPageData]);
+
+    const handlePauseTimer = async () => {
+        setTaskError(null);
+        setSubmitting(true);
+
+        try {
+            await api.post('/timers/pause');
+            await loadTimerPageData(false);
+            window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT));
+            emitTimeEntryChanged();
+        } catch (error) {
+            console.error('Failed to pause timer', error);
+            alert(extractErrorMessage(error, 'Failed to pause timer'));
+            await loadTimerPageData(false);
         } finally {
             setSubmitting(false);
         }
     };
+
+    const handleResumeTimer = async () => {
+        setTaskError(null);
+        setSubmitting(true);
+
+        try {
+            await api.post('/timers/resume');
+            await loadTimerPageData(false);
+            window.dispatchEvent(new CustomEvent(TIMER_IDLE_RESUMED_EVENT));
+            emitTimeEntryChanged();
+        } catch (error) {
+            console.error('Failed to resume timer', error);
+            alert(extractErrorMessage(error, 'Failed to resume timer'));
+            await loadTimerPageData(false);
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleStartNewTimer = async () => {
+        await handleStopTimer(true);
+    };
+
+    // Keyboard shortcut: Ctrl+Enter to start/stop timer
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !submitting) {
+                e.preventDefault();
+                if (isRunning) {
+                    void handleStopTimer(true);
+                } else {
+                    void handleStartTimer();
+                }
+            }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+    }, [handleStartTimer, handleStopTimer, isRunning, submitting]);
 
     const handleApplySuggestion = (event: CalendarEventSuggestion) => {
         setTask(event.title);
@@ -508,18 +560,39 @@ const Timer: React.FC = () => {
                             )}
 
                             {isRunning ? (
-                                <div className="mt-2 grid grid-cols-2 gap-3">
+                                <div className={`mt-2 grid gap-3 ${timerPaused ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
+                                    {timerPaused ? (
+                                        <button
+                                            onClick={() => void handleResumeTimer()}
+                                            disabled={submitting}
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white bg-slate-900 shadow-lg shadow-slate-900/15 transition-all hover:bg-slate-800 disabled:opacity-70 disabled:cursor-not-allowed"
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">play_arrow</span>
+                                            Resume Timer
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => void handlePauseTimer()}
+                                            disabled={submitting}
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-slate-700 bg-slate-100 shadow-sm transition-all hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">pause</span>
+                                            Pause Task
+                                        </button>
+                                    )}
+                                    {timerPaused && (
+                                        <button
+                                            onClick={() => void handleStartNewTimer()}
+                                            disabled={submitting}
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-slate-700 bg-slate-100 shadow-sm transition-all hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed"
+                                            title="Save this paused timer and open a fresh timer workspace"
+                                        >
+                                            <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                                            Start New Timer
+                                        </button>
+                                    )}
                                     <button
-                                        onClick={() => void handleToggle()}
-                                        disabled={submitting}
-                                        className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-slate-700 bg-slate-100 shadow-sm transition-all hover:bg-slate-200 disabled:opacity-70 disabled:cursor-not-allowed"
-                                        title="Saves to timeline so you can start a new task"
-                                    >
-                                        <span className="material-symbols-outlined text-[20px]">pause</span>
-                                        Pause Task
-                                    </button>
-                                    <button
-                                        onClick={() => void handleToggle()}
+                                        onClick={() => void handleStopTimer(true)}
                                         disabled={submitting}
                                         className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white bg-rose-500 shadow-lg shadow-rose-500/20 transition-all hover:bg-rose-600 disabled:opacity-70 disabled:cursor-not-allowed"
                                     >
@@ -529,7 +602,7 @@ const Timer: React.FC = () => {
                                 </div>
                             ) : (
                                 <button
-                                    onClick={() => void handleToggle()}
+                                    onClick={() => void handleStartTimer()}
                                     disabled={submitting}
                                     className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl py-3.5 text-sm font-bold text-white bg-emerald-500 shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-600 disabled:opacity-70 disabled:cursor-not-allowed"
                                 >
@@ -543,10 +616,16 @@ const Timer: React.FC = () => {
                     <aside className="space-y-4">
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Session Status</p>
-                            <p className="mt-2 text-lg font-black text-slate-900">{isRunning ? 'Timer is running' : 'Timer is stopped'}</p>
+                            <p className="mt-2 text-lg font-black text-slate-900">
+                                {isRunning ? (timerPaused ? 'Timer is paused' : 'Timer is running') : 'Timer is stopped'}
+                            </p>
                             <p className="mt-1 text-sm text-slate-500">
                                 {isRunning
-                                    ? 'Current task and project are locked until you stop tracking.'
+                                    ? (
+                                        timerPaused
+                                            ? 'Resume this timer, stop it, or save it and start a different task.'
+                                            : 'Current task and project are locked until you pause or stop tracking.'
+                                    )
                                     : 'Add task context and start logging time.'}
                             </p>
                         </div>
