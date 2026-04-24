@@ -33,6 +33,7 @@ const getTimerGuardrailThresholds = () => {
         autoStopThresholdMs: staleThresholdMs + (env_1.env.autoStopGraceMinutes * 60000),
         pingFrequencyThresholdMs: env_1.env.heartbeatIntervalMinutes * 2 * 60000,
         maxPauseMs: env_1.env.maxPauseHours * 60 * 60 * 1000,
+        maxActiveTimerMs: env_1.env.maxActiveTimerHours * 60 * 60 * 1000,
     };
 };
 const resolveInactivitySource = ({ timer, visibilityState, hasFocus, }) => {
@@ -43,6 +44,15 @@ const resolveInactivitySource = ({ timer, visibilityState, hasFocus, }) => {
 const enforceTimerGuardrails = (_a) => __awaiter(void 0, [_a], void 0, function* ({ timer, now, visibilityState, hasFocus, lastClientActivityAtOverride, }) {
     const checkTime = now !== null && now !== void 0 ? now : new Date();
     const thresholds = getTimerGuardrailThresholds();
+    const activeForMs = checkTime.getTime() - new Date(timer.start_time).getTime();
+    if (activeForMs >= thresholds.maxActiveTimerMs) {
+        yield (0, activeTimerService_1.stopActiveTimerWithReason)({
+            userId: timer.user_id,
+            reason: 'active_duration_limit',
+            triggeredAt: checkTime,
+        });
+        return 'stopped';
+    }
     if (timer.is_paused) {
         if (timer.paused_at) {
             const pausedForMs = checkTime.getTime() - new Date(timer.paused_at).getTime();

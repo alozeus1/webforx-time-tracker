@@ -28,7 +28,15 @@ const checkIdleTimers = () => __awaiter(void 0, void 0, void 0, function* () {
         // Threshold: if no ping received in 2× heartbeat interval, don't trust last-known browser state
         const pingFrequencyThresholdMs = env_1.env.heartbeatIntervalMinutes * 2 * 60000;
         const maxPauseMs = env_1.env.maxPauseHours * 60 * 60 * 1000;
+        const maxActiveTimerMs = env_1.env.maxActiveTimerHours * 60 * 60 * 1000;
         for (const timer of activeTimers) {
+            const startedAt = new Date(timer.start_time);
+            const activeForMs = now.getTime() - startedAt.getTime();
+            if (activeForMs >= maxActiveTimerMs) {
+                yield (0, activeTimerService_1.stopActiveTimerWithReason)({ userId: timer.user_id, reason: 'active_duration_limit', triggeredAt: now });
+                console.log(`[Worker] Timer auto-stopped (active_duration_limit, ${Math.round(activeForMs / 3600000)}h active) for user ${timer.user_id}`);
+                continue;
+            }
             // --- Guard 1: max pause duration ---
             // A paused timer that has been paused longer than maxPauseHours is auto-stopped.
             // This runs before all other checks; paused-but-not-expired timers are skipped entirely.

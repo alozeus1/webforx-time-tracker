@@ -58,6 +58,11 @@ export const env = {
         const parsed = Number.parseFloat(raw || '');
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
     })(),
+    maxActiveTimerHours: (() => {
+        const raw = process.env.MAX_ACTIVE_TIMER_HOURS?.trim();
+        const parsed = Number.parseFloat(raw || '');
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 8;
+    })(),
     authentikEnabled: process.env.AUTHENTIK_ENABLED?.trim().toLowerCase() === 'true',
     authentikIssuerUrl: process.env.AUTHENTIK_ISSUER_URL?.trim() || '',
     authentikClientId: process.env.AUTHENTIK_CLIENT_ID?.trim() || '',

@@ -29,6 +29,7 @@ import { checkIdleTimers } from '../src/workers/idleTracker';
 //   → warningThreshold=5min, staleThreshold=8min, autoStopThreshold=10min
 //   → pingFrequencyThreshold=6min (2 × heartbeatIntervalMinutes)
 //   → maxPauseMs = 4h (MAX_PAUSE_HOURS default)
+//   → maxActiveTimerMs = 8h (MAX_ACTIVE_TIMER_HOURS default)
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -168,6 +169,27 @@ describe('checkIdleTimers', () => {
         expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
             userId: 'user-1',
             reason: 'pause_expired',
+        }));
+        expect(pauseActiveTimer).not.toHaveBeenCalled();
+    });
+
+    it('auto-stops any timer that exceeds MAX_ACTIVE_TIMER_HOURS even if heartbeats are fresh', async () => {
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
+            ...baseTimer,
+            start_time: ago(9 * HOUR),
+            last_heartbeat_at: ago(1 * MIN),
+            last_client_activity_at: ago(1 * MIN),
+            client_visibility: 'visible',
+            client_has_focus: true,
+            is_paused: false,
+            paused_at: null,
+        }]);
+
+        await checkIdleTimers();
+
+        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
+            userId: 'user-1',
+            reason: 'active_duration_limit',
         }));
         expect(pauseActiveTimer).not.toHaveBeenCalled();
     });

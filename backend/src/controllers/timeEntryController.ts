@@ -35,6 +35,7 @@ const getTimerGuardrailThresholds = () => {
         autoStopThresholdMs: staleThresholdMs + (env.autoStopGraceMinutes * 60_000),
         pingFrequencyThresholdMs: env.heartbeatIntervalMinutes * 2 * 60_000,
         maxPauseMs: env.maxPauseHours * 60 * 60 * 1000,
+        maxActiveTimerMs: env.maxActiveTimerHours * 60 * 60 * 1000,
     };
 };
 
@@ -67,6 +68,16 @@ const enforceTimerGuardrails = async ({
 }): Promise<'none' | 'paused' | 'stopped'> => {
     const checkTime = now ?? new Date();
     const thresholds = getTimerGuardrailThresholds();
+    const activeForMs = checkTime.getTime() - new Date(timer.start_time).getTime();
+
+    if (activeForMs >= thresholds.maxActiveTimerMs) {
+        await stopActiveTimerWithReason({
+            userId: timer.user_id,
+            reason: 'active_duration_limit',
+            triggeredAt: checkTime,
+        });
+        return 'stopped';
+    }
 
     if (timer.is_paused) {
         if (timer.paused_at) {

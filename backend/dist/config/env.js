@@ -57,6 +57,12 @@ exports.env = {
         const parsed = Number.parseFloat(raw || '');
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
     })(),
+    maxActiveTimerHours: (() => {
+        var _a;
+        const raw = (_a = process.env.MAX_ACTIVE_TIMER_HOURS) === null || _a === void 0 ? void 0 : _a.trim();
+        const parsed = Number.parseFloat(raw || '');
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 8;
+    })(),
     authentikEnabled: ((_j = process.env.AUTHENTIK_ENABLED) === null || _j === void 0 ? void 0 : _j.trim().toLowerCase()) === 'true',
     authentikIssuerUrl: ((_k = process.env.AUTHENTIK_ISSUER_URL) === null || _k === void 0 ? void 0 : _k.trim()) || '',
     authentikClientId: ((_l = process.env.AUTHENTIK_CLIENT_ID) === null || _l === void 0 ? void 0 : _l.trim()) || '',

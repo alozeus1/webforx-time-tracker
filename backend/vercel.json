@@ -15,7 +15,7 @@
   "crons": [
     {
       "path": "/api/v1/cron/idle",
-      "schedule": "5 0 * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/v1/cron/workload",
