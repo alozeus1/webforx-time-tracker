@@ -17,6 +17,15 @@ const formatHoursText = (hours: number) => {
 
 const formatSecondsText = (seconds: number) => formatHoursText(seconds / 3600);
 
+const formatStopReason = (reason?: string | null) => {
+    if (!reason) return null;
+    if (reason === 'active_duration_limit') return '8h cap reached';
+    if (reason === 'idle_timeout') return 'Idle timeout';
+    if (reason === 'heartbeat_missing') return 'Heartbeat missing';
+    if (reason === 'pause_expired') return 'Paused too long';
+    return reason.replace(/_/g, ' ');
+};
+
 /** Returns Tailwind classes based on a trend string like "+5%", "-3%", "0%" */
 function getTrendClasses(trend: string | undefined): string {
     if (!trend) return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
@@ -148,6 +157,11 @@ const Reports: React.FC = () => {
         return source;
     }, [analytics?.userBreakdown, productivityFilter]);
 
+    const autoStoppedPendingApprovals = useMemo(
+        () => pendingApprovals.filter((entry) => entry.auto_stopped || entry.stop_reason === 'active_duration_limit'),
+        [pendingApprovals],
+    );
+
     const pillSelectClass = 'px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-sm font-medium text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all cursor-pointer hover:border-slate-300 dark:hover:border-slate-600';
 
     return (
@@ -269,6 +283,19 @@ const Reports: React.FC = () => {
                                 <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">${analytics?.metrics.billableAmount}</h3>
                                 <p className="text-xs text-slate-400 mt-1">Computed by hourly rate</p>
                             </div>
+
+                            {canReviewApprovals && (
+                                <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-amber-200 dark:border-amber-900/40 shadow-sm">
+                                    <div className="flex justify-between items-start">
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Flagged Auto-Stops</p>
+                                        <span className="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                            Review
+                                        </span>
+                                    </div>
+                                    <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{autoStoppedPendingApprovals.length}</h3>
+                                    <p className="text-xs text-slate-400 mt-1">Pending approvals triggered by inactivity or the 8h cap.</p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Charts Section */}
@@ -373,6 +400,31 @@ const Reports: React.FC = () => {
                                                 <td className="px-6 py-4 text-sm">
                                                     <p className="font-semibold text-slate-900 dark:text-slate-200">{entry.task_description}</p>
                                                     <p className="text-xs text-slate-500 mt-0.5">{entry.project?.name || 'Unassigned Project'}</p>
+                                                    {(entry.auto_stopped || entry.stop_reason || entry.intelligence) && (
+                                                        <div className="mt-2 flex flex-wrap gap-1.5">
+                                                            {entry.intelligence && (
+                                                                <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                                                    entry.intelligence.level === 'high'
+                                                                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
+                                                                        : entry.intelligence.level === 'medium'
+                                                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                                                                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                                                                }`}>
+                                                                    {entry.intelligence.level} risk
+                                                                </span>
+                                                            )}
+                                                            {entry.auto_stopped && (
+                                                                <span className="inline-flex rounded-full bg-indigo-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                                                                    auto-stopped
+                                                                </span>
+                                                            )}
+                                                            {formatStopReason(entry.stop_reason) && (
+                                                                <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                                                    {formatStopReason(entry.stop_reason)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">
                                                     {formatSecondsText(entry.duration)}

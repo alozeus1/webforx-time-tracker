@@ -106,6 +106,8 @@ export const scoreTimeEntryRisk = (entry: {
     project_id?: string | null;
     created_at?: Date | string;
     updated_at?: Date | string;
+    auto_stopped?: boolean;
+    stop_reason?: string | null;
 }): ApprovalIntelligence => {
     let score = 0;
     const reasons: string[] = [];
@@ -124,6 +126,22 @@ export const scoreTimeEntryRisk = (entry: {
     } else if (durationHours <= 0.08) {
         score += 8;
         reasons.push('very short duration');
+    }
+
+    if (entry.auto_stopped) {
+        score += 18;
+        reasons.push('auto-stopped entry');
+    }
+
+    if (entry.stop_reason === 'active_duration_limit') {
+        score += 28;
+        reasons.push('hit 8h active timer cap');
+    } else if (entry.stop_reason === 'idle_timeout' || entry.stop_reason === 'heartbeat_missing') {
+        score += 14;
+        reasons.push('stopped after inactivity');
+    } else if (entry.stop_reason === 'pause_expired') {
+        score += 10;
+        reasons.push('paused too long before stop');
     }
 
     if (!entry.project_id) {

@@ -82,6 +82,8 @@ export interface TimeEntrySummary {
     entry_type?: string;
     notes?: string | null;
     is_billable?: boolean;
+    auto_stopped?: boolean;
+    stop_reason?: string | null;
     intelligence?: ApprovalIntelligence;
     user: UserSummary;
     project?: ProjectReference | null;

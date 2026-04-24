@@ -39,6 +39,15 @@ const formatHoursValue = (hours: number) => {
 
 const formatSecondsValue = (seconds: number) => formatHoursValue(seconds / 3600);
 
+const formatStopReason = (reason?: string | null) => {
+    if (!reason) return null;
+    if (reason === 'active_duration_limit') return '8h cap reached';
+    if (reason === 'idle_timeout') return 'Idle timeout';
+    if (reason === 'heartbeat_missing') return 'Heartbeat missing';
+    if (reason === 'pause_expired') return 'Paused too long';
+    return reason.replace(/_/g, ' ');
+};
+
 const Timesheet: React.FC = () => {
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
@@ -320,6 +329,20 @@ const Timesheet: React.FC = () => {
                                                                 <p className="max-w-[180px] text-xs text-slate-500">
                                                                     {entry.intelligence.reasons.join(', ')}
                                                                 </p>
+                                                            )}
+                                                            {(entry.auto_stopped || entry.stop_reason) && (
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {entry.auto_stopped && (
+                                                                        <span className="inline-flex rounded-full bg-indigo-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+                                                                            auto-stopped
+                                                                        </span>
+                                                                    )}
+                                                                    {formatStopReason(entry.stop_reason) && (
+                                                                        <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+                                                                            {formatStopReason(entry.stop_reason)}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             )}
                                                         </div>
                                                     ) : (
