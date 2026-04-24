@@ -1,171 +1,185 @@
 # Application Route Map
 
-Defines the application routing structure.
+Last reviewed: 2026-04-23
 
----
+The frontend is a React Router app. The backend API is mounted under `/api/v1`.
 
-# Public Routes
+## Public Frontend Routes
 
-/login
+| Route | Purpose |
+| --- | --- |
+| `/` | Public landing page, or redirects authenticated users to `/dashboard` |
+| `/landing` | Redirects to `/` |
+| `/login` | Login form |
+| `/forgot-password` | Password reset request |
+| `/request-access` | Public access request form |
+| `/privacy` | Privacy policy |
+| `/terms` | Terms page |
+| `/share/:token` | Public shared artifact view |
+| `/demo` | Public 6-stop guided product tour |
 
-Login page for authentication.
+## Authenticated Frontend Routes
 
----
+These routes render inside the main authenticated layout.
 
-# Authenticated Routes
+| Route | Purpose |
+| --- | --- |
+| `/dashboard` | Main user dashboard with active timer, today summary, alerts, and recent work |
+| `/workday` | Workday reconstruction and operational intelligence view |
+| `/timer` | Start, pause, resume, stop, and manually enter time |
+| `/timeline` | Chronological time entry view, edits, duplicates, and resume-task actions |
+| `/timesheet` | Weekly summary and approval queue where authorized |
+| `/reports` | Analytics, exports, and approval review where authorized |
+| `/settings` | User preferences |
+| `/profile` | User account profile |
+| `/integrations` | Integration settings hub |
+| `/integrations/taiga` | Deep link alias to the integrations hub |
+| `/integrations/mattermost` | Deep link alias to the integrations hub |
 
-/dashboard
+## Manager/Admin Frontend Routes
 
-Main user dashboard.
+| Route | Allowed roles | Purpose |
+| --- | --- | --- |
+| `/team` | Manager, Admin | Team productivity, user visibility, access diagnostics, imports |
+| `/invoices` | Manager, Admin | Invoice management |
+| `/templates` | Manager, Admin | Project template management |
+| `/scheduled-reports` | Manager, Admin | Scheduled report management |
 
-Displays:
+## Admin Frontend Routes
 
-active timer  
-today hours  
-recent tasks
+| Route | Allowed roles | Purpose |
+| --- | --- | --- |
+| `/admin` | Current code: Admin, Manager. MVP spec: Admin only. | Users, projects, integrations, notifications, audit/auth logs |
+| `/webhooks` | Admin | Webhook subscription management |
 
----
+Note: `/admin` currently allows `Manager` in `frontend/src/App.tsx`. Treat that as an explicit product decision before transfer.
 
-/timer
+## Backend API Prefix
 
-Dedicated timer page.
+All backend routes are served under:
 
-Functions:
-
-start timer  
-stop timer  
-project selection
-
----
-
-/timeline
-
-Visual timeline of daily work entries.
-
----
-
-/timesheet
-
-Weekly summary view.
-
-Displays:
-
-hours per day  
-hours per project
-
----
-
-/reports
-
-Main analytics dashboard.
-
-Filters:
-
-date range  
-project  
-user
-
----
-
-# Manager Routes
-
-/team
-
-View team productivity and time allocation.
-
----
-
-# Admin Routes
-
-/admin
-
-Admin control panel.
-
-Sections:
-
-Users  
-Projects  
-Integrations  
-Notifications  
-Audit Logs
-
----
-
-# Settings Routes
-
-/settings
-
-User preferences.
-
----
-
-# Integration Routes
-
-/integrations
-
-Integration settings hub.
-
-Contains Taiga and Mattermost configuration panels.
-
-/integrations/taiga
-
-Alias route to the integrations hub for Taiga-specific deep links.
-
----
-
-/integrations/mattermost
-
-Alias route to the integrations hub for Mattermost-specific deep links.
-
----
-
-# Profile Routes
-
-/profile
-
-User account details.
-
----
-
-# API Routes (Backend)
-
-API prefix:
-
+```text
 /api/v1
+```
 
-Endpoints:
+Health and base routes:
 
-/api/v1/auth/login  
-/api/v1/auth/logout  
+| Method | Route | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/` | Public | API service descriptor |
+| `GET` | `/api/v1` | Public | API base descriptor |
+| `GET` | `/api/v1/health` | Public | Health check |
 
-/api/v1/timers/start  
-/api/v1/timers/stop  
-/api/v1/timers/manual  
-/api/v1/timers/me  
-/api/v1/timers/ping  
-/api/v1/timers/approvals  
+## Auth API
 
-/api/v1/projects  
+Mounted at `/api/v1/auth`.
 
-/api/v1/reports/export  
+| Method | Route | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/login` | Public | Email/password login |
+| `POST` | `/logout` | Public | Logout acknowledgment |
+| `POST` | `/forgot-password` | Public | Create password reset token |
+| `POST` | `/reset-password` | Public | Complete password reset |
+| `POST` | `/refresh` | Public | Refresh access token |
 
-/api/v1/users  
-/api/v1/users/me  
+## User API
 
-/api/v1/integrations
+Mounted at `/api/v1/users`.
 
-/api/v1/integrations/github/commits
+See `backend/src/routes/userRoutes.ts` for exact role restrictions. This group supports current-user details, user listing, creation/update/admin management, imports, and diagnostics.
 
-/api/v1/integrations/quickbooks/sync
+## Project API
 
-/api/v1/calendar/status
+Mounted at `/api/v1/projects`.
 
-/api/v1/calendar/connect
+Supports project listing, creation, update/archive flows, membership-aware project access, budget reporting, and active/inactive project state.
 
-/api/v1/calendar/events
+## Timer And Time Entry API
 
-/api/v1/calendar/disconnect
+Mounted at `/api/v1/timers`.
 
-/api/v1/calendar/callback
+| Method | Route | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/pause-beacon` | Body token | SendBeacon-safe pause on tab/window close |
+| `POST` | `/start` | User | Start active timer |
+| `POST` | `/stop` | User | Stop active timer and create entry |
+| `POST` | `/pause` | User | Pause active timer |
+| `POST` | `/resume` | User | Resume paused timer |
+| `POST` | `/manual` | User | Create manual entry |
+| `GET` | `/me` | User | Current user's entries, active timer, notifications, projects |
+| `POST` | `/ping` | User | Heartbeat/activity ping |
+| `PUT` | `/:id` | User | Update permitted entry |
+| `DELETE` | `/:id` | User | Delete permitted entry |
+| `POST` | `/:id/duplicate` | User | Duplicate/resume task context |
+| `GET` | `/approvals` | Manager, Admin | Pending approval queue |
+| `POST` | `/approvals/:entryId` | Manager, Admin | Approve/reject entry |
 
-/api/v1/ml/categorize
+## Reports API
+
+Mounted at `/api/v1/reports`.
+
+Supports report summaries, exports, operations insights, and manager/admin analytics. See `backend/src/routes/reportRoutes.ts` for the exact endpoint list.
+
+## Integration API
+
+Mounted at `/api/v1/integrations`.
+
+Supports Taiga/Mattermost-style encrypted configuration, integration status, and feature-specific integration helpers.
+
+## Calendar API
+
+Mounted at `/api/v1/calendar`.
+
+Common routes include:
+
+- `/status`
+- `/connect`
+- `/events`
+- `/disconnect`
+- `/callback`
+
+Google OAuth requires `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`.
+
+## ML API
+
+Mounted at `/api/v1/ml`.
+
+Includes categorization helpers such as mapping activity/window context to projects.
+
+## Admin API
+
+Mounted at `/api/v1/admin`.
+
+Supports admin dashboard data, audit/auth event visibility, system activity, notifications, and operational oversight.
+
+## Cron API
+
+Mounted at `/api/v1/cron`.
+
+Protected by `CRON_SECRET` in production.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/idle` | Idle/timer guardrail cron |
+| `POST` | `/workload` | Workload/burnout cron |
+| `POST` | `/daily` | Daily notification/report cron |
+| `POST` | `/reset-demo` | Reset demo user's data |
+
+## Additional API Groups
+
+| Prefix | Purpose |
+| --- | --- |
+| `/api/v1/public` | Public/shared data routes |
+| `/api/v1/contact` | Public request-access route |
+| `/api/v1/tags` | Time entry tag management |
+| `/api/v1/webhooks` | Webhook subscription management |
+| `/api/v1/invoices` | Invoice workflows |
+| `/api/v1/templates` | Project template workflows |
+| `/api/v1/scheduled-reports` | Scheduled report workflows |
+
+## Deployment Notes
+
+- Frontend `VITE_API_URL` must include `/api/v1`.
+- Vite environment variables are build-time values; redeploy frontend after changing `VITE_API_URL`.
+- Backend production requires `INTEGRATION_SECRET`; local non-production can fall back to `JWT_SECRET`.
+- Vercel cron paths are defined in `backend/vercel.json`.

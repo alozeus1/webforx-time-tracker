@@ -1,8 +1,54 @@
 .DS_Store
 
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment files
+.env
+.env.*
+!.env.example
+*/.env
+*/.env.*
+!*/.env.example
+
+# Build output and generated caches
+dist/
+dist-ssr/
+*/dist/
+*/dist-ssr/
+coverage/
+*/coverage/
+.turbo/
+.vite/
+*.tsbuildinfo
+
+# Test and browser automation output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+playwright/.auth/
+*/test-results/
+*/playwright-report/
+*/blob-report/
+
+# Deployment and local platform state
+.vercel/
+*/.vercel/
+
+# Large generated/demo media and local marketing output
+frontend/public/demo.mp4
+video/out/
+marketing-assets/
+AGENT_CONTEXT.md
+docs/demo-user.md
+docs/releases/
+
 # Local-only agent and MCP configuration
 .factory/
 .mcp.json
 .codex/
 .codex.local.toml
 .codex.local.json
+.superpowers/

@@ -1,275 +1,131 @@
 # Current Application Status
 
-Last reviewed: 2026-03-16
+Last reviewed: 2026-04-23
 
-This document summarizes where the application stands against the current source-of-truth docs:
+This document summarizes the current implementation against:
 
 - [docs/mvp.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs/mvp.md)
 - [docs/app-route.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs/app-route.md)
-- [docs/ANTIGRAVITY_INSTRUCTIONS.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs/ANTIGRAVITY_INSTRUCTIONS.md)
+- [AGENT_HANDBOOK.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/AGENT_HANDBOOK.md)
+- [DEPLOYMENT.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/DEPLOYMENT.md)
 
 ## Overall Status
 
-The app is beyond scaffold stage.
+Current maturity: production-shaped internal MVP with premium launch features.
 
-Current maturity: functional MVP shell
+The project has a working React/Vite frontend, Express/Prisma backend, Electron desktop wrapper, automated backend/frontend tests, Vercel deployment configuration, Prisma migrations, and release guard scripts.
 
-Meaning:
+The app is no longer a scaffold. Core auth, seeded roles/projects, server-backed timers, pause/resume behavior, manual entries, approvals, reports, admin surfaces, integrations, demo tour, request-access flow, and cron endpoints are implemented.
 
-- frontend, backend, and desktop wrapper all exist
-- core auth and seeded data exist
-- most documented routes are present
-- several screens are connected to live backend data
-- build and lint checks pass
-- a few product surfaces are still incomplete or misaligned with the MVP spec
+Remaining risk is mostly product depth and repo hygiene, not missing foundations.
 
-The biggest remaining blockers for "live-test ready MVP" status are reporting completeness, admin surface completeness, and environment readiness for optional integrations.
+## Recent Implemented Capabilities
 
-## Recent Progress
+- [x] Server-backed timer start, stop, pause, resume, heartbeat, and refresh-safe active timer state
+- [x] Idle handling that soft-pauses explicitly inactive browser sessions and hard-stops stale timers
+- [x] Pagehide pause beacon for tab/window close behavior
+- [x] Manual entry approval warnings and pending approval badges
+- [x] Manager/admin approval endpoints and frontend approval queues
+- [x] Demo tour at `/demo`
+- [x] Conditional demo user seed and demo data reset cron route
+- [x] Public request-access API and database model
+- [x] Resend-backed access request notification/receipt path with graceful no-email fallback
+- [x] Public landing, privacy, terms, forgot-password, request-access, and shared artifact routes
+- [x] Expanded admin/team/reporting/workday/invoice/template/webhook/scheduled-report surfaces
+- [x] Backend Jest/Supertest tests and frontend Vitest/Playwright tests exist
 
-Completed in the latest implementation pass:
+## Runtime Surfaces
 
-- [x] frontend timer now uses server-backed `/timers/start` and `/timers/stop`
-- [x] timer resume is now sourced from backend `activeTimer` state
-- [x] approvals endpoints are now manager/admin only
-- [x] frontend route guards now restrict `/team` and `/admin` by role
-- [x] employee report export is scoped to the authenticated user while managers/admins still export broader data
-- [x] route documentation now reflects the implemented API surface more closely
+- [x] Frontend: [frontend](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/frontend)
+- [x] Backend: [backend](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/backend)
+- [x] Desktop wrapper: [desktop](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/desktop)
+- [x] Demo video tooling: [video](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/video)
+- [x] Product/deployment docs: [docs](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs)
 
-## Verified Checks
+## Implemented Backend Areas
 
-The following commands were run successfully during review:
+- [x] Auth, refresh, forgot/reset password
+- [x] Users and role-aware middleware
+- [x] Projects, budgets, and project membership
+- [x] Timers, manual entries, pause/resume, ping, pause beacon, approval review
+- [x] Reports and export endpoints
+- [x] Integrations, Google Calendar, ML categorization
+- [x] Admin, audit/auth events, tags
+- [x] Webhooks, invoices, templates, scheduled reports
+- [x] Public routes and request-access contact route
+- [x] Cron routes for idle, workload, daily notifications, and demo reset
+- [x] Background workers for notifications, idle tracking, and burnout/workload tracking
 
-- `cd frontend && npm run build`
-- `cd frontend && npm run lint`
-- `cd backend && npm run build`
+## Implemented Frontend Areas
 
-Notes:
+- [x] Public marketing/landing pages
+- [x] Login, forgot password, request access, demo tour
+- [x] Dashboard, workday, timer, timeline, timesheet, reports
+- [x] Team and admin management
+- [x] Integrations, profile, settings
+- [x] Invoices, templates, webhooks, scheduled reports
+- [x] Shared artifact view
+- [x] Help chatbot, command palette, onboarding tour, resume confirmation dialog
 
-- frontend build completed successfully, but Vite warned that the local Node version is `20.15.0` while it recommends `20.19+` or `22.12+`
-- there is no meaningful automated test suite yet; frontend has no test script and backend `test` currently maps to `build`
+## Current Gaps And Decisions
 
-## Done Now
+### 1. Admin Role Boundary
 
-### App Structure
+Status: needs product decision
 
-- [x] React frontend exists in [frontend](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/frontend)
-- [x] Express + Prisma backend exists in [backend](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/backend)
-- [x] Electron desktop wrapper exists in [desktop](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/desktop)
+`docs/mvp.md` defines `/admin` as Admin-only. The current frontend route allows `Admin` and `Manager` for `/admin`. Decide whether to keep manager access as a deliberate product expansion or restore Admin-only routing.
 
-### Routes
+### 2. Reporting Depth
 
-- [x] Public login route exists
-- [x] Authenticated route shell exists for dashboard, timer, timeline, timesheet, reports, team, admin, settings, profile, and integrations
-- [x] Integration alias routes exist for Taiga and Mattermost
+Status: partially complete
 
-### Authentication
+Reports, workday, and ops insight services exist, but future work should verify every displayed analytics number is computed from live backend data and matches manager/admin authorization rules.
 
-- [x] Email/password login exists
-- [x] Password hashing exists
-- [x] JWT session token issuance exists
-- [x] Protected backend middleware exists
+### 3. Environment Readiness
 
-### Data Model
+Status: deployment-dependent
 
-- [x] Prisma schema includes users, roles, projects, time entries, active timers, notifications, audit logs, integrations, calendar connections, and report cache
-- [x] Seed includes admin, manager, employee, and the required initial projects
+Production requires `DATABASE_URL`, `JWT_SECRET`, `INTEGRATION_SECRET`, `CRON_SECRET`, `CORS_ORIGIN`, `FRONTEND_URL`, `NODE_ENV=production`, `ENABLE_BACKGROUND_WORKERS`, and frontend `VITE_API_URL`. Google Calendar, Resend email, Authentik, and demo user seeding remain environment-gated.
 
-### Implemented Backend Areas
+### 4. Repository Hygiene
 
-- [x] auth routes
-- [x] users routes
-- [x] projects routes
-- [x] timer/time entry routes
-- [x] report export route
-- [x] integrations routes
-- [x] Google Calendar routes
-- [x] ML categorization route
-- [x] background worker bootstrapping
+Status: needs cleanup before transfer
 
-### Implemented Frontend Areas
+The current worktree contains local/deployment/generated/untracked artifacts. See [docs/repo-transfer-checklist.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs/repo-transfer-checklist.md) before pushing to a new repository.
 
-- [x] login page
-- [x] dashboard page
-- [x] timer page
-- [x] timeline page
-- [x] timesheet page
-- [x] reports page
-- [x] team page
-- [x] admin page
-- [x] profile page
-- [x] settings page
-- [x] integrations page
+### 5. Generated Backend Dist Files
 
-## Working But Partial
+Status: needs decision
 
-These areas are present and usable, but not fully aligned with the source-of-truth requirements.
+`backend/dist` is currently tracked and has local modifications. Vercel backend builds from `backend/src/index.ts`; decide whether `backend/dist` should remain tracked for runtime compatibility or be removed from version control before transfer.
 
-### Dashboard
+## Verification Commands
 
-- [x] loads recent entries and total durations
-- [ ] still mixes live data with placeholder UI values
+Run before a transfer branch is merged or pushed:
 
-### Timesheet
+```bash
+cd backend && npm run build && npm test
+cd ../frontend && npm run build && npm run lint && npm run test:unit
+```
 
-- [x] weekly grouping works from user entries
-- [ ] submission and approval UX is still simplified
+Recommended release checks:
 
-### Reports
-
-- [x] CSV export works
-- [x] approvals table works at the API level
-- [ ] chart metrics and dashboard analytics are mostly placeholder values
-- [ ] route spec expects broader analytics filtering by date range, project, and user
-
-### Admin
-
-- [x] projects and users tabs exist
-- [x] project creation exists
-- [ ] route spec also expects integrations, notifications, and audit logs sections
-
-### Integrations
-
-- [x] Taiga config storage exists
-- [x] Mattermost config storage exists
-- [x] Google Calendar OAuth flow is implemented in code
-- [ ] real Google Calendar live testing is blocked until OAuth env vars are provided
-
-### Desktop Wrapper
-
-- [x] Electron wrapper launches the frontend
-- [x] idle-time bridge exists
-- [ ] deeper native tracking behavior is still very light
-
-## Broken Or Misaligned
-
-These are the main gaps between the codebase and the source-of-truth docs.
-
-### 1. Reports And Team Analytics Are Still Partially Placeholder
-
-Status: open
-
-Problem:
-
-- several dashboard/reports/team metrics are hardcoded or mock-like
-- the data model can support deeper reporting, but the UI is not fully wired
-
-Impact:
-
-- demo experience is stronger than actual analytics fidelity
-
-### 2. Admin Surface Is Incomplete Relative To The Spec
-
-Status: open
-
-Problem:
-
-- admin currently focuses on projects and users
-- spec expects integrations, notifications, and audit logs sections too
-
-Impact:
-
-- admin panel is functional but incomplete
-
-### 3. Environment Readiness Is Partial
-
-Status: open
-
-Current `.env` review:
-
-- backend has `DATABASE_URL`, `JWT_SECRET`, `PORT`, and `NODE_ENV`
-- frontend has `VITE_API_URL`
-- backend does not currently expose a dedicated `INTEGRATION_SECRET`
-- backend does not currently expose Google OAuth env vars
-
-Impact:
-
-- base app can run
-- encrypted integration storage falls back to `JWT_SECRET`
-- live Google Calendar connection is not ready yet
-
-### 4. Some Product Areas Still Need Role-Aware UX Polish
-
-Status: open
-
-Problem:
-
-- route guards now protect the main restricted screens
-- some mixed-role pages still need role-specific sections and cleaner fallbacks
-
-Impact:
-
-- security is improved
-- user experience still needs some refinement around permissions
-
-### 5. API Surface Previously Drifted From The Route Spec
-
-Status: improved
-
-Problem:
-
-- route documentation had fallen behind the actual implemented endpoints
-
-Impact:
-
-- this has now been corrected in `docs/app-route.md`, but the repo should keep docs and code updated together
-
-### 6. There Is Still No Meaningful Automated Test Suite
-
-Status: open
-
-Problem:
-
-- frontend has build and lint, but no real behavior tests wired into package scripts
-- backend `test` currently maps to `build`
-
-Impact:
-
-- regressions in timer lifecycle, role access, and approval flow are still possible
-
-## Priority Build Order
-
-This is the recommended next sequence.
-
-### P0: Must Fix Before Calling The App Live-Test Ready
-
-- [x] Rewire the frontend timer flow to use `/timers/start`, `/timers/stop`, `/timers/me`, and persisted `activeTimer`
-- [x] Make refresh-safe timer resume work from server state
-- [x] Add manager/admin authorization to approvals endpoints
-- [x] Add role-aware frontend route guards for `/team`, `/admin`, and approval actions
-- [x] Align API docs and implemented routes so the route map reflects reality
-
-### P1: Should Be Done Right After P0
-
-- [ ] Replace placeholder reports metrics with computed backend values
-- [ ] Add real filters for reports: date range, project, and user
-- [ ] Expand admin to include integrations, notifications, and audit logs sections
-- [ ] Add a dedicated `INTEGRATION_SECRET` to backend env handling for live deployments
-- [ ] Provide Google OAuth env vars if Calendar sync is part of the MVP launch
-
-### P2: Improves Reliability And Handoff
-
-- [ ] Add automated tests for auth, timer lifecycle, approvals, and report export
-- [ ] Add frontend integration coverage for login, timer start/stop, and role-restricted pages
-- [ ] Add a top-level README describing how to run frontend, backend, seed, and desktop together
-- [ ] Decide whether root-level git should be initialized here or whether this project is managed elsewhere
-
-## Definition Of "Ready For Internal Live Testing"
-
-Use this checklist when deciding if the app is ready for broader internal use.
-
-- [ ] a user can log in with seeded credentials
-- [x] a user can start a timer and refresh the page without losing it
-- [ ] a user can stop a timer and see the entry appear in dashboard, timeline, and timesheet
-- [x] only managers/admins can approve timesheets
-- [x] only admins can create projects and access admin-only actions
-- [ ] reports show real filtered data instead of placeholder figures
-- [ ] builds and lint pass in current environment
-- [ ] backend env includes a dedicated `INTEGRATION_SECRET`
-- [ ] Google Calendar env is present if calendar sync is expected in testing
+```bash
+cd backend && npm run release:preflight
+cd ../frontend && npm run test:e2e
+```
+
+## Definition Of Ready For New-Repo Transfer
+
+- [ ] No secrets or `.env*` files are staged
+- [ ] `.vercel/`, `.superpowers/`, generated reports, and local media output are excluded unless intentionally included
+- [ ] `backend/dist` tracking decision is made and documented
+- [ ] `docs/app-route.md` reflects the implemented route surface
+- [ ] Admin/manager access to `/admin` is accepted or corrected
+- [ ] Backend and frontend build/test checks pass
+- [ ] New repo visibility is known: private internal vs public sanitized
+- [ ] Deployment env requirements are copied into the new host, not committed
 
 ## Bottom Line
 
-If we summarize the application in one line:
-
-The project is structurally strong and demoable now, but it still needs one core workflow fix and a few authorization/spec-alignment fixes before it should be treated as a true live-test MVP.
+The application is feature-rich enough for internal demonstration and staged production hardening. Before pushing it to a new repository, the priority is cleanup, documentation alignment, and an explicit decision on secrets, generated files, and repo visibility.
