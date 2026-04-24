@@ -12,10 +12,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.duplicateEntry = exports.deleteEntry = exports.updateEntry = exports.reviewTimesheet = exports.getPendingTimesheets = exports.pingTimer = exports.getMyEntries = exports.manualEntry = exports.stopTimer = exports.startTimer = void 0;
+exports.duplicateEntry = exports.deleteEntry = exports.updateEntry = exports.reviewTimesheet = exports.getPendingTimesheets = exports.pauseBeacon = exports.pingTimer = exports.getMyEntries = exports.manualEntry = exports.resumeTimer = exports.pauseTimer = exports.stopTimer = exports.startTimer = void 0;
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const db_1 = __importDefault(require("../config/db"));
+const env_1 = require("../config/env");
 const webhookService_1 = require("../services/webhookService");
 const opsInsightsService_1 = require("../services/opsInsightsService");
+const activeTimerService_1 = require("../services/activeTimerService");
 const requireUserId = (req) => {
     var _a;
     if (!((_a = req.user) === null || _a === void 0 ? void 0 : _a.userId)) {
@@ -23,6 +26,64 @@ const requireUserId = (req) => {
     }
     return req.user.userId;
 };
+const getTimerGuardrailThresholds = () => {
+    const staleThresholdMs = env_1.env.heartbeatStaleMinutes * 60000;
+    return {
+        staleThresholdMs,
+        autoStopThresholdMs: staleThresholdMs + (env_1.env.autoStopGraceMinutes * 60000),
+        pingFrequencyThresholdMs: env_1.env.heartbeatIntervalMinutes * 2 * 60000,
+        maxPauseMs: env_1.env.maxPauseHours * 60 * 60 * 1000,
+    };
+};
+const resolveInactivitySource = ({ timer, visibilityState, hasFocus, }) => {
+    const effectiveVisibility = visibilityState !== null && visibilityState !== void 0 ? visibilityState : timer.client_visibility;
+    const effectiveHasFocus = typeof hasFocus === 'boolean' ? hasFocus : timer.client_has_focus;
+    return { effectiveVisibility, effectiveHasFocus };
+};
+const enforceTimerGuardrails = (_a) => __awaiter(void 0, [_a], void 0, function* ({ timer, now, visibilityState, hasFocus, lastClientActivityAtOverride, }) {
+    const checkTime = now !== null && now !== void 0 ? now : new Date();
+    const thresholds = getTimerGuardrailThresholds();
+    if (timer.is_paused) {
+        if (timer.paused_at) {
+            const pausedForMs = checkTime.getTime() - new Date(timer.paused_at).getTime();
+            if (pausedForMs >= thresholds.maxPauseMs) {
+                yield (0, activeTimerService_1.stopActiveTimerWithReason)({
+                    userId: timer.user_id,
+                    reason: 'pause_expired',
+                    triggeredAt: checkTime,
+                });
+                return 'stopped';
+            }
+        }
+        return 'none';
+    }
+    const lastHeartbeat = timer.last_heartbeat_at
+        ? new Date(timer.last_heartbeat_at)
+        : (timer.last_active_ping ? new Date(timer.last_active_ping) : new Date(timer.start_time));
+    const baseActivityTime = timer.last_client_activity_at
+        ? new Date(timer.last_client_activity_at)
+        : new Date(timer.start_time);
+    const lastClientActivity = lastClientActivityAtOverride !== null && lastClientActivityAtOverride !== void 0 ? lastClientActivityAtOverride : baseActivityTime;
+    const heartbeatAgeMs = checkTime.getTime() - lastHeartbeat.getTime();
+    const clientActivityAgeMs = checkTime.getTime() - lastClientActivity.getTime();
+    const pingIsTooOld = heartbeatAgeMs >= thresholds.pingFrequencyThresholdMs;
+    const { effectiveVisibility, effectiveHasFocus } = resolveInactivitySource({ timer, visibilityState, hasFocus });
+    const browserExplicitlyInactive = effectiveVisibility === 'hidden' || effectiveHasFocus === false;
+    if (clientActivityAgeMs >= thresholds.autoStopThresholdMs || heartbeatAgeMs >= thresholds.autoStopThresholdMs) {
+        if (!pingIsTooOld && browserExplicitlyInactive) {
+            yield (0, activeTimerService_1.pauseActiveTimer)(timer.user_id, 'browser_inactive');
+            return 'paused';
+        }
+        const reason = clientActivityAgeMs >= thresholds.autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
+        yield (0, activeTimerService_1.stopActiveTimerWithReason)({
+            userId: timer.user_id,
+            reason,
+            triggeredAt: checkTime,
+        });
+        return 'stopped';
+    }
+    return 'none';
+});
 const startTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c, _d;
     try {
@@ -75,7 +136,7 @@ const startTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 });
 exports.startTimer = startTimer;
 const stopTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
         const user_id = requireUserId(req);
         const notes = typeof ((_a = req.body) === null || _a === void 0 ? void 0 : _a.notes) === 'string' && req.body.notes.trim() ? req.body.notes.trim() : null;
@@ -85,8 +146,10 @@ const stopTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             return;
         }
         const end_time = new Date();
-        const duration = Math.floor((end_time.getTime() - new Date(activeTimer.start_time).getTime()) / 1000);
-        if (duration <= 0) {
+        const rawDuration = Math.floor((end_time.getTime() - new Date(activeTimer.start_time).getTime()) / 1000);
+        const pausedSeconds = (_b = activeTimer.paused_duration_seconds) !== null && _b !== void 0 ? _b : 0;
+        const duration = Math.max(rawDuration - pausedSeconds, 1);
+        if (rawDuration <= 0) {
             res.status(400).json({ message: 'Timer duration was invalid. Please try again.' });
             return;
         }
@@ -173,6 +236,48 @@ const stopTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.stopTimer = stopTimer;
+const pauseTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const user_id = requireUserId(req);
+    try {
+        const timer = yield db_1.default.activeTimer.findUnique({ where: { user_id } });
+        if (!timer) {
+            res.status(404).json({ message: 'No active timer found.' });
+            return;
+        }
+        if (timer.is_paused) {
+            res.status(200).json({ ok: true, message: 'Timer already paused.', pausedAt: timer.paused_at });
+            return;
+        }
+        yield (0, activeTimerService_1.pauseActiveTimer)(user_id, 'user_requested');
+        res.status(200).json({ ok: true, pausedAt: new Date().toISOString() });
+    }
+    catch (error) {
+        console.error('[pauseTimer]', error);
+        res.status(500).json({ message: 'Failed to pause timer.' });
+    }
+});
+exports.pauseTimer = pauseTimer;
+const resumeTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const user_id = requireUserId(req);
+    try {
+        const timer = yield db_1.default.activeTimer.findUnique({ where: { user_id } });
+        if (!timer) {
+            res.status(404).json({ message: 'No active timer found.' });
+            return;
+        }
+        if (!timer.is_paused) {
+            res.status(200).json({ ok: true, message: 'Timer is not paused.' });
+            return;
+        }
+        const totalPausedSeconds = yield (0, activeTimerService_1.resumeActiveTimer)(user_id);
+        res.status(200).json({ ok: true, resumedAt: new Date().toISOString(), pausedDurationSeconds: totalPausedSeconds });
+    }
+    catch (error) {
+        console.error('[resumeTimer]', error);
+        res.status(500).json({ message: 'Failed to resume timer.' });
+    }
+});
+exports.resumeTimer = resumeTimer;
 const manualEntry = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
     try {
@@ -238,7 +343,23 @@ const getMyEntries = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         const page = Math.max(parseInt(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
         const skip = (page - 1) * limit;
-        const [entries, total, activeTimer] = yield Promise.all([
+        let activeTimer = yield db_1.default.activeTimer.findUnique({
+            where: { user_id },
+            include: { project: { select: { id: true, name: true } } },
+        });
+        if (activeTimer) {
+            const guardrailResult = yield enforceTimerGuardrails({
+                timer: activeTimer,
+                now: new Date(),
+            });
+            if (guardrailResult !== 'none') {
+                activeTimer = yield db_1.default.activeTimer.findUnique({
+                    where: { user_id },
+                    include: { project: { select: { id: true, name: true } } },
+                });
+            }
+        }
+        const [entries, total] = yield Promise.all([
             db_1.default.timeEntry.findMany({
                 where: { user_id },
                 orderBy: { start_time: 'desc' },
@@ -250,10 +371,6 @@ const getMyEntries = (req, res) => __awaiter(void 0, void 0, void 0, function* (
                 take: limit,
             }),
             db_1.default.timeEntry.count({ where: { user_id } }),
-            db_1.default.activeTimer.findUnique({
-                where: { user_id },
-                include: { project: { select: { id: true, name: true } } },
-            }),
         ]);
         res.status(200).json({
             entries,
@@ -286,21 +403,43 @@ const pingTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
             res.status(409).json({ message: 'Heartbeat did not match the active timer' });
             return;
         }
+        const requestReceivedAt = new Date();
         const lastClientActivityAt = typeof lastClientActivityAtRaw === 'string'
             ? new Date(lastClientActivityAtRaw)
             : null;
-        const validLastClientActivityAt = lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
+        // Validate recency: reject timestamps older than 2× heartbeat interval or in the future (clock skew).
+        // Prevents clients from sending stale or forged activity timestamps.
+        const heartbeatIntervalMs = env_1.env.heartbeatIntervalMinutes * 60000;
+        const MAX_ACTIVITY_AGE_MS = 2 * heartbeatIntervalMs;
+        let validLastClientActivityAt = lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
             ? lastClientActivityAt
             : null;
+        if (validLastClientActivityAt) {
+            const ageMs = Date.now() - validLastClientActivityAt.getTime();
+            if (ageMs > MAX_ACTIVITY_AGE_MS || ageMs < -60000) {
+                validLastClientActivityAt = null;
+            }
+        }
+        const guardrailOutcome = yield enforceTimerGuardrails({
+            timer: activeTimer,
+            now: requestReceivedAt,
+            visibilityState,
+            hasFocus,
+            lastClientActivityAtOverride: validLastClientActivityAt,
+        });
+        if (guardrailOutcome === 'stopped') {
+            res.status(404).json({ message: 'No active timer found to ping' });
+            return;
+        }
         yield db_1.default.activeTimer.update({
             where: { user_id },
             data: {
-                last_active_ping: new Date(),
-                last_heartbeat_at: new Date(),
+                last_active_ping: requestReceivedAt,
+                last_heartbeat_at: requestReceivedAt,
                 last_client_activity_at: validLastClientActivityAt,
                 client_visibility: visibilityState,
                 client_has_focus: hasFocus,
-                heartbeat_state: Object.assign(Object.assign({}, (activeTimer.heartbeat_state || {})), { last_activity_at: (_e = validLastClientActivityAt === null || validLastClientActivityAt === void 0 ? void 0 : validLastClientActivityAt.toISOString()) !== null && _e !== void 0 ? _e : null, visibility_state: visibilityState, has_focus: hasFocus, active_timer_id: activeTimer.id, received_at: new Date().toISOString() }),
+                heartbeat_state: Object.assign(Object.assign({}, (activeTimer.heartbeat_state || {})), { last_activity_at: (_e = validLastClientActivityAt === null || validLastClientActivityAt === void 0 ? void 0 : validLastClientActivityAt.toISOString()) !== null && _e !== void 0 ? _e : null, visibility_state: visibilityState, has_focus: hasFocus, active_timer_id: activeTimer.id, received_at: requestReceivedAt.toISOString() }),
             },
         });
         yield db_1.default.auditLog.create({
@@ -316,7 +455,10 @@ const pingTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 },
             },
         });
-        res.status(200).json({ message: 'Ping successful' });
+        res.status(200).json({
+            message: guardrailOutcome === 'paused' ? 'Ping successful, timer paused for inactivity' : 'Ping successful',
+            state: guardrailOutcome === 'paused' ? 'paused' : 'running',
+        });
     }
     catch (error) {
         console.error('Failed to ping timer:', error);
@@ -324,6 +466,36 @@ const pingTimer = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 exports.pingTimer = pingTimer;
+// --- pauseBeacon ---
+// Called by navigator.sendBeacon on tab/window close. Cannot use Authorization header,
+// so the JWT is passed in the request body. Always returns 200 — beacon doesn't retry.
+const pauseBeacon = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const rawToken = (_a = req.body) === null || _a === void 0 ? void 0 : _a.token;
+        if (!rawToken || typeof rawToken !== 'string') {
+            res.status(200).end();
+            return;
+        }
+        let userId;
+        try {
+            const payload = jsonwebtoken_1.default.verify(rawToken, env_1.env.jwtSecret);
+            userId = payload.userId;
+            if (!userId)
+                throw new Error('No userId in token');
+        }
+        catch (_b) {
+            res.status(200).end();
+            return;
+        }
+        yield (0, activeTimerService_1.pauseActiveTimer)(userId, 'tab_closed');
+    }
+    catch (error) {
+        console.error('[pauseBeacon] error:', error);
+    }
+    res.status(200).end();
+});
+exports.pauseBeacon = pauseBeacon;
 // --- Timesheet Approvals (Managers/Admins) ---
 const getPendingTimesheets = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {

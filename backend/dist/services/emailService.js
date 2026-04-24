@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendPasswordResetEmail = exports.sendWelcomeEmail = void 0;
+exports.sendAccessRequestReceipt = exports.sendAccessRequestNotification = exports.sendPasswordResetEmail = exports.sendWelcomeEmail = void 0;
 const resend_1 = require("resend");
 const env_1 = require("../config/env");
 let resendClient = null;
@@ -152,3 +152,56 @@ const sendPasswordResetEmail = (opts) => __awaiter(void 0, void 0, void 0, funct
     });
 });
 exports.sendPasswordResetEmail = sendPasswordResetEmail;
+const sendAccessRequestNotification = (opts) => __awaiter(void 0, void 0, void 0, function* () {
+    const client = getClient();
+    if (!client) {
+        console.log(`[email:dev] Access request notification skipped (no RESEND_API_KEY) — ${opts.workEmail} from ${opts.company}`);
+        return;
+    }
+    const body = `
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#0f172a;">New Access Request</h2>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;">
+        A new workspace access request has been submitted.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;width:100%;margin-bottom:4px;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 8px;font-size:13px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;">Request details</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#0f172a;"><strong>Name:</strong> ${opts.fullName}</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#0f172a;"><strong>Email:</strong> ${opts.workEmail}</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#0f172a;"><strong>Company:</strong> ${opts.company}</p>
+          <p style="margin:0 0 6px;font-size:14px;color:#0f172a;"><strong>Team size:</strong> ${opts.teamSize}</p>
+          ${opts.details ? `<p style="margin:0;font-size:14px;color:#0f172a;"><strong>Details:</strong> ${opts.details}</p>` : ''}
+        </td></tr>
+      </table>
+    `;
+    yield send(client, {
+        from: env_1.env.emailFrom,
+        to: opts.to,
+        subject: `New access request — ${opts.company} (${opts.teamSize})`,
+        html: BASE_HTML('New Access Request', body),
+    });
+});
+exports.sendAccessRequestNotification = sendAccessRequestNotification;
+const sendAccessRequestReceipt = (opts) => __awaiter(void 0, void 0, void 0, function* () {
+    const client = getClient();
+    if (!client) {
+        console.log(`[email:dev] Access request receipt skipped (no RESEND_API_KEY) — ${opts.to}`);
+        return;
+    }
+    const body = `
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#0f172a;">We received your request, ${opts.fullName}.</h2>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;">
+        Thank you for your interest in Web Forx Time Tracker. Our team will review your request and reach out within 1–2 business days.
+      </p>
+      <p style="margin:0;font-size:15px;color:#475569;line-height:1.6;">
+        In the meantime, you can explore the product tour at <a href="https://timer.dev.webforxtech.com/demo" style="color:#354ac0;">timer.dev.webforxtech.com/demo</a>.
+      </p>
+    `;
+    yield send(client, {
+        from: env_1.env.emailFrom,
+        to: opts.to,
+        subject: 'We received your request — Web Forx Time Tracker',
+        html: BASE_HTML('Request Received', body),
+    });
+});
+exports.sendAccessRequestReceipt = sendAccessRequestReceipt;

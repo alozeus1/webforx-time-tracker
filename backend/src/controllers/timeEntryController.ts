@@ -100,12 +100,18 @@ const enforceTimerGuardrails = async ({
     const browserExplicitlyInactive = effectiveVisibility === 'hidden' || effectiveHasFocus === false;
 
     if (clientActivityAgeMs >= thresholds.autoStopThresholdMs || heartbeatAgeMs >= thresholds.autoStopThresholdMs) {
-        // We always soft-pause instead of hard-stopping when inactivity/sleep is detected.
-        // This grants the user the opportunity to recover the session ("ResumeConfirmDialog")
-        // when they return, unless the maxPauseMs (12h) expires.
+        if (!pingIsTooOld && browserExplicitlyInactive) {
+            await pauseActiveTimer(timer.user_id, 'browser_inactive');
+            return 'paused';
+        }
+
         const reason = clientActivityAgeMs >= thresholds.autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
-        await pauseActiveTimer(timer.user_id, reason);
-        return 'paused';
+        await stopActiveTimerWithReason({
+            userId: timer.user_id,
+            reason,
+            triggeredAt: checkTime,
+        });
+        return 'stopped';
     }
 
     return 'none';

@@ -1,5 +1,5 @@
 "use strict";
-var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.env = void 0;
 require("dotenv/config");
@@ -47,10 +47,23 @@ exports.env = {
     googleClientId: ((_f = process.env.GOOGLE_CLIENT_ID) === null || _f === void 0 ? void 0 : _f.trim()) || '',
     googleClientSecret: ((_g = process.env.GOOGLE_CLIENT_SECRET) === null || _g === void 0 ? void 0 : _g.trim()) || '',
     googleRedirectUri: ((_h = process.env.GOOGLE_REDIRECT_URI) === null || _h === void 0 ? void 0 : _h.trim()) || '',
-    idleWarningMinutes: parseMinutesEnv('IDLE_WARNING_MINUTES', 15),
-    heartbeatIntervalMinutes: parseMinutesEnv('HEARTBEAT_INTERVAL_MINUTES', 15),
-    heartbeatStaleMinutes: parseMinutesEnv('HEARTBEAT_STALE_MINUTES', 20),
-    autoStopGraceMinutes: parseMinutesEnv('AUTO_STOP_GRACE_MINUTES', 10),
-    resendApiKey: ((_l = process.env.RESEND_API_KEY) === null || _l === void 0 ? void 0 : _l.trim()) || '',
-    emailFrom: ((_m = process.env.EMAIL_FROM) === null || _m === void 0 ? void 0 : _m.trim()) || 'Web Forx Time Tracker <noreply@webforxtech.com>',
+    idleWarningMinutes: parseMinutesEnv('IDLE_WARNING_MINUTES', 5),
+    heartbeatIntervalMinutes: parseMinutesEnv('HEARTBEAT_INTERVAL_MINUTES', 3),
+    heartbeatStaleMinutes: parseMinutesEnv('HEARTBEAT_STALE_MINUTES', 8),
+    autoStopGraceMinutes: parseMinutesEnv('AUTO_STOP_GRACE_MINUTES', 2),
+    maxPauseHours: (() => {
+        var _a;
+        const raw = (_a = process.env.MAX_PAUSE_HOURS) === null || _a === void 0 ? void 0 : _a.trim();
+        const parsed = Number.parseFloat(raw || '');
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 4;
+    })(),
+    authentikEnabled: ((_j = process.env.AUTHENTIK_ENABLED) === null || _j === void 0 ? void 0 : _j.trim().toLowerCase()) === 'true',
+    authentikIssuerUrl: ((_k = process.env.AUTHENTIK_ISSUER_URL) === null || _k === void 0 ? void 0 : _k.trim()) || '',
+    authentikClientId: ((_l = process.env.AUTHENTIK_CLIENT_ID) === null || _l === void 0 ? void 0 : _l.trim()) || '',
+    authentikClientSecret: ((_m = process.env.AUTHENTIK_CLIENT_SECRET) === null || _m === void 0 ? void 0 : _m.trim()) || '',
+    authentikRedirectUri: ((_o = process.env.AUTHENTIK_REDIRECT_URI) === null || _o === void 0 ? void 0 : _o.trim()) || '',
+    authentikPostLogoutRedirectUri: ((_p = process.env.AUTHENTIK_POST_LOGOUT_REDIRECT_URI) === null || _p === void 0 ? void 0 : _p.trim()) || '',
+    authentikScopes: ((_q = process.env.AUTHENTIK_SCOPES) === null || _q === void 0 ? void 0 : _q.trim()) || 'openid profile email',
+    resendApiKey: ((_r = process.env.RESEND_API_KEY) === null || _r === void 0 ? void 0 : _r.trim()) || '',
+    emailFrom: ((_s = process.env.EMAIL_FROM) === null || _s === void 0 ? void 0 : _s.trim()) || 'Web Forx Time Tracker <noreply@webforxtech.com>',
 };

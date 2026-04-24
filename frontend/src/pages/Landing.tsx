@@ -457,7 +457,6 @@ const Landing: React.FC = () => {
 
   useEffect(() => {
     if (lightboxIndex === null) return;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightboxIndex(null);

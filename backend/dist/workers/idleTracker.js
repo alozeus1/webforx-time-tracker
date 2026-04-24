@@ -25,23 +25,46 @@ const checkIdleTimers = () => __awaiter(void 0, void 0, void 0, function* () {
         const warningThresholdMs = env_1.env.idleWarningMinutes * 60 * 1000;
         const staleThresholdMs = env_1.env.heartbeatStaleMinutes * 60 * 1000;
         const autoStopThresholdMs = staleThresholdMs + (env_1.env.autoStopGraceMinutes * 60 * 1000);
+        // Threshold: if no ping received in 2× heartbeat interval, don't trust last-known browser state
+        const pingFrequencyThresholdMs = env_1.env.heartbeatIntervalMinutes * 2 * 60000;
+        const maxPauseMs = env_1.env.maxPauseHours * 60 * 60 * 1000;
         for (const timer of activeTimers) {
+            // --- Guard 1: max pause duration ---
+            // A paused timer that has been paused longer than maxPauseHours is auto-stopped.
+            // This runs before all other checks; paused-but-not-expired timers are skipped entirely.
+            if (timer.is_paused) {
+                if (timer.paused_at) {
+                    const pausedForMs = now.getTime() - new Date(timer.paused_at).getTime();
+                    if (pausedForMs >= maxPauseMs) {
+                        yield (0, activeTimerService_1.stopActiveTimerWithReason)({ userId: timer.user_id, reason: 'pause_expired', triggeredAt: now });
+                        console.log(`[Worker] Timer auto-stopped (pause_expired, ${Math.round(pausedForMs / 3600000)}h paused) for user ${timer.user_id}`);
+                    }
+                }
+                continue; // Never run idle checks against a paused timer
+            }
             const lastHeartbeat = timer.last_heartbeat_at
                 ? new Date(timer.last_heartbeat_at)
                 : (timer.last_active_ping ? new Date(timer.last_active_ping) : new Date(timer.start_time));
-            const lastClientActivity = timer.last_client_activity_at ? new Date(timer.last_client_activity_at) : null;
+            const baseActivityTime = timer.last_client_activity_at
+                ? new Date(timer.last_client_activity_at)
+                : new Date(timer.start_time);
             const heartbeatAgeMs = now.getTime() - lastHeartbeat.getTime();
-            const clientActivityAgeMs = lastClientActivity ? now.getTime() - lastClientActivity.getTime() : Number.POSITIVE_INFINITY;
-            const browserInactive = timer.client_visibility === 'hidden' || timer.client_has_focus === false;
+            const clientActivityAgeMs = now.getTime() - baseActivityTime.getTime();
+            // --- Guard 2: ping-frequency enforcement ---
+            // If no ping is received in 2× heartbeat interval, browser state is stale.
+            // Do not rely on old hidden/focus signals for soft-pause decisions.
+            const pingIsTooOld = heartbeatAgeMs >= pingFrequencyThresholdMs;
+            const browserExplicitlyInactive = timer.client_visibility === 'hidden' ||
+                timer.client_has_focus === false;
             if (clientActivityAgeMs >= autoStopThresholdMs || heartbeatAgeMs >= autoStopThresholdMs) {
-                yield (0, activeTimerService_1.stopActiveTimerWithReason)({
-                    userId: timer.user_id,
-                    reason: browserInactive
-                        ? 'browser_inactive'
-                        : (clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing'),
-                    triggeredAt: now,
-                });
-                console.log(`[Worker] Timer auto-stopped for user ${timer.user_id}`);
+                if (!pingIsTooOld && browserExplicitlyInactive) {
+                    yield (0, activeTimerService_1.pauseActiveTimer)(timer.user_id, 'browser_inactive');
+                    console.log(`[Worker] Timer paused (browser_inactive) for user ${timer.user_id}`);
+                    continue;
+                }
+                const reason = clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
+                yield (0, activeTimerService_1.stopActiveTimerWithReason)({ userId: timer.user_id, reason, triggeredAt: now });
+                console.log(`[Worker] Timer auto-stopped (${reason}) for user ${timer.user_id}`);
                 continue;
             }
             if (clientActivityAgeMs >= warningThresholdMs || heartbeatAgeMs >= staleThresholdMs) {

@@ -4,9 +4,14 @@ const express_1 = require("express");
 const timeEntryController_1 = require("../controllers/timeEntryController");
 const auth_1 = require("../middlewares/auth");
 const router = (0, express_1.Router)();
+// Must be registered before authenticateToken — navigator.sendBeacon cannot set headers.
+// Auth is handled inside the controller by reading the token from the request body.
+router.post('/pause-beacon', timeEntryController_1.pauseBeacon);
 router.use(auth_1.authenticateToken);
 router.post('/start', timeEntryController_1.startTimer);
 router.post('/stop', timeEntryController_1.stopTimer);
+router.post('/pause', timeEntryController_1.pauseTimer);
+router.post('/resume', timeEntryController_1.resumeTimer);
 router.post('/manual', timeEntryController_1.manualEntry);
 router.get('/me', timeEntryController_1.getMyEntries);
 router.post('/ping', timeEntryController_1.pingTimer);

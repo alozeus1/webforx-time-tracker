@@ -51,12 +51,15 @@ export const checkIdleTimers = async () => {
                 timer.client_has_focus === false;
 
             if (clientActivityAgeMs >= autoStopThresholdMs || heartbeatAgeMs >= autoStopThresholdMs) {
-                // We always soft-pause instead of hard-stopping when inactivity/sleep is detected.
-                // This grants the user the opportunity to recover the session ("ResumeConfirmDialog")
-                // when they return, unless the maxPauseMs (12h) expires.
+                if (!pingIsTooOld && browserExplicitlyInactive) {
+                    await pauseActiveTimer(timer.user_id, 'browser_inactive');
+                    console.log(`[Worker] Timer paused (browser_inactive) for user ${timer.user_id}`);
+                    continue;
+                }
+
                 const reason = clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
-                await pauseActiveTimer(timer.user_id, reason);
-                console.log(`[Worker] Timer paused (${reason}) for user ${timer.user_id}`);
+                await stopActiveTimerWithReason({ userId: timer.user_id, reason, triggeredAt: now });
+                console.log(`[Worker] Timer auto-stopped (${reason}) for user ${timer.user_id}`);
                 continue;
             }
 
