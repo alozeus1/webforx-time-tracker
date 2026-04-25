@@ -12,6 +12,7 @@ import api from '../services/api';
 import type { TimerEntriesResponse } from '../types/api';
 import { getStoredToken } from '../utils/session';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
+import { usePageMetadata } from '../hooks/usePageMetadata';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from './CommandPalette';
@@ -42,6 +43,12 @@ const Layout: React.FC = () => {
 
     useActiveTimerHeartbeat();
     useWorkSignals();
+    usePageMetadata({
+        title: 'Workspace | Web Forx Time Tracker',
+        description: 'Authenticated Web Forx Time Tracker workspace for team time tracking, reporting, approvals, and administration.',
+        canonical: location.pathname,
+        noIndex: true,
+    });
 
     useEffect(() => {
         const routeTitles: Record<string, string> = {

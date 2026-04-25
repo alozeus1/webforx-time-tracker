@@ -15,12 +15,13 @@ const Login: React.FC = () => {
     const navigate = useNavigate();
 
     usePageMetadata({
-        title: 'Sign In | Web Forx Time Tracker',
-        description: 'Sign in to Web Forx Time Tracker to manage timers, timesheets, approvals, and team reporting.',
-        ogTitle: 'Sign In - Web Forx Time Tracker',
-        ogDescription: 'Secure workspace login for Web Forx Time Tracker users.',
+        title: 'Web Forx Time Tracker | Secure Team Time Tracking',
+        description: 'Web Forx Time Tracker helps teams track work hours, submit timesheets, manage approvals, and monitor project delivery in one secure workspace.',
+        ogTitle: 'Web Forx Time Tracker | Secure Team Time Tracking',
+        ogDescription: 'Web Forx Time Tracker helps teams track work hours, submit timesheets, manage approvals, and monitor project delivery in one secure workspace.',
+        ogImage: '/webforx-logo.png',
+        twitterCard: 'summary',
         canonical: '/login',
-        noIndex: true,
     });
 
     useEffect(() => {

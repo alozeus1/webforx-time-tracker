@@ -6,6 +6,7 @@ type PageMetadata = {
   ogTitle?: string;
   ogDescription?: string;
   ogImage?: string;
+  twitterCard?: 'summary' | 'summary_large_image';
   canonical?: string;
   noIndex?: boolean;
 };
@@ -46,6 +47,20 @@ export const usePageMetadata = (metadata: PageMetadata) => {
       ogImageTag.setAttribute('content', toAbsoluteUrl(metadata.ogImage));
     }
 
+    const twitterCardTag = ensureMetaTag('meta[name="twitter:card"]', { name: 'twitter:card' });
+    twitterCardTag.setAttribute('content', metadata.twitterCard ?? (metadata.ogImage ? 'summary_large_image' : 'summary'));
+
+    const twitterTitleTag = ensureMetaTag('meta[name="twitter:title"]', { name: 'twitter:title' });
+    twitterTitleTag.setAttribute('content', metadata.ogTitle ?? metadata.title);
+
+    const twitterDescriptionTag = ensureMetaTag('meta[name="twitter:description"]', { name: 'twitter:description' });
+    twitterDescriptionTag.setAttribute('content', metadata.ogDescription ?? metadata.description ?? '');
+
+    if (metadata.ogImage) {
+      const twitterImageTag = ensureMetaTag('meta[name="twitter:image"]', { name: 'twitter:image' });
+      twitterImageTag.setAttribute('content', toAbsoluteUrl(metadata.ogImage));
+    }
+
     const canonicalHref = metadata.canonical ? toAbsoluteUrl(metadata.canonical) : window.location.href;
     let canonicalTag = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonicalTag) {
@@ -62,4 +77,3 @@ export const usePageMetadata = (metadata: PageMetadata) => {
     robotsTag.setAttribute('content', metadata.noIndex ? 'noindex, nofollow' : 'index, follow');
   }, [metadata]);
 };
-

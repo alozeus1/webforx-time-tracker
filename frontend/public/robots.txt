@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /workday
+Disallow: /timer
+Disallow: /timeline
+Disallow: /timesheet
+Disallow: /reports
+Disallow: /team
+Disallow: /admin
+Disallow: /settings
+Disallow: /profile
+Disallow: /integrations
+Disallow: /invoices
+Disallow: /templates
+Disallow: /scheduled-reports
+Disallow: /webhooks
+Disallow: /api
+
+Sitemap: https://timer.dev.webforxtech.com/sitemap.xml
