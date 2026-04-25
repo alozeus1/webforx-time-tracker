@@ -23,6 +23,9 @@ MAX_PAUSE_HOURS=4
 MAX_ACTIVE_TIMER_HOURS=8
 RESEND_API_KEY="<RESEND_API_KEY>"
 EMAIL_FROM="Web Forx Time Tracker <noreply@webforxtech.com>"
+EXECUTIVE_REPORT_TEMPLATE_ENABLED=true
+REPORT_COMPANY_LOGO_PATH="<OPTIONAL_ABSOLUTE_COMPANY_LOGO_PATH>"
+REPORT_TIMER_APP_LOGO_PATH="<OPTIONAL_ABSOLUTE_TIMER_APP_LOGO_PATH>"
 GOOGLE_CLIENT_ID="<GOOGLE_OAUTH_CLIENT_ID>"
 GOOGLE_CLIENT_SECRET="<GOOGLE_OAUTH_CLIENT_SECRET>"
 GOOGLE_REDIRECT_URI="http://localhost:5005/api/v1/calendar/callback"
@@ -130,6 +133,9 @@ vercel env add FRONTEND_URL production
 vercel env add ENABLE_BACKGROUND_WORKERS production
 vercel env add RESEND_API_KEY production
 vercel env add EMAIL_FROM production
+vercel env add EXECUTIVE_REPORT_TEMPLATE_ENABLED production
+vercel env add REPORT_COMPANY_LOGO_PATH production
+vercel env add REPORT_TIMER_APP_LOGO_PATH production
 vercel env add GOOGLE_CLIENT_ID production
 vercel env add GOOGLE_CLIENT_SECRET production
 vercel env add GOOGLE_REDIRECT_URI production

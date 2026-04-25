@@ -3,9 +3,10 @@ import { autoTable } from 'jspdf-autotable';
 import { Resend } from 'resend';
 import prisma from '../config/db';
 import { env } from '../config/env';
+import { generateExecutiveReportPdf } from './executiveReportTemplate';
 
 type ReportEntry = {
-    user: { email: string };
+    user: { email: string; first_name?: string | null; last_name?: string | null };
     project: { name: string } | null;
     task_description: string;
     duration: number;
@@ -87,6 +88,10 @@ const getReportTitle = (frequency: string, reportType: string, label: string): s
 };
 
 const generateReportPdf = (title: string, entries: ReportEntry[]): ArrayBuffer => {
+    if (env.executiveReportTemplateEnabled) {
+        return generateExecutiveReportPdf(title, entries);
+    }
+
     const doc = new jsPDF();
     doc.setFontSize(18);
     doc.text(title, 14, 22);

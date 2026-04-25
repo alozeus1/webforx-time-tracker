@@ -9,6 +9,7 @@
     "release:smoke:login": "node scripts/release-smoke-login.cjs",
     "release:verify:idle": "node scripts/verify-idle-production.cjs",
     "release:verify": "npm run release:preflight && npm run release:smoke:login",
+    "report:preview": "tsx scripts/generate-executive-report-preview.ts",
     "start": "npm run schema:check && node dist/index.js",
     "dev": "npm run schema:check && ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",

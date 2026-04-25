@@ -72,4 +72,7 @@ export const env = {
     authentikScopes: process.env.AUTHENTIK_SCOPES?.trim() || 'openid profile email',
     resendApiKey: process.env.RESEND_API_KEY?.trim() || '',
     emailFrom: process.env.EMAIL_FROM?.trim() || 'Web Forx Time Tracker <noreply@webforxtech.com>',
+    executiveReportTemplateEnabled: process.env.EXECUTIVE_REPORT_TEMPLATE_ENABLED?.trim().toLowerCase() !== 'false',
+    reportCompanyLogoPath: process.env.REPORT_COMPANY_LOGO_PATH?.trim() || '',
+    reportTimerAppLogoPath: process.env.REPORT_TIMER_APP_LOGO_PATH?.trim() || '',
 };
