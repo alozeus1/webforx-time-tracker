@@ -19,6 +19,7 @@ router.get('/me', getMyEntries);
 router.post('/ping', pingTimer);
 router.get('/corrections', getMyCorrectionRequests);
 router.post('/corrections', createCorrectionRequest);
+router.post('/correction', createCorrectionRequest);
 router.get('/corrections/review', requireRole(['Manager', 'Admin']), getCorrectionRequestsForReview);
 router.post('/corrections/:correctionId/review', requireRole(['Manager', 'Admin']), reviewCorrectionRequest);
 

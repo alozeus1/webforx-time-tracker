@@ -566,6 +566,20 @@ describe('Timer correction requests', () => {
         }));
     });
 
+    it('supports the singular correction route as a compatibility alias', async () => {
+        const res = await request(app)
+            .post('/api/v1/timers/correction')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                requested_start_time: requestedStart.toISOString(),
+                requested_end_time: requestedEnd.toISOString(),
+                reason: 'Timer paused while working',
+            });
+
+        expect(res.status).toBe(201);
+        expect(prisma.timerCorrectionRequest.create).toHaveBeenCalled();
+    });
+
     it('allows a user to view only their correction requests', async () => {
         (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'correction-1' }]);
 

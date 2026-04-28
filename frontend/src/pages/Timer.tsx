@@ -51,6 +51,11 @@ const extractErrorMessage = (error: unknown, fallback: string) =>
         : fallback;
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const isApiRouteNotFoundError = (error: unknown) => {
+    const message = extractErrorMessage(error, '').toLowerCase();
+    return message.includes('api route not found');
+};
+
 const buildTaskSuggestions = (entries: TimeEntrySummary[]) => (
     Array.from(
         new Set(
@@ -390,14 +395,15 @@ const Timer: React.FC = () => {
     const handleSubmitCorrectionRequest = async (event: React.FormEvent) => {
         event.preventDefault();
         setCorrectionFeedback(null);
+        const payload = {
+            requested_start_time: correctionStart ? new Date(correctionStart).toISOString() : '',
+            requested_end_time: correctionEnd ? new Date(correctionEnd).toISOString() : '',
+            reason: correctionReason,
+            work_note: correctionWorkNote,
+        };
 
         try {
-            await api.post('/timers/corrections', {
-                requested_start_time: correctionStart ? new Date(correctionStart).toISOString() : '',
-                requested_end_time: correctionEnd ? new Date(correctionEnd).toISOString() : '',
-                reason: correctionReason,
-                work_note: correctionWorkNote,
-            });
+            await api.post('/timers/corrections', payload);
             setCorrectionStart('');
             setCorrectionEnd('');
             setCorrectionReason('');
@@ -405,6 +411,22 @@ const Timer: React.FC = () => {
             setCorrectionFeedback('Correction request submitted for admin review.');
             await loadTimerPageData(false);
         } catch (error) {
+            if (isApiRouteNotFoundError(error)) {
+                try {
+                    await api.post('/timers/correction', payload);
+                    setCorrectionStart('');
+                    setCorrectionEnd('');
+                    setCorrectionReason('');
+                    setCorrectionWorkNote('');
+                    setCorrectionFeedback('Correction request submitted for admin review.');
+                    await loadTimerPageData(false);
+                    return;
+                } catch (retryError) {
+                    setCorrectionFeedback(extractErrorMessage(retryError, 'Failed to submit correction request'));
+                    return;
+                }
+            }
+
             setCorrectionFeedback(extractErrorMessage(error, 'Failed to submit correction request'));
         }
     };
