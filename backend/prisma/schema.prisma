@@ -34,6 +34,7 @@ model User {
   active_timers         ActiveTimer[]
   notifications         Notification[]
   audit_logs            AuditLog[]
+  timer_correction_requests TimerCorrectionRequest[]
   auth_events           AuthEvent[]
   calendar_connection   CalendarConnection?
   password_reset_tokens PasswordResetToken[]
@@ -112,12 +113,57 @@ model ActiveTimer {
   client_visibility String?
   client_has_focus Boolean?
   heartbeat_state  Json      @default("{}")
+  heartbeat_miss_count Int    @default(0)
   is_paused              Boolean   @default(false)
+  pause_reason           String?
   paused_at              DateTime?
+  idle_warning_shown_at  DateTime?
   paused_duration_seconds Int       @default(0)
 
   user    User     @relation(fields: [user_id], references: [id])
   project Project? @relation(fields: [project_id], references: [id])
+}
+
+model TimerCorrectionRequest {
+  id                         String   @id @default(uuid())
+  user_id                    String
+  timer_session_id           String?
+  requested_start_time       DateTime
+  requested_end_time         DateTime
+  requested_duration_seconds Int
+  reason                     String
+  work_note                  String?
+  status                     String   @default("PENDING")
+  reviewed_by                String?
+  reviewed_at                DateTime?
+  reviewer_note              String?
+  created_at                 DateTime @default(now())
+  updated_at                 DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([user_id, status, created_at])
+}
+
+model TimerPolicyConfig {
+  id                                String   @id @default(uuid())
+  scope_type                        String   @default("GLOBAL")
+  scope_id                          String?
+  heartbeat_interval_seconds         Int      @default(180)
+  missed_heartbeat_warning_threshold Int      @default(3)
+  missed_heartbeat_pause_threshold   Int      @default(4)
+  idle_warning_after_minutes         Int      @default(5)
+  idle_pause_after_minutes           Int      @default(10)
+  max_session_duration_hours         Decimal  @default(8.0) @db.Decimal(4, 2)
+  allow_resume_after_idle_pause      Boolean  @default(true)
+  require_note_on_resume_after_minutes Int    @default(30)
+  created_by                        String?
+  updated_by                        String?
+  created_at                        DateTime @default(now())
+  updated_at                        DateTime @updatedAt
+
+  @@unique([scope_type, scope_id])
+  @@index([scope_type, scope_id])
 }
 
 model Notification {

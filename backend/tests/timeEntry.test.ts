@@ -18,8 +18,18 @@ jest.mock('../src/config/db', () => ({
             delete: jest.fn(),
             update: jest.fn(),
         },
+        timerPolicyConfig: {
+            findFirst: jest.fn(),
+        },
+        timerCorrectionRequest: {
+            create: jest.fn(),
+            findMany: jest.fn(),
+            findUnique: jest.fn(),
+            update: jest.fn(),
+        },
         timeEntry: {
             create: jest.fn(),
+            findFirst: jest.fn(),
             findMany: jest.fn(),
             update: jest.fn(),
             count: jest.fn(),
@@ -57,6 +67,7 @@ app.use('/api/v1/timers', timeEntryRoutes);
 
 const employeeToken = makeToken('user-emp-1', 'Employee');
 const managerToken = makeToken('user-mgr-1', 'Manager');
+const adminToken = makeToken('user-admin-1', 'Admin');
 
 const mockActiveTimer = {
     id: 'timer-1',
@@ -91,6 +102,7 @@ beforeEach(() => {
     jest.clearAllMocks();
     (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
     (prisma.notification.create as jest.Mock).mockResolvedValue({});
+    (prisma.timerPolicyConfig.findFirst as jest.Mock).mockResolvedValue(null);
 });
 
 // ─── startTimer ────────────────────────────────────────────────────────────
@@ -311,7 +323,7 @@ describe('POST /api/v1/timers/ping', () => {
         expect(res.body.message).toMatch(/no active timer/i);
     });
 
-    it('returns 404 and hard-stops stale unattended timers', async () => {
+    it('returns 200 and pauses stale unattended timers', async () => {
         const staleTimer = {
             ...mockActiveTimer,
             last_heartbeat_at: new Date(Date.now() - 11 * 60_000),
@@ -328,15 +340,6 @@ describe('POST /api/v1/timers/ping', () => {
             .mockResolvedValueOnce(staleTimer) // pingTimer lookup
             .mockResolvedValueOnce(staleTimer); // stopActiveTimerWithReason lookup
 
-        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
-            const tx = {
-                timeEntry: { create: jest.fn().mockResolvedValue(mockTimeEntry) },
-                timeEntryTag: { createMany: jest.fn().mockResolvedValue({ count: 0 }) },
-                activeTimer: { delete: jest.fn().mockResolvedValue({}) },
-            };
-            return fn(tx);
-        });
-
         const res = await request(app)
             .post('/api/v1/timers/ping')
             .set('Authorization', `Bearer ${employeeToken}`)
@@ -347,9 +350,9 @@ describe('POST /api/v1/timers/ping', () => {
                 has_focus: true,
             });
 
-        expect(res.status).toBe(404);
-        expect(res.body.message).toMatch(/no active timer/i);
-        expect(prisma.activeTimer.update).not.toHaveBeenCalled();
+        expect(res.status).toBe(200);
+        expect(res.body.state).toBe('paused');
+        expect(prisma.activeTimer.update).toHaveBeenCalled();
     });
 });
 
@@ -514,6 +517,162 @@ describe('POST /api/v1/timers/ping — timestamp validation', () => {
         expect(res.status).toBe(200);
         expect(prisma.activeTimer.update).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({ last_client_activity_at: null }),
+        }));
+    });
+});
+
+// ─── correction requests ─────────────────────────────────────────────────────
+
+describe('Timer correction requests', () => {
+    const requestedStart = new Date(Date.now() - 40 * 60_000);
+    const requestedEnd = new Date(Date.now() - 10 * 60_000);
+
+    beforeEach(() => {
+        (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.timeEntry.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.timerCorrectionRequest.create as jest.Mock).mockResolvedValue({
+            id: 'correction-1',
+            user_id: 'user-emp-1',
+            requested_start_time: requestedStart,
+            requested_end_time: requestedEnd,
+            requested_duration_seconds: 1800,
+            reason: 'Timer paused while working',
+            status: 'PENDING',
+        });
+    });
+
+    it('allows a user to create a correction request without mutating time entries', async () => {
+        const res = await request(app)
+            .post('/api/v1/timers/corrections')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                requested_start_time: requestedStart.toISOString(),
+                requested_end_time: requestedEnd.toISOString(),
+                reason: 'Timer paused while working',
+                work_note: 'Worked in AWS Console',
+            });
+
+        expect(res.status).toBe(201);
+        expect(prisma.timerCorrectionRequest.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                user_id: 'user-emp-1',
+                reason: 'Timer paused while working',
+            }),
+        }));
+        expect(prisma.timeEntry.create).not.toHaveBeenCalled();
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ action: 'correction_request_created' }),
+        }));
+    });
+
+    it('allows a user to view only their correction requests', async () => {
+        (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'correction-1' }]);
+
+        const res = await request(app)
+            .get('/api/v1/timers/corrections')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: { user_id: 'user-emp-1' },
+        }));
+    });
+
+    it('allows admins to view all correction requests', async () => {
+        const res = await request(app)
+            .get('/api/v1/timers/corrections/review')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            include: expect.objectContaining({ user: expect.any(Object) }),
+        }));
+    });
+
+    it('prevents regular users from viewing all correction requests', async () => {
+        const res = await request(app)
+            .get('/api/v1/timers/corrections/review')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(403);
+    });
+
+    it('allows admins to approve correction requests through an audited adjustment entry', async () => {
+        const correction = {
+            id: 'correction-1',
+            user_id: 'user-emp-1',
+            requested_start_time: requestedStart,
+            requested_end_time: requestedEnd,
+            requested_duration_seconds: 1800,
+            reason: 'Timer paused while working',
+            work_note: 'Reviewed note',
+            status: 'PENDING',
+        };
+        const txTimeEntryCreate = jest.fn().mockResolvedValue({ id: 'entry-correction-1' });
+        const txCorrectionUpdate = jest.fn().mockResolvedValue({ ...correction, status: 'APPROVED' });
+
+        (prisma.timerCorrectionRequest.findUnique as jest.Mock).mockResolvedValue(correction);
+        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
+            timerCorrectionRequest: { update: txCorrectionUpdate },
+            timeEntry: {
+                findFirst: jest.fn().mockResolvedValue(null),
+                create: txTimeEntryCreate,
+            },
+        }));
+
+        const res = await request(app)
+            .post('/api/v1/timers/corrections/correction-1/review')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ action: 'approve', reviewer_note: 'Approved' });
+
+        expect(res.status).toBe(200);
+        expect(txTimeEntryCreate).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                entry_type: 'manual',
+                status: 'approved',
+                duration: 1800,
+            }),
+        }));
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ action: 'correction_request_approved' }),
+        }));
+    });
+
+    it('allows admins to reject correction requests without creating time entries', async () => {
+        const correction = {
+            id: 'correction-1',
+            user_id: 'user-emp-1',
+            requested_start_time: requestedStart,
+            requested_end_time: requestedEnd,
+            requested_duration_seconds: 1800,
+            reason: 'Timer paused while working',
+            work_note: null,
+            status: 'PENDING',
+        };
+        const txTimeEntryCreate = jest.fn();
+
+        (prisma.timerCorrectionRequest.findUnique as jest.Mock).mockResolvedValue(correction);
+        (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
+            timerCorrectionRequest: { update: jest.fn().mockResolvedValue({ ...correction, status: 'REJECTED' }) },
+            timeEntry: {
+                findFirst: jest.fn().mockResolvedValue(null),
+                create: txTimeEntryCreate,
+            },
+        }));
+
+        const res = await request(app)
+            .post('/api/v1/timers/corrections/correction-1/review')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ action: 'reject', reviewer_note: 'Not enough detail' });
+
+        expect(res.status).toBe(200);
+        expect(txTimeEntryCreate).not.toHaveBeenCalled();
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                action: 'correction_request_rejected',
+                metadata: expect.objectContaining({ reviewer_note: 'Not enough detail' }),
+            }),
         }));
     });
 });

@@ -8,6 +8,7 @@ jest.mock('../src/config/db', () => ({
     default: {
         auditLog: {
             findMany: jest.fn(),
+            create: jest.fn(),
         },
         authEvent: {
             findMany: jest.fn(),
@@ -15,6 +16,11 @@ jest.mock('../src/config/db', () => ({
         notification: {
             findMany: jest.fn(),
             findFirst: jest.fn(),
+            update: jest.fn(),
+        },
+        timerPolicyConfig: {
+            findFirst: jest.fn(),
+            create: jest.fn(),
             update: jest.fn(),
         },
     },
@@ -40,6 +46,59 @@ beforeEach(() => {
     (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.notification.update as jest.Mock).mockResolvedValue({});
+    (prisma.timerPolicyConfig.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.timerPolicyConfig.create as jest.Mock).mockResolvedValue({ id: 'policy-1' });
+    (prisma.timerPolicyConfig.update as jest.Mock).mockResolvedValue({ id: 'policy-1' });
+    (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
+});
+
+describe('PUT /api/v1/admin/timer-policy', () => {
+    it('allows admins to update safe timer policy values', async () => {
+        const res = await request(app)
+            .put('/api/v1/admin/timer-policy')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                heartbeatIntervalSeconds: 180,
+                missedHeartbeatWarningThreshold: 3,
+                missedHeartbeatPauseThreshold: 4,
+                idleWarningAfterMinutes: 5,
+                idlePauseAfterMinutes: 12,
+                maxSessionDurationHours: 8,
+                allowResumeAfterIdlePause: true,
+                requireNoteOnResumeAfterMinutes: 30,
+            });
+
+        expect(res.status).toBe(200);
+        expect(prisma.timerPolicyConfig.create).toHaveBeenCalled();
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ action: 'timer_policy_updated' }),
+        }));
+    });
+
+    it('rejects non-admin timer policy updates', async () => {
+        const res = await request(app)
+            .put('/api/v1/admin/timer-policy')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ idlePauseAfterMinutes: 15 });
+
+        expect(res.status).toBe(403);
+        expect(prisma.timerPolicyConfig.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsafe timer policy values', async () => {
+        const res = await request(app)
+            .put('/api/v1/admin/timer-policy')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                idleWarningAfterMinutes: 0,
+                idlePauseAfterMinutes: 0,
+                maxSessionDurationHours: 24,
+            });
+
+        expect(res.status).toBe(400);
+        expect(res.body.errors.length).toBeGreaterThan(0);
+        expect(prisma.timerPolicyConfig.create).not.toHaveBeenCalled();
+    });
 });
 
 describe('GET /api/v1/admin/audit-logs', () => {

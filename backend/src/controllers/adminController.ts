@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
+import { getGlobalTimerPolicy, normalizeTimerPolicy, validateTimerPolicy } from '../services/timerPolicyService';
 
 type AdminAuditFeedEntry = {
     id: string;
@@ -118,5 +119,87 @@ export const deleteSystemNotification = async (req: AuthRequest, res: Response):
     } catch (error) {
         console.error('Failed to delete system notification:', error);
         res.status(500).json({ message: 'Internal server error while deleting system notification' });
+    }
+};
+
+export const getTimerPolicy = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const policy = await getGlobalTimerPolicy();
+        res.status(200).json({ policy });
+    } catch (error) {
+        console.error('Failed to get timer policy:', error);
+        res.status(500).json({ message: 'Internal server error while loading timer policy' });
+    }
+};
+
+export const updateTimerPolicy = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const actorId = req.user?.userId || null;
+        const currentPolicy = await getGlobalTimerPolicy();
+        const nextPolicy = normalizeTimerPolicy({
+            ...currentPolicy,
+            ...req.body,
+        });
+        const errors = validateTimerPolicy(nextPolicy);
+
+        if (errors.length > 0) {
+            res.status(400).json({ message: 'Invalid timer policy', errors });
+            return;
+        }
+
+        const existing = await prisma.timerPolicyConfig.findFirst({
+            where: { scope_type: 'GLOBAL', scope_id: null },
+        });
+
+        const saved = existing
+            ? await prisma.timerPolicyConfig.update({
+                where: { id: existing.id },
+                data: {
+                    heartbeat_interval_seconds: nextPolicy.heartbeatIntervalSeconds,
+                    missed_heartbeat_warning_threshold: nextPolicy.missedHeartbeatWarningThreshold,
+                    missed_heartbeat_pause_threshold: nextPolicy.missedHeartbeatPauseThreshold,
+                    idle_warning_after_minutes: nextPolicy.idleWarningAfterMinutes,
+                    idle_pause_after_minutes: nextPolicy.idlePauseAfterMinutes,
+                    max_session_duration_hours: nextPolicy.maxSessionDurationHours,
+                    allow_resume_after_idle_pause: nextPolicy.allowResumeAfterIdlePause,
+                    require_note_on_resume_after_minutes: nextPolicy.requireNoteOnResumeAfterMinutes,
+                    updated_by: actorId,
+                },
+            })
+            : await prisma.timerPolicyConfig.create({
+                data: {
+                    scope_type: 'GLOBAL',
+                    scope_id: null,
+                    heartbeat_interval_seconds: nextPolicy.heartbeatIntervalSeconds,
+                    missed_heartbeat_warning_threshold: nextPolicy.missedHeartbeatWarningThreshold,
+                    missed_heartbeat_pause_threshold: nextPolicy.missedHeartbeatPauseThreshold,
+                    idle_warning_after_minutes: nextPolicy.idleWarningAfterMinutes,
+                    idle_pause_after_minutes: nextPolicy.idlePauseAfterMinutes,
+                    max_session_duration_hours: nextPolicy.maxSessionDurationHours,
+                    allow_resume_after_idle_pause: nextPolicy.allowResumeAfterIdlePause,
+                    require_note_on_resume_after_minutes: nextPolicy.requireNoteOnResumeAfterMinutes,
+                    created_by: actorId,
+                    updated_by: actorId,
+                },
+            });
+
+        if (actorId) {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: actorId,
+                    action: 'timer_policy_updated',
+                    resource: 'timer_policy_config',
+                    metadata: {
+                        timer_policy_config_id: saved.id,
+                        policy: nextPolicy,
+                    },
+                },
+            });
+        }
+
+        res.status(200).json({ policy: nextPolicy });
+    } catch (error) {
+        console.error('Failed to update timer policy:', error);
+        res.status(500).json({ message: 'Internal server error while updating timer policy' });
     }
 };

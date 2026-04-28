@@ -7,6 +7,7 @@ import type {
     CalendarStatus,
     NotificationSummary,
     ProjectSummary,
+    TimerCorrectionRequestSummary,
     TimeEntrySummary,
     TimerEntriesResponse,
 } from '../types/api';
@@ -80,6 +81,12 @@ const Timer: React.FC = () => {
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
     const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
     const [timerStatusNotice, setTimerStatusNotice] = useState<NotificationSummary | null>(null);
+    const [correctionRequests, setCorrectionRequests] = useState<TimerCorrectionRequestSummary[]>([]);
+    const [correctionStart, setCorrectionStart] = useState('');
+    const [correctionEnd, setCorrectionEnd] = useState('');
+    const [correctionReason, setCorrectionReason] = useState('');
+    const [correctionWorkNote, setCorrectionWorkNote] = useState('');
+    const [correctionFeedback, setCorrectionFeedback] = useState<string | null>(null);
 
     const isRunning = timerStartedAt !== null;
     const isActivelyRecording = isRunning && !timerPaused;
@@ -183,6 +190,13 @@ const Timer: React.FC = () => {
                 setTimerStatusNotice(latestTimerNotification || null);
             } catch {
                 setTimerStatusNotice(null);
+            }
+
+            try {
+                const correctionResponse = await api.get<{ corrections: TimerCorrectionRequestSummary[] }>('/timers/corrections');
+                setCorrectionRequests(correctionResponse.data.corrections || []);
+            } catch {
+                setCorrectionRequests([]);
             }
         } catch (error) {
             console.error('Failed to fetch timer page data', error);
@@ -371,6 +385,28 @@ const Timer: React.FC = () => {
 
     const handleStartNewTimer = async () => {
         await handleStopTimer(true);
+    };
+
+    const handleSubmitCorrectionRequest = async (event: React.FormEvent) => {
+        event.preventDefault();
+        setCorrectionFeedback(null);
+
+        try {
+            await api.post('/timers/corrections', {
+                requested_start_time: correctionStart ? new Date(correctionStart).toISOString() : '',
+                requested_end_time: correctionEnd ? new Date(correctionEnd).toISOString() : '',
+                reason: correctionReason,
+                work_note: correctionWorkNote,
+            });
+            setCorrectionStart('');
+            setCorrectionEnd('');
+            setCorrectionReason('');
+            setCorrectionWorkNote('');
+            setCorrectionFeedback('Correction request submitted for admin review.');
+            await loadTimerPageData(false);
+        } catch (error) {
+            setCorrectionFeedback(extractErrorMessage(error, 'Failed to submit correction request'));
+        }
     };
 
     // Keyboard shortcut: Ctrl+Enter to start/stop timer
@@ -647,6 +683,80 @@ const Timer: React.FC = () => {
                             </div>
                         </div>
                     </aside>
+                </section>
+
+                <section className={`rounded-2xl border p-5 shadow-sm ${
+                    searchParams.get('correction') === '1'
+                        ? 'border-amber-300 bg-amber-50'
+                        : 'border-slate-200 bg-white'
+                }`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-sm font-bold tracking-wide text-slate-900">Correction Request</h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                Request review for time that was missed while you were working. Approved requests are reviewed before they affect official time.
+                            </p>
+                        </div>
+                        {correctionRequests.length > 0 && (
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500">
+                                {correctionRequests[0].status}
+                            </span>
+                        )}
+                    </div>
+                    <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event) => void handleSubmitCorrectionRequest(event)}>
+                        <label className="text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Start time
+                            <input
+                                type="datetime-local"
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                value={correctionStart}
+                                onChange={(event) => setCorrectionStart(event.target.value)}
+                                required
+                            />
+                        </label>
+                        <label className="text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                            End time
+                            <input
+                                type="datetime-local"
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                value={correctionEnd}
+                                onChange={(event) => setCorrectionEnd(event.target.value)}
+                                required
+                            />
+                        </label>
+                        <label className="text-left text-xs font-bold uppercase tracking-wide text-slate-500 md:col-span-2">
+                            Reason
+                            <input
+                                type="text"
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                value={correctionReason}
+                                onChange={(event) => setCorrectionReason(event.target.value)}
+                                placeholder="Timer paused while I was working in another tool"
+                                required
+                            />
+                        </label>
+                        <label className="text-left text-xs font-bold uppercase tracking-wide text-slate-500 md:col-span-2">
+                            Work note
+                            <textarea
+                                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                rows={3}
+                                value={correctionWorkNote}
+                                onChange={(event) => setCorrectionWorkNote(event.target.value)}
+                                placeholder="Optional context for the reviewer"
+                            />
+                        </label>
+                        <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                            <button
+                                type="submit"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
+                            >
+                                Submit request
+                            </button>
+                            {correctionFeedback && (
+                                <p className="text-sm font-semibold text-slate-600">{correctionFeedback}</p>
+                            )}
+                        </div>
+                    </form>
                 </section>
 
                 {calendarStatus?.configured && !calendarStatus.connected && (

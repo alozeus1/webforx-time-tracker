@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary } from '../types/api';
+import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
 
-const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'audit'] as const;
+const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit'] as const;
 const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
 const resolveProjectLogoSrc = (logoUrl?: string | null) => {
     if (!logoUrl) {
@@ -103,6 +103,9 @@ const Admin: React.FC = () => {
     const [integrations, setIntegrations] = useState<IntegrationSummary[]>([]);
     const [auditLogs, setAuditLogs] = useState<AuditLogSummary[]>([]);
     const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
+    const [corrections, setCorrections] = useState<TimerCorrectionRequestSummary[]>([]);
+    const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
+    const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
     
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -166,6 +169,54 @@ const Admin: React.FC = () => {
         }
     }
 
+    async function fetchCorrections() {
+        try {
+            const res = await api.get<{ corrections: TimerCorrectionRequestSummary[] }>('/timers/corrections/review');
+            setCorrections(res.data.corrections || []);
+        } catch (error) {
+            console.error('Error fetching correction requests:', error);
+        }
+    }
+
+    async function fetchTimerPolicy() {
+        try {
+            const res = await api.get<{ policy: TimerPolicySummary }>('/admin/timer-policy');
+            setTimerPolicy(res.data.policy);
+        } catch (error) {
+            console.error('Error fetching timer policy:', error);
+        }
+    }
+
+    async function handleReviewCorrection(correctionId: string, action: 'approve' | 'reject') {
+        const reviewerNote = window.prompt(action === 'approve' ? 'Approval note (optional)' : 'Rejection note (optional)') || '';
+        try {
+            await api.post(`/timers/corrections/${correctionId}/review`, {
+                action,
+                reviewer_note: reviewerNote,
+            });
+            void fetchCorrections();
+            void fetchAuditLogs();
+        } catch (error) {
+            console.error('Error reviewing correction request:', error);
+            alert('Failed to review correction request.');
+        }
+    }
+
+    async function handleSaveTimerPolicy(event: React.FormEvent) {
+        event.preventDefault();
+        if (!timerPolicy) return;
+        setPolicyFeedback(null);
+        try {
+            const res = await api.put<{ policy: TimerPolicySummary }>('/admin/timer-policy', timerPolicy);
+            setTimerPolicy(res.data.policy);
+            setPolicyFeedback('Timer policy saved.');
+            void fetchAuditLogs();
+        } catch (error) {
+            console.error('Error saving timer policy:', error);
+            setPolicyFeedback('Failed to save timer policy.');
+        }
+    }
+
     async function handleDeleteNotification(notificationId: string) {
         try {
             await api.delete(`/admin/notifications/${notificationId}`);
@@ -182,7 +233,9 @@ const Admin: React.FC = () => {
                 fetchUsers(),
                 fetchIntegrations(),
                 fetchAuditLogs(),
-                fetchNotifications()
+                fetchNotifications(),
+                fetchCorrections(),
+                fetchTimerPolicy(),
             ]);
         };
 
@@ -285,7 +338,7 @@ const Admin: React.FC = () => {
 
                 <div className="mb-6">
                     <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto">
-                        {['projects', 'users', 'integrations', 'notifications', 'audit'].map(tab => (
+                        {availableTabs.map(tab => (
                             <button
                                 key={tab}
                                 type="button"
@@ -350,6 +403,19 @@ const Admin: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Read</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Action</th>
                                         </>
+                                    )}
+                                    {activeTab === 'corrections' && (
+                                        <>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Submitted</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">User</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Requested Window</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Reason</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Status</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Review</th>
+                                        </>
+                                    )}
+                                    {activeTab === 'policy' && (
+                                        <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Timer idle policy</th>
                                     )}
                                 </tr>
                             </thead>
@@ -536,6 +602,80 @@ const Admin: React.FC = () => {
                                         </td>
                                     </tr>
                                 )))}
+                                {activeTab === 'corrections' && (corrections.length === 0 ? (
+                                    <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests found.</td></tr>
+                                ) : corrections.map((correction) => (
+                                    <tr key={correction.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                        <td className="px-6 py-4 text-sm text-slate-500">{new Date(correction.created_at).toLocaleString()}</td>
+                                        <td className="px-6 py-4 text-sm font-semibold dark:text-slate-200">
+                                            {correction.user?.email || correction.user_id}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-600">
+                                            {new Date(correction.requested_start_time).toLocaleString()} – {new Date(correction.requested_end_time).toLocaleString()}
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{correction.reason}</td>
+                                        <td className="px-6 py-4 text-xs font-bold uppercase text-slate-500">{correction.status}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            {correction.status === 'PENDING' ? (
+                                                <div className="flex justify-end gap-2">
+                                                    <button type="button" className="text-xs font-bold text-emerald-600" onClick={() => void handleReviewCorrection(correction.id, 'approve')}>Approve</button>
+                                                    <button type="button" className="text-xs font-bold text-rose-600" onClick={() => void handleReviewCorrection(correction.id, 'reject')}>Reject</button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-slate-400">Reviewed</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )))}
+                                {activeTab === 'policy' && (
+                                    <tr>
+                                        <td className="px-6 py-6">
+                                            {timerPolicy ? (
+                                                <form className="grid gap-4 md:grid-cols-3" onSubmit={(event) => void handleSaveTimerPolicy(event)}>
+                                                    {[
+                                                        ['heartbeatIntervalSeconds', 'Heartbeat seconds'],
+                                                        ['missedHeartbeatWarningThreshold', 'Missed heartbeat warning'],
+                                                        ['missedHeartbeatPauseThreshold', 'Missed heartbeat pause'],
+                                                        ['idleWarningAfterMinutes', 'Idle warning minutes'],
+                                                        ['idlePauseAfterMinutes', 'Idle pause minutes'],
+                                                        ['maxSessionDurationHours', 'Max session hours'],
+                                                        ['requireNoteOnResumeAfterMinutes', 'Resume note minutes'],
+                                                    ].map(([key, label]) => (
+                                                        <label key={key} className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                            {label}
+                                                            <input
+                                                                type="number"
+                                                                className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                                value={timerPolicy[key as keyof TimerPolicySummary] as number}
+                                                                onChange={(event) => setTimerPolicy((current) => current ? {
+                                                                    ...current,
+                                                                    [key]: Number(event.target.value),
+                                                                } : current)}
+                                                            />
+                                                        </label>
+                                                    ))}
+                                                    <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 md:col-span-3">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={timerPolicy.allowResumeAfterIdlePause}
+                                                            onChange={(event) => setTimerPolicy((current) => current ? {
+                                                                ...current,
+                                                                allowResumeAfterIdlePause: event.target.checked,
+                                                            } : current)}
+                                                        />
+                                                        Allow resume after idle pause
+                                                    </label>
+                                                    <div className="flex items-center gap-3 md:col-span-3">
+                                                        <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white">Save policy</button>
+                                                        {policyFeedback && <span className="text-sm text-slate-500">{policyFeedback}</span>}
+                                                    </div>
+                                                </form>
+                                            ) : (
+                                                <p className="text-sm text-slate-500">Timer policy unavailable.</p>
+                                            )}
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>

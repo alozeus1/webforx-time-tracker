@@ -2,20 +2,19 @@ import cron from 'node-cron';
 import prisma from '../config/db';
 import { env } from '../config/env';
 import { stopActiveTimerWithReason, pauseActiveTimer } from '../services/activeTimerService';
+import { getGlobalTimerPolicy } from '../services/timerPolicyService';
 
 export const checkIdleTimers = async () => {
     console.log('[Worker] Running Idle Tracker Checks...');
     try {
         const activeTimers = await prisma.activeTimer.findMany();
         const now = new Date();
-        const warningThresholdMs = env.idleWarningMinutes * 60 * 1000;
-        const staleThresholdMs = env.heartbeatStaleMinutes * 60 * 1000;
-        const autoStopThresholdMs = staleThresholdMs + (env.autoStopGraceMinutes * 60 * 1000);
-
-        // Threshold: if no ping received in 2× heartbeat interval, don't trust last-known browser state
-        const pingFrequencyThresholdMs = env.heartbeatIntervalMinutes * 2 * 60_000;
+        const policy = await getGlobalTimerPolicy();
+        const warningThresholdMs = policy.idleWarningAfterMinutes * 60 * 1000;
+        const idlePauseThresholdMs = policy.idlePauseAfterMinutes * 60 * 1000;
+        const heartbeatIntervalMs = policy.heartbeatIntervalSeconds * 1000;
         const maxPauseMs = env.maxPauseHours * 60 * 60 * 1000;
-        const maxActiveTimerMs = env.maxActiveTimerHours * 60 * 60 * 1000;
+        const maxActiveTimerMs = policy.maxSessionDurationHours * 60 * 60 * 1000;
 
         for (const timer of activeTimers) {
             const startedAt = new Date(timer.start_time);
@@ -51,29 +50,30 @@ export const checkIdleTimers = async () => {
                 
             const heartbeatAgeMs = now.getTime() - lastHeartbeat.getTime();
             const clientActivityAgeMs = now.getTime() - baseActivityTime.getTime();
+            const missedHeartbeats = Math.max(Math.floor(heartbeatAgeMs / heartbeatIntervalMs) - 1, 0);
 
-            // --- Guard 2: ping-frequency enforcement ---
-            // If no ping is received in 2× heartbeat interval, browser state is stale.
-            // Do not rely on old hidden/focus signals for soft-pause decisions.
-            const pingIsTooOld = heartbeatAgeMs >= pingFrequencyThresholdMs;
-            const browserExplicitlyInactive =
-                timer.client_visibility === 'hidden' ||
-                timer.client_has_focus === false;
+            if (missedHeartbeats !== timer.heartbeat_miss_count) {
+                await prisma.activeTimer.update({
+                    where: { user_id: timer.user_id },
+                    data: { heartbeat_miss_count: missedHeartbeats },
+                });
+            }
 
-            if (clientActivityAgeMs >= autoStopThresholdMs || heartbeatAgeMs >= autoStopThresholdMs) {
-                if (!pingIsTooOld && browserExplicitlyInactive) {
-                    await pauseActiveTimer(timer.user_id, 'browser_inactive');
-                    console.log(`[Worker] Timer paused (browser_inactive) for user ${timer.user_id}`);
-                    continue;
-                }
-
-                const reason = clientActivityAgeMs >= autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
-                await stopActiveTimerWithReason({ userId: timer.user_id, reason, triggeredAt: now });
-                console.log(`[Worker] Timer auto-stopped (${reason}) for user ${timer.user_id}`);
+            if (
+                missedHeartbeats >= policy.missedHeartbeatPauseThreshold ||
+                clientActivityAgeMs >= idlePauseThresholdMs
+            ) {
+                const reason = missedHeartbeats >= policy.missedHeartbeatPauseThreshold
+                    ? 'missed_heartbeat_threshold'
+                    : (timer.client_visibility === 'hidden' || timer.client_has_focus === false)
+                        ? 'browser_inactive'
+                        : 'idle_timeout';
+                await pauseActiveTimer(timer.user_id, reason);
+                console.log(`[Worker] Timer paused (${reason}) for user ${timer.user_id}`);
                 continue;
             }
 
-            if (clientActivityAgeMs >= warningThresholdMs || heartbeatAgeMs >= staleThresholdMs) {
+            if (clientActivityAgeMs >= warningThresholdMs || missedHeartbeats >= policy.missedHeartbeatWarningThreshold) {
                 const existingNote = await prisma.notification.findFirst({
                     where: {
                         user_id: timer.user_id,
@@ -89,9 +89,13 @@ export const checkIdleTimers = async () => {
                     await prisma.notification.create({
                         data: {
                             user_id: timer.user_id,
-                            message: `You have an active timer running but appear inactive. If activity does not resume, it will be stopped automatically.`,
+                            message: `You have an active timer running but appear inactive. If activity does not resume, it will be paused automatically.`,
                             type: 'idle_warning',
                         }
+                    });
+                    await prisma.activeTimer.update({
+                        where: { user_id: timer.user_id },
+                        data: { idle_warning_shown_at: now },
                     });
                     await prisma.auditLog.create({
                         data: {
@@ -101,6 +105,7 @@ export const checkIdleTimers = async () => {
                             metadata: {
                                 active_timer_id: timer.id,
                                 heartbeat_age_ms: heartbeatAgeMs,
+                                missed_heartbeats: missedHeartbeats,
                                 client_activity_age_ms: Number.isFinite(clientActivityAgeMs) ? clientActivityAgeMs : null,
                                 client_visibility: timer.client_visibility,
                                 client_has_focus: timer.client_has_focus,

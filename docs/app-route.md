@@ -108,6 +108,10 @@ Mounted at `/api/v1/timers`.
 | `POST` | `/manual` | User | Create manual entry |
 | `GET` | `/me` | User | Current user's entries, active timer, notifications, projects |
 | `POST` | `/ping` | User | Heartbeat/activity ping |
+| `GET` | `/corrections` | User | Current user's timer correction requests |
+| `POST` | `/corrections` | User | Create timer correction request for missed paused time |
+| `GET` | `/corrections/review` | Manager, Admin | List correction requests for review |
+| `POST` | `/corrections/:correctionId/review` | Manager, Admin | Approve/reject correction request |
 | `PUT` | `/:id` | User | Update permitted entry |
 | `DELETE` | `/:id` | User | Delete permitted entry |
 | `POST` | `/:id/duplicate` | User | Duplicate/resume task context |
@@ -151,6 +155,13 @@ Includes categorization helpers such as mapping activity/window context to proje
 Mounted at `/api/v1/admin`.
 
 Supports admin dashboard data, audit/auth event visibility, system activity, notifications, and operational oversight.
+
+Timer policy endpoints:
+
+| Method | Route | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/timer-policy` | Admin | Read global timer idle/heartbeat policy |
+| `PUT` | `/timer-policy` | Admin | Update global timer idle/heartbeat policy with server validation |
 
 ## Cron API
 

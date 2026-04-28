@@ -6,6 +6,7 @@ import { AuthRequest } from '../types/auth';
 import { emitWebhookEvent } from '../services/webhookService';
 import { scoreTimeEntryRisk } from '../services/opsInsightsService';
 import { pauseActiveTimer, resumeActiveTimer, stopActiveTimerWithReason } from '../services/activeTimerService';
+import { getGlobalTimerPolicy } from '../services/timerPolicyService';
 
 type GuardrailActiveTimer = {
     id: string;
@@ -16,6 +17,7 @@ type GuardrailActiveTimer = {
     last_client_activity_at: Date | null;
     client_visibility: string | null;
     client_has_focus: boolean | null;
+    heartbeat_miss_count?: number;
     is_paused: boolean;
     paused_at: Date | null;
 };
@@ -26,17 +28,6 @@ const requireUserId = (req: AuthRequest): string => {
     }
 
     return req.user.userId;
-};
-
-const getTimerGuardrailThresholds = () => {
-    const staleThresholdMs = env.heartbeatStaleMinutes * 60_000;
-    return {
-        staleThresholdMs,
-        autoStopThresholdMs: staleThresholdMs + (env.autoStopGraceMinutes * 60_000),
-        pingFrequencyThresholdMs: env.heartbeatIntervalMinutes * 2 * 60_000,
-        maxPauseMs: env.maxPauseHours * 60 * 60 * 1000,
-        maxActiveTimerMs: env.maxActiveTimerHours * 60 * 60 * 1000,
-    };
 };
 
 const resolveInactivitySource = ({
@@ -67,7 +58,13 @@ const enforceTimerGuardrails = async ({
     lastClientActivityAtOverride?: Date | null;
 }): Promise<'none' | 'paused' | 'stopped'> => {
     const checkTime = now ?? new Date();
-    const thresholds = getTimerGuardrailThresholds();
+    const policy = await getGlobalTimerPolicy();
+    const thresholds = {
+        heartbeatIntervalMs: policy.heartbeatIntervalSeconds * 1000,
+        idlePauseThresholdMs: policy.idlePauseAfterMinutes * 60_000,
+        maxPauseMs: env.maxPauseHours * 60 * 60 * 1000,
+        maxActiveTimerMs: policy.maxSessionDurationHours * 60 * 60 * 1000,
+    };
     const activeForMs = checkTime.getTime() - new Date(timer.start_time).getTime();
 
     if (activeForMs >= thresholds.maxActiveTimerMs) {
@@ -104,25 +101,26 @@ const enforceTimerGuardrails = async ({
 
     const lastClientActivity = lastClientActivityAtOverride ?? baseActivityTime;
 
-    const heartbeatAgeMs = checkTime.getTime() - lastHeartbeat.getTime();
+    const heartbeatAgeMs = lastClientActivityAtOverride
+        ? 0
+        : checkTime.getTime() - lastHeartbeat.getTime();
     const clientActivityAgeMs = checkTime.getTime() - lastClientActivity.getTime();
-    const pingIsTooOld = heartbeatAgeMs >= thresholds.pingFrequencyThresholdMs;
+    const missedHeartbeats = Math.max(Math.floor(heartbeatAgeMs / thresholds.heartbeatIntervalMs) - 1, 0);
     const { effectiveVisibility, effectiveHasFocus } = resolveInactivitySource({ timer, visibilityState, hasFocus });
     const browserExplicitlyInactive = effectiveVisibility === 'hidden' || effectiveHasFocus === false;
 
-    if (clientActivityAgeMs >= thresholds.autoStopThresholdMs || heartbeatAgeMs >= thresholds.autoStopThresholdMs) {
-        if (!pingIsTooOld && browserExplicitlyInactive) {
-            await pauseActiveTimer(timer.user_id, 'browser_inactive');
-            return 'paused';
-        }
-
-        const reason = clientActivityAgeMs >= thresholds.autoStopThresholdMs ? 'idle_timeout' : 'heartbeat_missing';
-        await stopActiveTimerWithReason({
-            userId: timer.user_id,
-            reason,
-            triggeredAt: checkTime,
-        });
-        return 'stopped';
+    if (
+        clientActivityAgeMs >= thresholds.idlePauseThresholdMs ||
+        missedHeartbeats >= policy.missedHeartbeatPauseThreshold ||
+        browserExplicitlyInactive && clientActivityAgeMs >= policy.idleWarningAfterMinutes * 60_000
+    ) {
+        const reason = missedHeartbeats >= policy.missedHeartbeatPauseThreshold
+            ? 'missed_heartbeat_threshold'
+            : browserExplicitlyInactive
+                ? 'browser_inactive'
+                : 'idle_timeout';
+        await pauseActiveTimer(timer.user_id, reason);
+        return 'paused';
     }
 
     return 'none';
@@ -394,6 +392,209 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
     }
 };
 
+export const createCorrectionRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const requestedStartTime = new Date(req.body?.requested_start_time);
+        const requestedEndTime = new Date(req.body?.requested_end_time);
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+        const workNote = typeof req.body?.work_note === 'string' && req.body.work_note.trim()
+            ? req.body.work_note.trim()
+            : null;
+        const timerSessionId = typeof req.body?.timer_session_id === 'string' && req.body.timer_session_id.trim()
+            ? req.body.timer_session_id.trim()
+            : null;
+
+        if (
+            Number.isNaN(requestedStartTime.getTime()) ||
+            Number.isNaN(requestedEndTime.getTime()) ||
+            requestedEndTime <= requestedStartTime
+        ) {
+            res.status(400).json({ message: 'Correction request time range is invalid.' });
+            return;
+        }
+
+        if (!reason) {
+            res.status(400).json({ message: 'Correction reason is required.' });
+            return;
+        }
+
+        const conflict = await prisma.timeEntry.findFirst({
+            where: {
+                user_id,
+                status: 'approved',
+                start_time: { lt: requestedEndTime },
+                end_time: { gt: requestedStartTime },
+            },
+        });
+
+        if (conflict) {
+            res.status(409).json({ message: 'Correction request overlaps an approved time entry.' });
+            return;
+        }
+
+        const requestedDurationSeconds = Math.floor((requestedEndTime.getTime() - requestedStartTime.getTime()) / 1000);
+        const correction = await prisma.timerCorrectionRequest.create({
+            data: {
+                user_id,
+                timer_session_id: timerSessionId,
+                requested_start_time: requestedStartTime,
+                requested_end_time: requestedEndTime,
+                requested_duration_seconds: requestedDurationSeconds,
+                reason,
+                work_note: workNote,
+            },
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                user_id,
+                action: 'correction_request_created',
+                resource: 'timer_correction_request',
+                metadata: {
+                    correction_request_id: correction.id,
+                    timer_session_id: timerSessionId,
+                    requested_duration_seconds: requestedDurationSeconds,
+                },
+            },
+        });
+
+        res.status(201).json({ correction });
+    } catch (error) {
+        console.error('Failed to create correction request:', error);
+        res.status(500).json({ message: 'Internal server error while creating correction request' });
+    }
+};
+
+export const getMyCorrectionRequests = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const corrections = await prisma.timerCorrectionRequest.findMany({
+            where: { user_id },
+            orderBy: { created_at: 'desc' },
+            take: 100,
+        });
+        res.status(200).json({ corrections });
+    } catch (error) {
+        console.error('Failed to list correction requests:', error);
+        res.status(500).json({ message: 'Internal server error while loading correction requests' });
+    }
+};
+
+export const getCorrectionRequestsForReview = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const corrections = await prisma.timerCorrectionRequest.findMany({
+            orderBy: { created_at: 'desc' },
+            take: 200,
+            include: {
+                user: { select: { id: true, email: true, first_name: true, last_name: true } },
+            },
+        });
+        res.status(200).json({ corrections });
+    } catch (error) {
+        console.error('Failed to list correction requests for review:', error);
+        res.status(500).json({ message: 'Internal server error while loading correction requests' });
+    }
+};
+
+export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const reviewerId = requireUserId(req);
+        const correctionId = String(req.params.correctionId);
+        const action = req.body?.action;
+        const reviewerNote = typeof req.body?.reviewer_note === 'string' && req.body.reviewer_note.trim()
+            ? req.body.reviewer_note.trim()
+            : null;
+
+        if (!['approve', 'reject'].includes(action)) {
+            res.status(400).json({ message: 'Invalid correction review action.' });
+            return;
+        }
+
+        const correction = await prisma.timerCorrectionRequest.findUnique({ where: { id: correctionId } });
+        if (!correction) {
+            res.status(404).json({ message: 'Correction request not found.' });
+            return;
+        }
+
+        if (correction.status !== 'PENDING') {
+            res.status(400).json({ message: 'Correction request has already been reviewed.' });
+            return;
+        }
+
+        const nextStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
+        const updated = await prisma.$transaction(async (tx) => {
+            const reviewed = await tx.timerCorrectionRequest.update({
+                where: { id: correction.id },
+                data: {
+                    status: nextStatus,
+                    reviewed_by: reviewerId,
+                    reviewed_at: new Date(),
+                    reviewer_note: reviewerNote,
+                },
+            });
+
+            if (action === 'approve') {
+                const conflict = await tx.timeEntry.findFirst({
+                    where: {
+                        user_id: correction.user_id,
+                        status: 'approved',
+                        start_time: { lt: correction.requested_end_time },
+                        end_time: { gt: correction.requested_start_time },
+                    },
+                });
+
+                if (conflict) {
+                    throw new Error('Correction request overlaps an approved time entry.');
+                }
+
+                await tx.timeEntry.create({
+                    data: {
+                        user_id: correction.user_id,
+                        project_id: null,
+                        task_description: 'Approved timer correction',
+                        start_time: correction.requested_start_time,
+                        end_time: correction.requested_end_time,
+                        duration: correction.requested_duration_seconds,
+                        entry_type: 'manual',
+                        notes: [correction.reason, correction.work_note, reviewerNote].filter(Boolean).join('\n\n') || null,
+                        status: 'approved',
+                    },
+                });
+            }
+
+            return reviewed;
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                user_id: reviewerId,
+                action: action === 'approve' ? 'correction_request_approved' : 'correction_request_rejected',
+                resource: 'timer_correction_request',
+                metadata: {
+                    correction_request_id: correction.id,
+                    target_user_id: correction.user_id,
+                    reviewer_note: reviewerNote,
+                },
+            },
+        });
+
+        await prisma.notification.create({
+            data: {
+                user_id: correction.user_id,
+                message: `Your timer correction request was ${nextStatus.toLowerCase()}.`,
+                type: 'correction_request_reviewed',
+            },
+        });
+
+        res.status(200).json({ correction: updated });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Internal server error while reviewing correction request';
+        console.error('Failed to review correction request:', error);
+        res.status(message.includes('overlaps') ? 409 : 500).json({ message });
+    }
+};
+
 export const getMyEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
@@ -474,7 +675,8 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
 
         // Validate recency: reject timestamps older than 2× heartbeat interval or in the future (clock skew).
         // Prevents clients from sending stale or forged activity timestamps.
-        const heartbeatIntervalMs = env.heartbeatIntervalMinutes * 60_000;
+        const policy = await getGlobalTimerPolicy();
+        const heartbeatIntervalMs = policy.heartbeatIntervalSeconds * 1000;
         const MAX_ACTIVITY_AGE_MS = 2 * heartbeatIntervalMs;
         let validLastClientActivityAt: Date | null =
             lastClientActivityAt && !Number.isNaN(lastClientActivityAt.getTime())
@@ -516,6 +718,8 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
                     active_timer_id: activeTimer.id,
                     received_at: requestReceivedAt.toISOString(),
                 },
+                heartbeat_miss_count: 0,
+                idle_warning_shown_at: null,
             },
         });
 

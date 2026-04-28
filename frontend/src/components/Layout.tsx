@@ -131,6 +131,42 @@ const Layout: React.FC = () => {
         emitTimeEntryChanged();
     };
 
+    const handleStillWorking = async () => {
+        try {
+            const token = getStoredToken();
+            if (token) {
+                await api.post('/timers/ping', {
+                    last_activity_at: new Date().toISOString(),
+                    visibility_state: typeof document === 'undefined' ? 'visible' : document.visibilityState,
+                    has_focus: typeof document === 'undefined' ? true : document.hasFocus(),
+                });
+            }
+        } catch {
+            // state reconciles on the next heartbeat
+        }
+        setIdleWarning(null);
+        window.dispatchEvent(new CustomEvent(TIMER_IDLE_RESUMED_EVENT));
+        emitTimeEntryChanged();
+    };
+
+    const handlePauseNow = async () => {
+        try {
+            const token = getStoredToken();
+            if (token) {
+                await api.post('/timers/pause');
+            }
+        } catch {
+            // state reconciles on the next heartbeat
+        }
+        setIdleWarning(null);
+        emitTimeEntryChanged();
+    };
+
+    const handleAddNote = () => {
+        setIdleWarning(null);
+        navigate('/timer?correction=1');
+    };
+
     const handleDiscardTimer = async () => {
         try {
             const token = getStoredToken();
@@ -210,34 +246,41 @@ const Layout: React.FC = () => {
             <OnboardingTour key={tourKey} />
             <HelpChatbot />
 
-            {/* Idle warning dialog — shown when frontend detects 5+ min of inactivity */}
+            {/* Idle warning dialog — shown before server idle pause thresholds are reached */}
             <AccessibleDialog
                 isOpen={Boolean(idleWarning)}
                 onClose={() => setIdleWarning(null)}
-                ariaLabel="Timer paused"
+                ariaLabel="Timer idle warning"
                 panelClassName="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
             >
                 <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Timer Paused</p>
-                    <h2 className="text-xl font-bold text-slate-900">Your timer has been paused</h2>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Idle Warning</p>
+                    <h2 className="text-xl font-bold text-slate-900">Still working?</h2>
                     <p className="text-sm text-slate-600">
                         No activity detected for {idleWarning?.inactiveForMinutes ?? 0} minute(s).
-                        Your time up to this point is saved — resume when you're back.
+                        Your timer may pause soon if activity does not resume.
                     </p>
-                    <div className="flex gap-3 justify-end">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                         <button
                             type="button"
                             className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600"
-                            onClick={handleDiscardTimer}
+                            onClick={handleAddNote}
                         >
-                            I'm done for now
+                            Add note
+                        </button>
+                        <button
+                            type="button"
+                            className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                            onClick={handlePauseNow}
+                        >
+                            Pause now
                         </button>
                         <button
                             type="button"
                             className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                            onClick={handleResumeTimer}
+                            onClick={handleStillWorking}
                         >
-                            Resume Timer
+                            I'm still working
                         </button>
                     </div>
                 </div>

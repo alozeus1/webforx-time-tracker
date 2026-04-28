@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import api from '../services/api';
 import {
     TIMER_IDLE_WARNING_EVENT,
@@ -37,6 +37,8 @@ describe('useActiveTimerHeartbeat', () => {
     });
 
     afterEach(() => {
+        cleanup();
+        vi.clearAllTimers();
         vi.useRealTimers();
     });
 
@@ -46,7 +48,7 @@ describe('useActiveTimerHeartbeat', () => {
                 entries: [],
                 activeTimer: {
                     id: 'timer-1',
-                    start_time: new Date('2026-03-28T11:55:00.000Z').toISOString(),
+                    start_time: new Date().toISOString(),
                     task_description: 'Focus work',
                     project_id: null,
                     project: null,
@@ -95,6 +97,7 @@ describe('useActiveTimerHeartbeat', () => {
 
     it('emits a local idle warning event before server auto-stop windows elapse', async () => {
         vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-04-28T12:00:00.000Z'));
         const idleSpy = vi.fn();
         window.addEventListener(TIMER_IDLE_WARNING_EVENT, idleSpy as EventListener);
 
@@ -103,7 +106,7 @@ describe('useActiveTimerHeartbeat', () => {
                 entries: [],
                 activeTimer: {
                     id: 'timer-1',
-                    start_time: new Date('2026-03-28T11:55:00.000Z').toISOString(),
+                    start_time: new Date('2026-04-28T11:55:00.000Z').toISOString(),
                     task_description: 'Focus work',
                     project_id: null,
                     project: null,
@@ -112,11 +115,14 @@ describe('useActiveTimerHeartbeat', () => {
         });
         mockedApi.post.mockResolvedValue({ data: { message: 'Ping successful' } });
 
-        render(<HeartbeatHarness />);
-        await Promise.resolve();
+        await act(async () => {
+            render(<HeartbeatHarness />);
+            await Promise.resolve();
+        });
         expect(mockedApi.get).toHaveBeenCalledWith('/timers/me');
-        vi.advanceTimersByTime(15 * 60 * 1000 + 30_000);
-        await Promise.resolve();
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 30_000);
+        });
 
         expect(idleSpy).toHaveBeenCalled();
         window.removeEventListener(TIMER_IDLE_WARNING_EVENT, idleSpy as EventListener);

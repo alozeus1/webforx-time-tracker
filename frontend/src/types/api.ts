@@ -106,6 +106,35 @@ export interface TimerEntriesResponse {
     activeTimer?: ActiveTimerSummary | null;
 }
 
+export interface TimerCorrectionRequestSummary {
+    id: string;
+    user_id: string;
+    timer_session_id?: string | null;
+    requested_start_time: string;
+    requested_end_time: string;
+    requested_duration_seconds: number;
+    reason: string;
+    work_note?: string | null;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+    reviewed_by?: string | null;
+    reviewed_at?: string | null;
+    reviewer_note?: string | null;
+    created_at: string;
+    updated_at: string;
+    user?: UserSummary;
+}
+
+export interface TimerPolicySummary {
+    heartbeatIntervalSeconds: number;
+    missedHeartbeatWarningThreshold: number;
+    missedHeartbeatPauseThreshold: number;
+    idleWarningAfterMinutes: number;
+    idlePauseAfterMinutes: number;
+    maxSessionDurationHours: number;
+    allowResumeAfterIdlePause: boolean;
+    requireNoteOnResumeAfterMinutes: number;
+}
+
 export interface CalendarEventSuggestion {
     id: string;
     title: string;

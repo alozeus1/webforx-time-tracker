@@ -106,6 +106,7 @@ export const pauseActiveTimer = async (userId: string, reason: string): Promise<
         data: {
             is_paused: true,
             paused_at: new Date(),
+            pause_reason: reason,
         },
     });
 
@@ -140,7 +141,12 @@ export const resumeActiveTimer = async (userId: string): Promise<number> => {
         data: {
             is_paused: false,
             paused_at: null,
+            pause_reason: null,
             paused_duration_seconds: totalPausedSeconds,
+            last_active_ping: now,
+            last_heartbeat_at: now,
+            last_client_activity_at: now,
+            heartbeat_miss_count: 0,
         },
     });
 

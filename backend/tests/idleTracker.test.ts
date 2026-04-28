@@ -3,6 +3,10 @@ jest.mock('../src/config/db', () => ({
     default: {
         activeTimer: {
             findMany: jest.fn(),
+            update: jest.fn(),
+        },
+        timerPolicyConfig: {
+            findFirst: jest.fn(),
         },
         notification: {
             findFirst: jest.fn(),
@@ -58,6 +62,8 @@ describe('checkIdleTimers', () => {
         (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
         (prisma.notification.create as jest.Mock).mockResolvedValue({});
         (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
+        (prisma.activeTimer.update as jest.Mock).mockResolvedValue({});
+        (prisma.timerPolicyConfig.findFirst as jest.Mock).mockResolvedValue(null);
     });
 
     // ─── Idle warning ──────────────────────────────────────────────────────────
@@ -94,9 +100,9 @@ describe('checkIdleTimers', () => {
         expect(prisma.notification.create).not.toHaveBeenCalled();
     });
 
-    // ─── Auto-stop (browser visible, fresh ping, stale activity) ──────────────
+    // ─── Idle pause (browser visible, fresh ping, stale activity) ──────────────
 
-    it('auto-stops a visible-browser timer when client activity is older than auto-stop threshold', async () => {
+    it('pauses a visible-browser timer when client activity is older than idle pause threshold', async () => {
         // heartbeat 5min ago (fresh, pingIsTooOld=false) → browserInactive=false
         // clientActivity 11min ago → > autoStopThreshold (10min) → STOP
         (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
@@ -109,11 +115,8 @@ describe('checkIdleTimers', () => {
 
         await checkIdleTimers();
 
-        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
-            userId: 'user-1',
-            reason: 'idle_timeout',
-        }));
-        expect(pauseActiveTimer).not.toHaveBeenCalled();
+        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'idle_timeout');
+        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
     });
 
     // ─── Browser inactive → pause ──────────────────────────────────────────────
@@ -135,24 +138,20 @@ describe('checkIdleTimers', () => {
 
     // ─── Ping-frequency enforcement ────────────────────────────────────────────
 
-    it('auto-stops timer when ping is stale (> 2× heartbeat interval) even if browser was reported visible', async () => {
-        // heartbeat 7min ago → pingIsTooOld (> 6min), browser signal is stale
-        // clientActivity 11min ago → > autoStopThreshold (10min) → enters auto-stop block → STOP
+    it('pauses timer when missed heartbeat tolerance is exceeded', async () => {
+        // heartbeat 16min ago means 4 missed heartbeats at the 3min interval.
         (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
             ...baseTimer,
-            last_heartbeat_at: ago(7 * MIN),
-            last_client_activity_at: ago(11 * MIN),
+            last_heartbeat_at: ago(16 * MIN),
+            last_client_activity_at: ago(1 * MIN),
             client_visibility: 'visible',
             client_has_focus: true,
         }]);
 
         await checkIdleTimers();
 
-        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
-            userId: 'user-1',
-            reason: 'idle_timeout',
-        }));
-        expect(pauseActiveTimer).not.toHaveBeenCalled();
+        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'missed_heartbeat_threshold');
+        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
     });
 
     // ─── Max pause duration ────────────────────────────────────────────────────
