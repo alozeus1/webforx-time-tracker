@@ -136,9 +136,12 @@ export const handleGoogleCalendarCallback = async (req: AuthRequest, res: Respon
             },
         });
 
+        const user = await prisma.user.findUnique({ where: { id: parsedState.userId }, select: { organization_id: true } });
+
         await prisma.auditLog.create({
             data: {
                 user_id: parsedState.userId,
+                organization_id: user!.organization_id,
                 action: 'calendar_connected',
                 resource: 'google_calendar',
                 metadata: {
@@ -184,7 +187,7 @@ export const getCalendarEvents = async (req: AuthRequest, res: Response): Promis
         dayEnd.setHours(23, 59, 59, 999);
 
         const activeProjects = await prisma.project.findMany({
-            where: { is_active: true },
+            where: { is_active: true, organization_id: req.user!.organization_id },
             select: { name: true },
         });
         const projectNames = activeProjects.map((project) => project.name);
@@ -252,9 +255,12 @@ export const disconnectGoogleCalendar = async (req: AuthRequest, res: Response):
             where: { user_id: userId },
         });
 
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { organization_id: true } });
+
         await prisma.auditLog.create({
             data: {
                 user_id: userId,
+                organization_id: user!.organization_id,
                 action: 'calendar_disconnected',
                 resource: 'google_calendar',
                 metadata: {

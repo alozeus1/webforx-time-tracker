@@ -66,13 +66,13 @@ const normalizeManualLineItems = (value: unknown): NormalizedLineItem[] | null =
     return normalized;
 };
 
-const buildLineItemsFromEntries = async (timeEntryIds: string[]): Promise<NormalizedLineItem[] | null> => {
+const buildLineItemsFromEntries = async (timeEntryIds: string[], organizationId: string): Promise<NormalizedLineItem[] | null> => {
     if (timeEntryIds.length === 0) {
         return null;
     }
 
     const entries = await prisma.timeEntry.findMany({
-        where: { id: { in: timeEntryIds }, is_billable: true },
+        where: { id: { in: timeEntryIds }, is_billable: true, organization_id: organizationId },
         include: { user: { select: { hourly_rate: true } } },
     });
 
@@ -102,7 +102,7 @@ export const listInvoices = async (req: AuthRequest, res: Response): Promise<voi
         const status = typeof req.query.status === 'string' ? req.query.status : undefined;
         const projectId = typeof req.query.project_id === 'string' ? req.query.project_id : undefined;
 
-        const where: Record<string, unknown> = {};
+        const where: Record<string, unknown> = { organization_id: req.user!.organization_id };
         if (!canViewAll) where.user_id = userId;
         if (status) where.status = status;
         if (projectId) where.project_id = projectId;
@@ -161,7 +161,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
                 ? time_entry_ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
                 : [];
 
-            normalizedLineItems = await buildLineItemsFromEntries(timeEntryIds);
+            normalizedLineItems = await buildLineItemsFromEntries(timeEntryIds, req.user!.organization_id);
         }
 
         if (!normalizedLineItems || normalizedLineItems.length === 0) {
@@ -191,6 +191,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
                     client_email: typeof client_email === 'string' && client_email.trim() ? client_email.trim() : null,
                     project_id: typeof project_id === 'string' && project_id.trim() ? project_id.trim() : null,
                     user_id: userId,
+                    organization_id: req.user!.organization_id,
                     subtotal,
                     tax_rate: taxRateValue,
                     total,
@@ -213,8 +214,8 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
             return createdInvoice;
         });
 
-        const fullInvoice = await prisma.invoice.findUnique({
-            where: { id: invoice.id },
+        const fullInvoice = await prisma.invoice.findFirst({
+            where: { id: invoice.id, organization_id: req.user!.organization_id },
             include: { line_items: true, project: { select: { name: true } } },
         });
 
@@ -245,6 +246,7 @@ export const createAutopilotInvoice = async (req: AuthRequest, res: Response): P
             status: 'approved',
             is_billable: true,
             invoice_line_items: { none: {} },
+            organization_id: req.user!.organization_id,
         };
 
         if (projectId) {
@@ -295,6 +297,7 @@ export const createAutopilotInvoice = async (req: AuthRequest, res: Response): P
                     client_name: resolvedClientName,
                     project_id: resolvedProjectId,
                     user_id: userId,
+                    organization_id: req.user!.organization_id,
                     subtotal,
                     tax_rate: taxRateValue,
                     total,
@@ -316,8 +319,8 @@ export const createAutopilotInvoice = async (req: AuthRequest, res: Response): P
             return createdInvoice;
         });
 
-        const fullInvoice = await prisma.invoice.findUnique({
-            where: { id: invoice.id },
+        const fullInvoice = await prisma.invoice.findFirst({
+            where: { id: invoice.id, organization_id: req.user!.organization_id },
             include: {
                 project: { select: { name: true } },
                 line_items: true,
@@ -337,8 +340,8 @@ export const createAutopilotInvoice = async (req: AuthRequest, res: Response): P
 export const getInvoice = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const invoiceId = req.params.id as string;
-        const invoice = await prisma.invoice.findUnique({
-            where: { id: invoiceId },
+        const invoice = await prisma.invoice.findFirst({
+            where: { id: invoiceId, organization_id: req.user!.organization_id },
             include: {
                 project: { select: { name: true } },
                 creator: { select: { first_name: true, last_name: true, email: true } },
@@ -371,7 +374,7 @@ export const updateInvoiceStatus = async (req: AuthRequest, res: Response): Prom
         if (status === 'sent') data.issued_at = new Date();
         if (status === 'paid') data.paid_at = new Date();
 
-        const updated = await prisma.invoice.update({ where: { id: invoiceId }, data });
+        const updated = await prisma.invoice.update({ where: { id: invoiceId, organization_id: req.user!.organization_id }, data });
         res.status(200).json(updated);
     } catch (error) {
         if ((error as { code?: string }).code === 'P2025') {
@@ -386,7 +389,7 @@ export const updateInvoiceStatus = async (req: AuthRequest, res: Response): Prom
 export const deleteInvoice = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const invoiceId = req.params.id as string;
-        const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+        const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, organization_id: req.user!.organization_id } });
         if (!invoice) {
             sendApiError(res, 404, 'INVOICE_NOT_FOUND', 'Invoice not found');
             return;
@@ -395,7 +398,7 @@ export const deleteInvoice = async (req: AuthRequest, res: Response): Promise<vo
             sendApiError(res, 400, 'VALIDATION_ERROR', 'Only draft invoices can be deleted');
             return;
         }
-        await prisma.invoice.delete({ where: { id: invoiceId } });
+        await prisma.invoice.delete({ where: { id: invoiceId, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Invoice deleted' });
     } catch (error) {
         console.error('Failed to delete invoice:', error);

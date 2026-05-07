@@ -21,7 +21,12 @@ export const checkIdleTimers = async () => {
             const activeForMs = now.getTime() - startedAt.getTime();
 
             if (activeForMs >= maxActiveTimerMs) {
-                await stopActiveTimerWithReason({ userId: timer.user_id, reason: 'active_duration_limit', triggeredAt: now });
+                await stopActiveTimerWithReason({
+                    userId: timer.user_id,
+                    reason: 'active_duration_limit',
+                    triggeredAt: now,
+                    organizationId: timer.organization_id,
+                });
                 console.log(`[Worker] Timer auto-stopped (active_duration_limit, ${Math.round(activeForMs / 3600000)}h active) for user ${timer.user_id}`);
                 continue;
             }
@@ -33,7 +38,12 @@ export const checkIdleTimers = async () => {
                 if (timer.paused_at) {
                     const pausedForMs = now.getTime() - new Date(timer.paused_at).getTime();
                     if (pausedForMs >= maxPauseMs) {
-                        await stopActiveTimerWithReason({ userId: timer.user_id, reason: 'pause_expired', triggeredAt: now });
+                        await stopActiveTimerWithReason({
+                            userId: timer.user_id,
+                            reason: 'pause_expired',
+                            triggeredAt: now,
+                            organizationId: timer.organization_id,
+                        });
                         console.log(`[Worker] Timer auto-stopped (pause_expired, ${Math.round(pausedForMs / 3600000)}h paused) for user ${timer.user_id}`);
                     }
                 }
@@ -68,7 +78,7 @@ export const checkIdleTimers = async () => {
                     : (timer.client_visibility === 'hidden' || timer.client_has_focus === false)
                         ? 'browser_inactive'
                         : 'idle_timeout';
-                await pauseActiveTimer(timer.user_id, reason);
+                await pauseActiveTimer(timer.user_id, timer.organization_id, reason);
                 console.log(`[Worker] Timer paused (${reason}) for user ${timer.user_id}`);
                 continue;
             }
@@ -76,6 +86,7 @@ export const checkIdleTimers = async () => {
             if (clientActivityAgeMs >= warningThresholdMs || missedHeartbeats >= policy.missedHeartbeatWarningThreshold) {
                 const existingNote = await prisma.notification.findFirst({
                     where: {
+                        organization_id: timer.organization_id,
                         user_id: timer.user_id,
                         type: 'idle_warning',
                         deleted_at: null,
@@ -89,6 +100,7 @@ export const checkIdleTimers = async () => {
                     await prisma.notification.create({
                         data: {
                             user_id: timer.user_id,
+                            organization_id: timer.organization_id,
                             message: `You have an active timer running but appear inactive. If activity does not resume, it will be paused automatically.`,
                             type: 'idle_warning',
                         }
@@ -100,6 +112,7 @@ export const checkIdleTimers = async () => {
                     await prisma.auditLog.create({
                         data: {
                             user_id: timer.user_id,
+                            organization_id: timer.organization_id,
                             action: 'timer_idle_warning_issued',
                             resource: 'active_timer',
                             metadata: {

@@ -45,6 +45,7 @@ export const checkBurnout = async () => {
                 await prisma.notification.create({
                     data: {
                         user_id: user.id,
+                        organization_id: user.organization_id,
                         message: `Burnout Alert: You have logged ${totalHours.toFixed(1)} hours in the last 7 days. Please prioritize rest and taking breaks.`,
                         type: 'burnout_alert',
                     }

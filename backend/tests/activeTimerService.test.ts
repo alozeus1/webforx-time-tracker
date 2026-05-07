@@ -30,7 +30,7 @@ describe('pauseActiveTimer', () => {
         (prisma.notification.create as jest.Mock).mockResolvedValue({});
         (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
-        await pauseActiveTimer('user-1', 'browser_inactive');
+        await pauseActiveTimer('user-1', 'org-1', 'browser_inactive');
 
         expect(prisma.activeTimer.update).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -50,7 +50,7 @@ describe('pauseActiveTimer', () => {
             id: 'timer-1', user_id: 'user-1', is_paused: true,
         });
 
-        await pauseActiveTimer('user-1', 'browser_inactive');
+        await pauseActiveTimer('user-1', 'org-1', 'browser_inactive');
 
         expect(prisma.activeTimer.update).not.toHaveBeenCalled();
     });
@@ -58,7 +58,7 @@ describe('pauseActiveTimer', () => {
     it('is a no-op if no active timer exists', async () => {
         (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
 
-        await pauseActiveTimer('user-1', 'browser_inactive');
+        await pauseActiveTimer('user-1', 'org-1', 'browser_inactive');
 
         expect(prisma.activeTimer.update).not.toHaveBeenCalled();
     });
@@ -80,7 +80,7 @@ describe('resumeActiveTimer', () => {
         (prisma.activeTimer.update as jest.Mock).mockResolvedValue({});
         (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
-        const totalPaused = await resumeActiveTimer('user-1');
+        const totalPaused = await resumeActiveTimer('user-1', 'org-1');
 
         // 60 existing + ~120 new = ~180
         expect(totalPaused).toBeGreaterThanOrEqual(170);
@@ -99,7 +99,7 @@ describe('resumeActiveTimer', () => {
             id: 'timer-1', user_id: 'user-1', is_paused: false, paused_at: null, paused_duration_seconds: 0,
         });
 
-        const result = await resumeActiveTimer('user-1');
+        const result = await resumeActiveTimer('user-1', 'org-1');
         expect(result).toBe(0);
         expect(prisma.activeTimer.update).not.toHaveBeenCalled();
     });

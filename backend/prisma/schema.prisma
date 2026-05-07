@@ -10,14 +10,49 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Organization {
+  id            String   @id @default(uuid())
+  name          String
+  slug          String   @unique
+  billing_email String?
+  plan          String   @default("free") // free, pro, enterprise
+  status        String   @default("active") // active, suspended, archived
+  settings      Json     @default("{}")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  users             User[]
+  roles             Role[]
+  projects          Project[]
+  time_entries      TimeEntry[]
+  active_timers     ActiveTimer[]
+  timer_correction_requests TimerCorrectionRequest[]
+  notifications     Notification[]
+  audit_logs        AuditLog[]
+  auth_events       AuthEvent[]
+  integrations      Integration[]
+  webhooks          WebhookSubscription[]
+  templates         ProjectTemplate[]
+  scheduled_reports ScheduledReport[]
+  invoices          Invoice[]
+  tags              Tag[]
+  timer_policies    TimerPolicyConfig[]
+  report_caches     ReportCache[]
+  access_requests   AccessRequest[]
+
+  @@index([status, created_at])
+}
+
 model User {
   id            String   @id @default(uuid())
-  email         String   @unique
+  email         String
   password_hash String
   first_name    String
   last_name     String
   role          Role     @relation(fields: [role_id], references: [id])
   role_id       String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   is_active     Boolean  @default(true)
   hourly_rate   Decimal? @default(0.00) @db.Decimal(10, 2)
   oidc_provider String?
@@ -41,20 +76,31 @@ model User {
   invoices              Invoice[]
   project_templates     ProjectTemplate[]
   scheduled_reports     ScheduledReport[]
+
+  @@unique([email, organization_id])
+  @@index([organization_id, is_active])
+  @@index([organization_id, role_id])
 }
 
 model Role {
   id          String @id @default(uuid())
-  name        String @unique // Intern, Employee, Manager, Admin
+  name        String
   permissions Json   @default("[]")
   users       User[]
+  organization_id String?
+  organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([name, organization_id])
+  @@index([organization_id])
 }
 
 model Project {
   id            String   @id @default(uuid())
-  name          String   @unique
+  name          String
   description   String?
   logo_url      String?
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   is_active     Boolean  @default(true)
   budget_hours  Int?
   budget_amount Decimal? @db.Decimal(10, 2)
@@ -64,6 +110,9 @@ model Project {
   time_entries  TimeEntry[]
   active_timers ActiveTimer[]
   invoices      Invoice[]
+
+  @@unique([name, organization_id])
+  @@index([organization_id, is_active])
 }
 
 model ProjectMember {
@@ -81,6 +130,8 @@ model TimeEntry {
   id               String   @id @default(uuid())
   user_id          String
   project_id       String?
+  organization_id  String
+  organization     Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   task_description String
   start_time       DateTime
   end_time         DateTime
@@ -98,12 +149,18 @@ model TimeEntry {
   project            Project?          @relation(fields: [project_id], references: [id])
   tags               TimeEntryTag[]
   invoice_line_items InvoiceLineItem[]
+
+  @@index([organization_id, user_id, start_time])
+  @@index([organization_id, project_id, start_time])
+  @@index([organization_id, status, created_at])
 }
 
 model ActiveTimer {
   id               String    @id @default(uuid())
   user_id          String    @unique
   project_id       String?
+  organization_id  String
+  organization     Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   task_description String
   start_time       DateTime
   persisted_state  Json      @default("{}")
@@ -122,11 +179,15 @@ model ActiveTimer {
 
   user    User     @relation(fields: [user_id], references: [id])
   project Project? @relation(fields: [project_id], references: [id])
+
+  @@index([organization_id, user_id])
 }
 
 model TimerCorrectionRequest {
   id                         String   @id @default(uuid())
   user_id                    String
+  organization_id            String
+  organization               Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   timer_session_id           String?
   requested_start_time       DateTime
   requested_end_time         DateTime
@@ -142,13 +203,15 @@ model TimerCorrectionRequest {
 
   user User @relation(fields: [user_id], references: [id])
 
-  @@index([user_id, status, created_at])
+  @@index([organization_id, user_id, status, created_at])
 }
 
 model TimerPolicyConfig {
   id                                String   @id @default(uuid())
-  scope_type                        String   @default("GLOBAL")
+  scope_type                        String   @default("ORGANIZATION") // "GLOBAL" | "ORGANIZATION"
   scope_id                          String?
+  organization_id                   String?
+  organization                      Organization? @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   heartbeat_interval_seconds         Int      @default(180)
   missed_heartbeat_warning_threshold Int      @default(3)
   missed_heartbeat_pause_threshold   Int      @default(4)
@@ -163,12 +226,14 @@ model TimerPolicyConfig {
   updated_at                        DateTime @updatedAt
 
   @@unique([scope_type, scope_id])
-  @@index([scope_type, scope_id])
+  @@index([organization_id])
 }
 
 model Notification {
   id         String   @id @default(uuid())
   user_id    String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   message    String
   type       String // "reminder" or "alert"
   is_read    Boolean  @default(false)
@@ -178,24 +243,31 @@ model Notification {
 
   user User @relation(fields: [user_id], references: [id])
 
-  @@index([user_id, deleted_at, is_read, created_at])
+  @@index([organization_id, user_id, deleted_at, is_read, created_at])
 }
 
 model AuditLog {
   id         String   @id @default(uuid())
   user_id    String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   action     String
   resource   String
   metadata   Json     @default("{}")
   created_at DateTime @default(now())
 
   user User @relation(fields: [user_id], references: [id])
+
+  @@index([organization_id, created_at])
+  @@index([organization_id, user_id, created_at])
 }
 
 model AuthEvent {
   id         String   @id @default(uuid())
   user_id    String?
   email      String?
+  organization_id String?
+  organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
   event_type String
   outcome    String
   reason     String?
@@ -206,6 +278,7 @@ model AuthEvent {
 
   user User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
 
+  @@index([organization_id, created_at])
   @@index([user_id, created_at])
   @@index([email, created_at])
   @@index([event_type, outcome, created_at])
@@ -213,9 +286,14 @@ model AuthEvent {
 
 model Integration {
   id        String  @id @default(uuid())
-  type      String  @unique // "taiga" or "mattermost"
-  config    String // Encrypted JSON
+  type      String  // "taiga" or "mattermost"
+  config    String  // Encrypted JSON
   is_active Boolean @default(true)
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@unique([type, organization_id])
+  @@index([organization_id])
 }
 
 model CalendarConnection {
@@ -247,17 +325,26 @@ model ReportCache {
   report_type  String
   parameters   Json
   data         Json
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   generated_at DateTime @default(now())
   expires_at   DateTime
+
+  @@index([organization_id, report_type, generated_at])
 }
 
 model Tag {
   id         String   @id @default(uuid())
-  name       String   @unique
+  name       String
   color      String   @default("#6366f1")
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   created_at DateTime @default(now())
 
   time_entries TimeEntryTag[]
+
+  @@unique([name, organization_id])
+  @@index([organization_id])
 }
 
 model TimeEntryTag {
@@ -277,6 +364,8 @@ model Invoice {
   client_email   String?
   project_id     String?
   user_id        String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   status         String    @default("draft") // draft, sent, paid
   subtotal       Decimal   @db.Decimal(10, 2)
   tax_rate       Decimal?  @db.Decimal(5, 2)
@@ -291,6 +380,8 @@ model Invoice {
   project    Project?          @relation(fields: [project_id], references: [id])
   creator    User              @relation(fields: [user_id], references: [id])
   line_items InvoiceLineItem[]
+
+  @@index([organization_id, status, created_at])
 }
 
 model InvoiceLineItem {
@@ -308,16 +399,21 @@ model InvoiceLineItem {
 
 model ProjectTemplate {
   id               String   @id @default(uuid())
-  name             String   @unique
+  name             String
   description      String?
   default_billable Boolean  @default(true)
   budget_hours     Int?
   budget_amount    Decimal? @db.Decimal(10, 2)
   tag_ids          Json     @default("[]")
   created_by       String
+  organization_id  String
+  organization     Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   created_at       DateTime @default(now())
 
   creator User @relation(fields: [created_by], references: [id])
+
+  @@unique([name, organization_id])
+  @@index([organization_id])
 }
 
 model WebhookSubscription {
@@ -326,12 +422,18 @@ model WebhookSubscription {
   events     Json     @default("[]")
   secret     String
   is_active  Boolean  @default(true)
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   created_at DateTime @default(now())
+
+  @@index([organization_id, is_active])
 }
 
 model ScheduledReport {
   id           String    @id @default(uuid())
   user_id      String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   frequency    String // weekly, monthly
   day_of_week  Int?
   recipients   Json      @default("[]")
@@ -341,6 +443,8 @@ model ScheduledReport {
   created_at   DateTime  @default(now())
 
   user User @relation(fields: [user_id], references: [id])
+
+  @@index([organization_id, is_active])
 }
 
 model AccessRequest {
@@ -351,6 +455,10 @@ model AccessRequest {
   team_size  String
   details    String?
   status     String   @default("pending")
+  organization_id String?
+  organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
+
+  @@index([organization_id, status, created_at])
 }

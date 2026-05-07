@@ -52,7 +52,7 @@ export const resetDemoData = async (_req: Request, res: Response): Promise<void>
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
 
     try {
-        const demoUser = await prisma.user.findUnique({ where: { email: DEMO_EMAIL } });
+        const demoUser = await prisma.user.findFirst({ where: { email: DEMO_EMAIL } });
         if (!demoUser) {
             res.status(200).json({ status: 'skipped', message: 'Demo user not found.' });
             return;

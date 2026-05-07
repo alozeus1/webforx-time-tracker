@@ -27,7 +27,7 @@ export const listScheduledReports = async (req: AuthRequest, res: Response): Pro
         const canViewAll = role === 'Manager' || role === 'Admin';
 
         const reports = await prisma.scheduledReport.findMany({
-            where: canViewAll ? undefined : { user_id: userId },
+            where: canViewAll ? { organization_id: req.user!.organization_id } : { user_id: userId, organization_id: req.user!.organization_id },
             orderBy: { created_at: 'desc' },
             include: { user: { select: { first_name: true, last_name: true, email: true } } },
         });
@@ -80,6 +80,7 @@ export const createScheduledReport = async (req: AuthRequest, res: Response): Pr
                 day_of_week: frequency === 'weekly' ? parsedDayOfWeek : null,
                 recipients: normalizedRecipients,
                 report_type: typeof report_type === 'string' && report_type.trim() ? report_type.trim() : 'summary',
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -126,7 +127,7 @@ export const updateScheduledReport = async (req: AuthRequest, res: Response): Pr
 
         const reportId = req.params.id as string;
         const report = await prisma.scheduledReport.update({
-            where: { id: reportId },
+            where: { id: reportId, organization_id: req.user!.organization_id },
             data,
         });
 
@@ -144,7 +145,7 @@ export const updateScheduledReport = async (req: AuthRequest, res: Response): Pr
 export const deleteScheduledReport = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const reportId = req.params.id as string;
-        await prisma.scheduledReport.delete({ where: { id: reportId } });
+        await prisma.scheduledReport.delete({ where: { id: reportId, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Scheduled report deleted' });
     } catch (error) {
         if ((error as { code?: string }).code === 'P2025') {

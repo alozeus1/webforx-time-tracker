@@ -37,6 +37,7 @@ class NotificationWorker {
                 await prisma.notification.create({
                     data: {
                         user_id: user.id,
+                        organization_id: user.organization_id,
                         message: 'Good morning! Remember to start tracking your time for today.',
                         type: 'SYSTEM',
                     }
@@ -58,6 +59,7 @@ class NotificationWorker {
                 await prisma.notification.create({
                     data: {
                         user_id: user.id,
+                        organization_id: user.organization_id,
                         message: 'Don\'t forget to review and submit your timesheet for this week.',
                         type: 'SYSTEM',
                     }
@@ -76,13 +78,15 @@ class NotificationWorker {
                 where: {
                     is_active: true,
                     role: { name: { in: ['Admin', 'Manager'] } }
-                }
+                },
+                include: { role: true }
             });
 
             for (const admin of admins) {
                 await prisma.notification.create({
                     data: {
                         user_id: admin.id,
+                        organization_id: admin.organization_id,
                         message: 'The daily organization timesheet summary is ready.',
                         type: 'REPORT',
                     }

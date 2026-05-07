@@ -50,12 +50,14 @@ const enforceTimerGuardrails = async ({
     visibilityState,
     hasFocus,
     lastClientActivityAtOverride,
+    organizationId,
 }: {
     timer: GuardrailActiveTimer;
     now?: Date;
     visibilityState?: string | null;
     hasFocus?: boolean | null;
     lastClientActivityAtOverride?: Date | null;
+    organizationId: string;
 }): Promise<'none' | 'paused' | 'stopped'> => {
     const checkTime = now ?? new Date();
     const policy = await getGlobalTimerPolicy();
@@ -72,6 +74,7 @@ const enforceTimerGuardrails = async ({
             userId: timer.user_id,
             reason: 'active_duration_limit',
             triggeredAt: checkTime,
+            organizationId,
         });
         return 'stopped';
     }
@@ -84,6 +87,7 @@ const enforceTimerGuardrails = async ({
                     userId: timer.user_id,
                     reason: 'pause_expired',
                     triggeredAt: checkTime,
+                    organizationId,
                 });
                 return 'stopped';
             }
@@ -119,7 +123,7 @@ const enforceTimerGuardrails = async ({
             : browserExplicitlyInactive
                 ? 'browser_inactive'
                 : 'idle_timeout';
-        await pauseActiveTimer(timer.user_id, reason);
+        await pauseActiveTimer(timer.user_id, organizationId, reason);
         return 'paused';
     }
 
@@ -139,7 +143,9 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const existingTimer = await prisma.activeTimer.findUnique({ where: { user_id } });
+        const existingTimer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
+        });
         if (existingTimer) {
             res.status(400).json({ message: 'A timer is already running for this user' });
             return;
@@ -148,6 +154,7 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
         const newTimer = await prisma.activeTimer.create({
             data: {
                 user_id,
+                organization_id: req.user!.organization_id,
                 project_id,
                 task_description,
                 start_time: new Date(),
@@ -159,6 +166,7 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
             await prisma.auditLog.create({
                 data: {
                     user_id,
+                    organization_id: req.user!.organization_id,
                     action: 'timer_started',
                     resource: 'active_timer',
                     metadata: {
@@ -184,7 +192,9 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
         const user_id = requireUserId(req);
         const notes = typeof req.body?.notes === 'string' && req.body.notes.trim() ? req.body.notes.trim() : null;
 
-        const activeTimer = await prisma.activeTimer.findUnique({ where: { user_id } });
+        const activeTimer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
+        });
         if (!activeTimer) {
             res.status(404).json({ message: 'No active timer found' });
             return;
@@ -207,6 +217,7 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
             const entry = await tx.timeEntry.create({
                 data: {
                     user_id,
+                    organization_id: req.user!.organization_id,
                     project_id: activeTimer.project_id,
                     task_description: activeTimer.task_description,
                     start_time: activeTimer.start_time,
@@ -218,7 +229,7 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
                 },
             });
 
-            await tx.activeTimer.delete({ where: { user_id } });
+            await tx.activeTimer.delete({ where: { id: activeTimer.id } });
 
             if (Array.isArray(persistedState.tag_ids)) {
                 const tagLinks = (persistedState.tag_ids as string[]).map((tag_id: string) => ({
@@ -235,6 +246,7 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
             await prisma.auditLog.create({
                 data: {
                     user_id,
+                    organization_id: req.user!.organization_id,
                     action: 'timer_stopped',
                     resource: 'time_entry',
                     metadata: {
@@ -257,7 +269,10 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
 
         // Overtime weekly limit check
         try {
-            const user = await prisma.user.findUnique({ where: { id: user_id }, select: { weekly_hour_limit: true } });
+            const user = await prisma.user.findFirst({
+                where: { id: user_id, organization_id: req.user!.organization_id },
+                select: { weekly_hour_limit: true },
+            });
             if (user?.weekly_hour_limit) {
                 const now = new Date();
                 const dayOfWeek = now.getDay();
@@ -266,7 +281,11 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
                 monday.setHours(0, 0, 0, 0);
 
                 const weekEntries = await prisma.timeEntry.findMany({
-                    where: { user_id, start_time: { gte: monday } },
+                    where: {
+                        organization_id: req.user!.organization_id,
+                        user_id,
+                        start_time: { gte: monday },
+                    },
                     select: { duration: true },
                 });
                 const totalWeekHours = weekEntries.reduce((s, e) => s + e.duration, 0) / 3600;
@@ -275,6 +294,7 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
                     await prisma.notification.create({
                         data: {
                             user_id,
+                            organization_id: req.user!.organization_id,
                             message: `You have logged ${totalWeekHours.toFixed(1)}h this week, exceeding your ${user.weekly_hour_limit}h weekly limit.`,
                             type: 'overtime_alert',
                         },
@@ -294,11 +314,13 @@ export const pauseTimer = async (req: AuthRequest, res: Response): Promise<void>
     const user_id = requireUserId(req);
 
     try {
-        const timer = await prisma.activeTimer.findUnique({ where: { user_id } });
+        const timer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
+        });
         if (!timer) { res.status(404).json({ message: 'No active timer found.' }); return; }
         if (timer.is_paused) { res.status(200).json({ ok: true, message: 'Timer already paused.', pausedAt: timer.paused_at }); return; }
 
-        await pauseActiveTimer(user_id, 'user_requested');
+        await pauseActiveTimer(user_id, req.user!.organization_id, 'user_requested');
         res.status(200).json({ ok: true, pausedAt: new Date().toISOString() });
     } catch (error) {
         console.error('[pauseTimer]', error);
@@ -310,11 +332,13 @@ export const resumeTimer = async (req: AuthRequest, res: Response): Promise<void
     const user_id = requireUserId(req);
 
     try {
-        const timer = await prisma.activeTimer.findUnique({ where: { user_id } });
+        const timer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
+        });
         if (!timer) { res.status(404).json({ message: 'No active timer found.' }); return; }
         if (!timer.is_paused) { res.status(200).json({ ok: true, message: 'Timer is not paused.' }); return; }
 
-        const totalPausedSeconds = await resumeActiveTimer(user_id);
+        const totalPausedSeconds = await resumeActiveTimer(user_id, req.user!.organization_id);
         res.status(200).json({ ok: true, resumedAt: new Date().toISOString(), pausedDurationSeconds: totalPausedSeconds });
     } catch (error) {
         console.error('[resumeTimer]', error);
@@ -352,6 +376,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
         const timeEntry = await prisma.timeEntry.create({
             data: {
                 user_id,
+                organization_id: req.user!.organization_id,
                 project_id: typeof project_id === 'string' && project_id.trim() ? project_id : null,
                 task_description: task_description.trim(),
                 start_time: start,
@@ -366,6 +391,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
         await prisma.auditLog.create({
             data: {
                 user_id,
+                organization_id: req.user!.organization_id,
                 action: 'manual_time_entry_created',
                 resource: 'time_entry',
                 metadata: {
@@ -421,6 +447,7 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
 
         const conflict = await prisma.timeEntry.findFirst({
             where: {
+                organization_id: req.user!.organization_id,
                 user_id,
                 status: 'approved',
                 start_time: { lt: requestedEndTime },
@@ -437,6 +464,7 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
         const correction = await prisma.timerCorrectionRequest.create({
             data: {
                 user_id,
+                organization_id: req.user!.organization_id,
                 timer_session_id: timerSessionId,
                 requested_start_time: requestedStartTime,
                 requested_end_time: requestedEndTime,
@@ -449,6 +477,7 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
         await prisma.auditLog.create({
             data: {
                 user_id,
+                organization_id: req.user!.organization_id,
                 action: 'correction_request_created',
                 resource: 'timer_correction_request',
                 metadata: {
@@ -470,7 +499,7 @@ export const getMyCorrectionRequests = async (req: AuthRequest, res: Response): 
     try {
         const user_id = requireUserId(req);
         const corrections = await prisma.timerCorrectionRequest.findMany({
-            where: { user_id },
+            where: { organization_id: req.user!.organization_id, user_id },
             orderBy: { created_at: 'desc' },
             take: 100,
         });
@@ -481,9 +510,10 @@ export const getMyCorrectionRequests = async (req: AuthRequest, res: Response): 
     }
 };
 
-export const getCorrectionRequestsForReview = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const getCorrectionRequestsForReview = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const corrections = await prisma.timerCorrectionRequest.findMany({
+            where: { organization_id: req.user!.organization_id },
             orderBy: { created_at: 'desc' },
             take: 200,
             include: {
@@ -511,7 +541,9 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
             return;
         }
 
-        const correction = await prisma.timerCorrectionRequest.findUnique({ where: { id: correctionId } });
+        const correction = await prisma.timerCorrectionRequest.findFirst({
+            where: { id: correctionId, organization_id: req.user!.organization_id },
+        });
         if (!correction) {
             res.status(404).json({ message: 'Correction request not found.' });
             return;
@@ -537,6 +569,7 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
             if (action === 'approve') {
                 const conflict = await tx.timeEntry.findFirst({
                     where: {
+                        organization_id: req.user!.organization_id,
                         user_id: correction.user_id,
                         status: 'approved',
                         start_time: { lt: correction.requested_end_time },
@@ -551,6 +584,7 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
                 await tx.timeEntry.create({
                     data: {
                         user_id: correction.user_id,
+                        organization_id: req.user!.organization_id,
                         project_id: null,
                         task_description: 'Approved timer correction',
                         start_time: correction.requested_start_time,
@@ -569,6 +603,7 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
         await prisma.auditLog.create({
             data: {
                 user_id: reviewerId,
+                organization_id: req.user!.organization_id,
                 action: action === 'approve' ? 'correction_request_approved' : 'correction_request_rejected',
                 resource: 'timer_correction_request',
                 metadata: {
@@ -582,6 +617,7 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
         await prisma.notification.create({
             data: {
                 user_id: correction.user_id,
+                organization_id: req.user!.organization_id,
                 message: `Your timer correction request was ${nextStatus.toLowerCase()}.`,
                 type: 'correction_request_reviewed',
             },
@@ -602,8 +638,8 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
         const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 200);
         const skip = (page - 1) * limit;
 
-        let activeTimer = await prisma.activeTimer.findUnique({
-            where: { user_id },
+        let activeTimer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
             include: { project: { select: { id: true, name: true } } },
         });
 
@@ -611,11 +647,12 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
             const guardrailResult = await enforceTimerGuardrails({
                 timer: activeTimer,
                 now: new Date(),
+                organizationId: req.user!.organization_id,
             });
 
             if (guardrailResult !== 'none') {
-                activeTimer = await prisma.activeTimer.findUnique({
-                    where: { user_id },
+                activeTimer = await prisma.activeTimer.findFirst({
+                    where: { user_id, organization_id: req.user!.organization_id },
                     include: { project: { select: { id: true, name: true } } },
                 });
             }
@@ -623,7 +660,7 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
 
         const [entries, total] = await Promise.all([
             prisma.timeEntry.findMany({
-                where: { user_id },
+                where: { organization_id: req.user!.organization_id, user_id },
                 orderBy: { start_time: 'desc' },
                 include: {
                     project: { select: { id: true, name: true } },
@@ -632,7 +669,7 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
                 skip,
                 take: limit,
             }),
-            prisma.timeEntry.count({ where: { user_id } }),
+            prisma.timeEntry.count({ where: { organization_id: req.user!.organization_id, user_id } }),
         ]);
 
         res.status(200).json({
@@ -654,8 +691,8 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         const visibilityState = typeof req.body?.visibility_state === 'string' ? req.body.visibility_state : null;
         const hasFocus = typeof req.body?.has_focus === 'boolean' ? req.body.has_focus : null;
 
-        const activeTimer = await prisma.activeTimer.findUnique({
-            where: { user_id },
+        const activeTimer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
         });
 
         if (!activeTimer) {
@@ -695,6 +732,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
             visibilityState,
             hasFocus,
             lastClientActivityAtOverride: validLastClientActivityAt,
+            organizationId: req.user!.organization_id,
         });
 
         if (guardrailOutcome === 'stopped') {
@@ -703,7 +741,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         }
 
         await prisma.activeTimer.update({
-            where: { user_id },
+            where: { id: activeTimer.id },
             data: {
                 last_active_ping: requestReceivedAt,
                 last_heartbeat_at: requestReceivedAt,
@@ -726,6 +764,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         await prisma.auditLog.create({
             data: {
                 user_id,
+                organization_id: req.user!.organization_id,
                 action: 'timer_heartbeat_received',
                 resource: 'active_timer',
                 metadata: {
@@ -768,7 +807,16 @@ export const pauseBeacon = async (req: Request, res: Response): Promise<void> =>
             return;
         }
 
-        await pauseActiveTimer(userId, 'tab_closed');
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { organization_id: true },
+        });
+        if (!user) {
+            res.status(200).end();
+            return;
+        }
+
+        await pauseActiveTimer(userId, user.organization_id, 'tab_closed');
     } catch (error) {
         console.error('[pauseBeacon] error:', error);
     }
@@ -781,6 +829,7 @@ export const getPendingTimesheets = async (req: AuthRequest, res: Response): Pro
         // Only return valid pending entries with positive duration windows.
         const pendingEntries = await prisma.timeEntry.findMany({
             where: {
+                organization_id: req.user!.organization_id,
                 status: 'pending',
                 duration: { gt: 0 },
                 end_time: { gt: new Date('1970-01-01') },
@@ -819,6 +868,14 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
 
         const statusMap = { approve: 'approved', reject: 'rejected' };
 
+        const entry = await prisma.timeEntry.findFirst({
+            where: { id: entryId, organization_id: req.user!.organization_id },
+        });
+        if (!entry) {
+            res.status(404).json({ message: 'Timesheet entry not found' });
+            return;
+        }
+
         const updatedEntry = await prisma.timeEntry.update({
             where: { id: entryId },
             data: { status: statusMap[action as keyof typeof statusMap] }
@@ -828,6 +885,7 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
         await prisma.notification.create({
             data: {
                 user_id: updatedEntry.user_id,
+                organization_id: req.user!.organization_id,
                 message: `Your timesheet for ${updatedEntry.task_description} was ${statusMap[action as keyof typeof statusMap]} by your manager.`,
                 type: 'approval_status'
             }
@@ -837,6 +895,7 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
             await prisma.auditLog.create({
                 data: {
                     user_id: reviewerId,
+                    organization_id: req.user!.organization_id,
                     action: `timesheet_${action}`,
                     resource: 'time_entry',
                     metadata: {
@@ -862,7 +921,9 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
         const role = req.user?.role;
         const entryId = req.params.id as string;
 
-        const entry = await prisma.timeEntry.findUnique({ where: { id: entryId } });
+        const entry = await prisma.timeEntry.findFirst({
+            where: { id: entryId, organization_id: req.user!.organization_id },
+        });
         if (!entry) { res.status(404).json({ message: 'Time entry not found' }); return; }
         if (entry.user_id !== user_id && role !== 'Admin' && role !== 'Manager') {
             res.status(403).json({ message: 'Not authorized to edit this entry' }); return;
@@ -916,7 +977,9 @@ export const deleteEntry = async (req: AuthRequest, res: Response): Promise<void
         const role = req.user?.role;
         const entryId = req.params.id as string;
 
-        const entry = await prisma.timeEntry.findUnique({ where: { id: entryId } });
+        const entry = await prisma.timeEntry.findFirst({
+            where: { id: entryId, organization_id: req.user!.organization_id },
+        });
         if (!entry) { res.status(404).json({ message: 'Time entry not found' }); return; }
         if (entry.user_id !== user_id && role !== 'Admin') {
             res.status(403).json({ message: 'Not authorized to delete this entry' }); return;
@@ -935,8 +998,8 @@ export const duplicateEntry = async (req: AuthRequest, res: Response): Promise<v
         const user_id = requireUserId(req);
         const entryId = req.params.id as string;
 
-        const entry = await prisma.timeEntry.findUnique({
-            where: { id: entryId },
+        const entry = await prisma.timeEntry.findFirst({
+            where: { id: entryId, organization_id: req.user!.organization_id },
             include: { tags: { select: { tag_id: true } } },
         });
         if (!entry) { res.status(404).json({ message: 'Time entry not found' }); return; }
@@ -950,6 +1013,7 @@ export const duplicateEntry = async (req: AuthRequest, res: Response): Promise<v
             const created = await tx.timeEntry.create({
                 data: {
                     user_id,
+                    organization_id: req.user!.organization_id,
                     project_id: entry.project_id,
                     task_description: entry.task_description,
                     start_time: startOfDay,

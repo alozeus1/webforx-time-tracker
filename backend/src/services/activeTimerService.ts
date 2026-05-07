@@ -6,12 +6,16 @@ export const stopActiveTimerWithReason = async ({
     userId,
     reason,
     triggeredAt = new Date(),
+    organizationId,
 }: {
     userId: string;
     reason: AutoStopReason;
     triggeredAt?: Date;
+    organizationId: string;
 }) => {
-    const activeTimer = await prisma.activeTimer.findUnique({ where: { user_id: userId } });
+    const activeTimer = await prisma.activeTimer.findFirst({
+        where: { user_id: userId, organization_id: organizationId },
+    });
     if (!activeTimer) {
         return null;
     }
@@ -31,6 +35,7 @@ export const stopActiveTimerWithReason = async ({
         const entry = await tx.timeEntry.create({
             data: {
                 user_id: userId,
+                organization_id: organizationId,
                 project_id: activeTimer.project_id,
                 task_description: activeTimer.task_description,
                 start_time: activeTimer.start_time,
@@ -54,7 +59,7 @@ export const stopActiveTimerWithReason = async ({
             });
         }
 
-        await tx.activeTimer.delete({ where: { user_id: userId } });
+        await tx.activeTimer.delete({ where: { id: activeTimer.id } });
 
         return entry;
     });
@@ -63,6 +68,7 @@ export const stopActiveTimerWithReason = async ({
         await prisma.auditLog.create({
             data: {
                 user_id: userId,
+                organization_id: organizationId,
                 action: 'timer_auto_stopped',
                 resource: 'time_entry',
                 metadata: {
@@ -86,6 +92,7 @@ export const stopActiveTimerWithReason = async ({
         await prisma.notification.create({
             data: {
                 user_id: userId,
+                organization_id: organizationId,
                 message: `Your timer for "${activeTimer.task_description}" was stopped automatically because ${reason.replace(/_/g, ' ')} was detected.`,
                 type: 'timer_auto_stopped',
             },
@@ -97,12 +104,14 @@ export const stopActiveTimerWithReason = async ({
     return timeEntry;
 };
 
-export const pauseActiveTimer = async (userId: string, reason: string): Promise<void> => {
-    const timer = await prisma.activeTimer.findUnique({ where: { user_id: userId } });
+export const pauseActiveTimer = async (userId: string, organizationId: string, reason: string): Promise<void> => {
+    const timer = await prisma.activeTimer.findFirst({
+        where: { user_id: userId, organization_id: organizationId },
+    });
     if (!timer || timer.is_paused) return;
 
     await prisma.activeTimer.update({
-        where: { user_id: userId },
+        where: { id: timer.id },
         data: {
             is_paused: true,
             paused_at: new Date(),
@@ -113,6 +122,7 @@ export const pauseActiveTimer = async (userId: string, reason: string): Promise<
     await prisma.notification.create({
         data: {
             user_id: userId,
+            organization_id: organizationId,
             message: `Your timer was paused due to inactivity. Resume when you're back — your time is saved.`,
             type: 'timer_paused',
         },
@@ -121,6 +131,7 @@ export const pauseActiveTimer = async (userId: string, reason: string): Promise<
     await prisma.auditLog.create({
         data: {
             user_id: userId,
+            organization_id: organizationId,
             action: 'timer_paused',
             resource: 'active_timer',
             metadata: { reason, active_timer_id: timer.id },
@@ -128,8 +139,10 @@ export const pauseActiveTimer = async (userId: string, reason: string): Promise<
     });
 };
 
-export const resumeActiveTimer = async (userId: string): Promise<number> => {
-    const timer = await prisma.activeTimer.findUnique({ where: { user_id: userId } });
+export const resumeActiveTimer = async (userId: string, organizationId: string): Promise<number> => {
+    const timer = await prisma.activeTimer.findFirst({
+        where: { user_id: userId, organization_id: organizationId },
+    });
     if (!timer || !timer.is_paused || !timer.paused_at) return 0;
 
     const now = new Date();
@@ -137,7 +150,7 @@ export const resumeActiveTimer = async (userId: string): Promise<number> => {
     const totalPausedSeconds = timer.paused_duration_seconds + newPausedSeconds;
 
     await prisma.activeTimer.update({
-        where: { user_id: userId },
+        where: { id: timer.id },
         data: {
             is_paused: false,
             paused_at: null,
@@ -153,6 +166,7 @@ export const resumeActiveTimer = async (userId: string): Promise<number> => {
     await prisma.auditLog.create({
         data: {
             user_id: userId,
+            organization_id: organizationId,
             action: 'timer_resumed',
             resource: 'active_timer',
             metadata: {

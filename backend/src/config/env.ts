@@ -40,6 +40,7 @@ export const env = {
     nodeEnv,
     port: Number(process.env.PORT || 5005),
     databaseUrl: requireEnv('DATABASE_URL'),
+    redisUrl: process.env.REDIS_URL?.trim() || 'redis://localhost:6379',
     jwtSecret,
     integrationSecret: resolveIntegrationSecret(),
     cronSecret: process.env.CRON_SECRET?.trim() || '',

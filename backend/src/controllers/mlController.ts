@@ -1,7 +1,8 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import prisma from '../config/db';
+import { AuthRequest } from '../types/auth';
 
-export const categorizeWindows = async (req: Request, res: Response): Promise<void> => {
+export const categorizeWindows = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { windowTitles } = req.body;
 
@@ -10,7 +11,7 @@ export const categorizeWindows = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const activeProjects = await prisma.project.findMany({ where: { is_active: true } });
+        const activeProjects = await prisma.project.findMany({ where: { is_active: true, organization_id: req.user!.organization_id } });
 
         // Mock ML Logic: fuzzy match words in the titles with project names
         const suggestions: Array<{ title: string, suggested_project: string | null, confidence: number }> = [];

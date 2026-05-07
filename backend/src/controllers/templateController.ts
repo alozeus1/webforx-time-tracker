@@ -21,9 +21,10 @@ const parseOptionalNumber = (value: unknown): number | null => {
     return Number.isFinite(parsed) ? parsed : null;
 };
 
-export const listTemplates = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const listTemplates = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const templates = await prisma.projectTemplate.findMany({
+            where: { organization_id: req.user!.organization_id },
             orderBy: { name: 'asc' },
             include: { creator: { select: { first_name: true, last_name: true } } },
         });
@@ -60,7 +61,7 @@ export const createTemplate = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
-        const existing = await prisma.projectTemplate.findUnique({ where: { name } });
+        const existing = await prisma.projectTemplate.findFirst({ where: { name, organization_id: req.user!.organization_id } });
         if (existing) {
             sendApiError(res, 409, 'TEMPLATE_EXISTS', 'Template name already exists');
             return;
@@ -75,6 +76,7 @@ export const createTemplate = async (req: AuthRequest, res: Response): Promise<v
                 budget_amount: budgetAmount,
                 tag_ids: Array.isArray(req.body.tag_ids) ? req.body.tag_ids : [],
                 created_by: userId,
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -88,7 +90,7 @@ export const createTemplate = async (req: AuthRequest, res: Response): Promise<v
 export const createProjectFromTemplate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const templateId = req.params.id as string;
-        const template = await prisma.projectTemplate.findUnique({ where: { id: templateId } });
+        const template = await prisma.projectTemplate.findFirst({ where: { id: templateId, organization_id: req.user!.organization_id } });
         if (!template) {
             sendApiError(res, 404, 'TEMPLATE_NOT_FOUND', 'Template not found');
             return;
@@ -100,7 +102,7 @@ export const createProjectFromTemplate = async (req: AuthRequest, res: Response)
             return;
         }
 
-        const existingProject = await prisma.project.findUnique({ where: { name: projectName } });
+        const existingProject = await prisma.project.findFirst({ where: { name: projectName, organization_id: req.user!.organization_id } });
         if (existingProject) {
             sendApiError(res, 409, 'PROJECT_EXISTS', 'Project name already exists');
             return;
@@ -112,6 +114,7 @@ export const createProjectFromTemplate = async (req: AuthRequest, res: Response)
                 description: template.description,
                 budget_hours: template.budget_hours,
                 budget_amount: template.budget_amount,
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -125,7 +128,7 @@ export const createProjectFromTemplate = async (req: AuthRequest, res: Response)
 export const deleteTemplate = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const templateId = req.params.id as string;
-        await prisma.projectTemplate.delete({ where: { id: templateId } });
+        await prisma.projectTemplate.delete({ where: { id: templateId, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Template deleted' });
     } catch (error) {
         if ((error as { code?: string }).code === 'P2025') {

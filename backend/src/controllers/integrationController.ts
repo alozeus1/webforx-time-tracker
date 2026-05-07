@@ -61,12 +61,13 @@ export const getGithubCommits = async (req: AuthRequest, res: Response): Promise
     }
 };
 
-export const getTaskSources = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const getTaskSources = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const integrations = await prisma.integration.findMany({
             where: {
                 type: { in: ['github', 'jira', 'linear', 'asana', 'clickup', 'trello'] },
                 is_active: true,
+                organization_id: req.user!.organization_id,
             },
             orderBy: { type: 'asc' },
         });
@@ -116,9 +117,10 @@ export const getTaskSources = async (_req: AuthRequest, res: Response): Promise<
     }
 };
 
-export const listIntegrations = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const listIntegrations = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const integrations = await prisma.integration.findMany({
+            where: { organization_id: req.user!.organization_id },
             orderBy: { type: 'asc' },
         });
 
@@ -264,7 +266,7 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
         }
 
         const integration = await prisma.integration.upsert({
-            where: { type },
+            where: { type_organization_id: { type, organization_id: req.user!.organization_id } },
             update: {
                 config: encryptConfig(config),
                 is_active: true,
@@ -273,6 +275,7 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
                 type,
                 config: encryptConfig(config),
                 is_active: true,
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -281,6 +284,7 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
                 await prisma.auditLog.create({
                     data: {
                         user_id: req.user.userId,
+                        organization_id: req.user!.organization_id,
                         action: 'integration_saved',
                         resource: 'integration',
                         metadata: {
@@ -314,7 +318,7 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
             return;
         }
 
-        const integration = await prisma.integration.findUnique({ where: { type } });
+        const integration = await prisma.integration.findFirst({ where: { type, organization_id: req.user!.organization_id } });
         if (!integration || !integration.is_active) {
             res.status(404).json({ message: `${type} integration is not configured` });
             return;
@@ -341,6 +345,7 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
                     await prisma.auditLog.create({
                         data: {
                             user_id: req.user.userId,
+                            organization_id: req.user!.organization_id,
                             action: 'integration_tested',
                             resource: 'integration',
                             metadata: { type: 'mattermost', result: 'success' },
@@ -361,6 +366,7 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
                     await prisma.auditLog.create({
                         data: {
                             user_id: req.user.userId,
+                            organization_id: req.user!.organization_id,
                             action: 'integration_tested',
                             resource: 'integration',
                             metadata: { type, result: 'configured' },
@@ -406,6 +412,7 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
                 await prisma.auditLog.create({
                     data: {
                         user_id: req.user.userId,
+                        organization_id: req.user!.organization_id,
                         action: 'integration_tested',
                         resource: 'integration',
                         metadata: { type: 'taiga', result: 'success' },
