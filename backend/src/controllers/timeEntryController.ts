@@ -394,6 +394,175 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
     }
 };
 
+export const createCorrectionRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const start = new Date(req.body?.requested_start_time);
+        const end = new Date(req.body?.requested_end_time);
+        const duration = Math.floor((end.getTime() - start.getTime()) / 1000);
+        const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+        const work_note = typeof req.body?.work_note === 'string' && req.body.work_note.trim()
+            ? req.body.work_note.trim()
+            : null;
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || duration <= 0) {
+            res.status(400).json({ message: 'Invalid correction time window' });
+            return;
+        }
+
+        if (!reason) {
+            res.status(400).json({ message: 'A reason is required for correction requests' });
+            return;
+        }
+
+        const correction = await prisma.timerCorrectionRequest.create({
+            data: {
+                user_id,
+                requested_start_time: start,
+                requested_end_time: end,
+                requested_duration_seconds: duration,
+                reason,
+                work_note,
+            },
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                user_id,
+                action: 'correction_request_created',
+                resource: 'timer_correction_request',
+                metadata: {
+                    correction_request_id: correction.id,
+                    requested_start_time: start.toISOString(),
+                    requested_end_time: end.toISOString(),
+                    requested_duration_seconds: duration,
+                },
+            },
+        });
+
+        res.status(201).json({ correction });
+    } catch (error) {
+        console.error('Failed to create correction request:', error);
+        res.status(500).json({ message: 'Internal server error while creating correction request' });
+    }
+};
+
+export const getMyCorrectionRequests = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const corrections = await prisma.timerCorrectionRequest.findMany({
+            where: { user_id },
+            orderBy: { created_at: 'desc' },
+            take: 10,
+        });
+
+        res.status(200).json({ corrections });
+    } catch (error) {
+        console.error('Failed to list correction requests:', error);
+        res.status(500).json({ message: 'Internal server error while loading correction requests' });
+    }
+};
+
+export const getCorrectionRequestsForReview = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const corrections = await prisma.timerCorrectionRequest.findMany({
+            orderBy: { created_at: 'desc' },
+            include: {
+                user: { select: { id: true, email: true, first_name: true, last_name: true } },
+            },
+            take: 100,
+        });
+
+        res.status(200).json({ corrections });
+    } catch (error) {
+        console.error('Failed to list correction requests for review:', error);
+        res.status(500).json({ message: 'Internal server error while loading correction requests' });
+    }
+};
+
+export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const reviewerId = requireUserId(req);
+        const correctionId = String(req.params.correctionId);
+        const action = req.body?.action;
+        const reviewerNote = typeof req.body?.reviewer_note === 'string' && req.body.reviewer_note.trim()
+            ? req.body.reviewer_note.trim()
+            : null;
+
+        if (!['approve', 'reject'].includes(action)) {
+            res.status(400).json({ message: 'Invalid correction review action.' });
+            return;
+        }
+
+        const correction = await prisma.timerCorrectionRequest.findUnique({ where: { id: correctionId } });
+        if (!correction) {
+            res.status(404).json({ message: 'Correction request not found' });
+            return;
+        }
+
+        if (correction.status !== 'PENDING') {
+            res.status(400).json({ message: 'Correction request has already been reviewed' });
+            return;
+        }
+
+        const nextStatus = action === 'approve' ? 'APPROVED' : 'REJECTED';
+
+        const updated = await prisma.$transaction(async (tx) => {
+            if (action === 'approve') {
+                await tx.timeEntry.create({
+                    data: {
+                        user_id: correction.user_id,
+                        project_id: null,
+                        task_description: 'Approved timer correction',
+                        start_time: correction.requested_start_time,
+                        end_time: correction.requested_end_time,
+                        duration: correction.requested_duration_seconds,
+                        entry_type: 'manual_correction',
+                        notes: [correction.reason, correction.work_note, reviewerNote].filter(Boolean).join('\n\n') || null,
+                        status: 'approved',
+                    },
+                });
+            }
+
+            return tx.timerCorrectionRequest.update({
+                where: { id: correction.id },
+                data: {
+                    status: nextStatus,
+                    reviewed_by: reviewerId,
+                    reviewed_at: new Date(),
+                    reviewer_note: reviewerNote,
+                },
+            });
+        });
+
+        await prisma.auditLog.create({
+            data: {
+                user_id: reviewerId,
+                action: action === 'approve' ? 'correction_request_approved' : 'correction_request_rejected',
+                resource: 'timer_correction_request',
+                metadata: {
+                    correction_request_id: correction.id,
+                    target_user_id: correction.user_id,
+                    status: nextStatus,
+                },
+            },
+        });
+
+        await prisma.notification.create({
+            data: {
+                user_id: correction.user_id,
+                message: `Your timer correction request was ${nextStatus.toLowerCase()}.`,
+                type: 'correction_request_reviewed',
+            },
+        });
+
+        res.status(200).json({ correction: updated });
+    } catch (error) {
+        console.error('Failed to review correction request:', error);
+        res.status(500).json({ message: 'Internal server error while reviewing correction request' });
+    }
+};
+
 export const getMyEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);

@@ -144,6 +144,13 @@ const Layout: React.FC = () => {
         navigate('/timer');
     };
 
+    const handleRequestCorrection = async () => {
+        setShowResumeDialog(false);
+        setPausedTimer(null);
+        setIdleWarning(null);
+        navigate('/timer?correction=1');
+    };
+
     const restartTour = () => {
         localStorage.removeItem(ONBOARDING_KEY);
         setTourKey((k) => k + 1);
@@ -244,6 +251,7 @@ const Layout: React.FC = () => {
                 onResume={handleResumeTimer}
                 onSwitchTask={handleSwitchTask}
                 onStop={handleDiscardTimer}
+                onRequestCorrection={handleRequestCorrection}
             />
         </div>
     );

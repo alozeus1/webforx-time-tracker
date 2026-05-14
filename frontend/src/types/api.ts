@@ -106,6 +106,22 @@ export interface TimerEntriesResponse {
     activeTimer?: ActiveTimerSummary | null;
 }
 
+export interface TimerCorrectionRequestSummary {
+    id: string;
+    user_id: string;
+    requested_start_time: string;
+    requested_end_time: string;
+    requested_duration_seconds: number;
+    reason: string;
+    work_note?: string | null;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | string;
+    reviewed_by?: string | null;
+    reviewed_at?: string | null;
+    reviewer_note?: string | null;
+    created_at: string;
+    user?: UserSummary;
+}
+
 export interface CalendarEventSuggestion {
     id: string;
     title: string;

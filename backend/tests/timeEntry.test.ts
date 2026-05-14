@@ -27,6 +27,12 @@ jest.mock('../src/config/db', () => ({
         timeEntryTag: {
             createMany: jest.fn(),
         },
+        timerCorrectionRequest: {
+            create: jest.fn(),
+            findMany: jest.fn(),
+            findUnique: jest.fn(),
+            update: jest.fn(),
+        },
         auditLog: {
             create: jest.fn(),
         },
@@ -232,6 +238,94 @@ describe('POST /api/v1/timers/manual', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/task description/i);
+    });
+});
+
+// ─── correction requests ─────────────────────────────────────────────────────
+
+describe('Timer correction requests', () => {
+    const end = new Date();
+    const start = new Date(end.getTime() - 3600_000);
+    const correction = {
+        id: 'correction-1',
+        user_id: 'user-emp-1',
+        requested_start_time: start,
+        requested_end_time: end,
+        requested_duration_seconds: 3600,
+        reason: 'Forgot to start the timer',
+        work_note: null,
+        status: 'PENDING',
+        created_at: new Date(),
+    };
+
+    it('allows a user to create a correction request', async () => {
+        (prisma.timerCorrectionRequest.create as jest.Mock).mockResolvedValue(correction);
+
+        const res = await request(app)
+            .post('/api/v1/timers/corrections')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                requested_start_time: start.toISOString(),
+                requested_end_time: end.toISOString(),
+                reason: 'Forgot to start the timer',
+            });
+
+        expect(res.status).toBe(201);
+        expect(res.body.correction.id).toBe('correction-1');
+        expect(prisma.timerCorrectionRequest.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                user_id: 'user-emp-1',
+                requested_duration_seconds: 3600,
+                reason: 'Forgot to start the timer',
+            }),
+        }));
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ action: 'correction_request_created' }),
+        }));
+    });
+
+    it('supports the singular correction route as a compatibility alias', async () => {
+        (prisma.timerCorrectionRequest.create as jest.Mock).mockResolvedValue(correction);
+
+        const res = await request(app)
+            .post('/api/v1/timers/correction')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                requested_start_time: start.toISOString(),
+                requested_end_time: end.toISOString(),
+                reason: 'Forgot to start the timer',
+            });
+
+        expect(res.status).toBe(201);
+        expect(res.body.correction.id).toBe('correction-1');
+    });
+
+    it('rejects invalid correction windows', async () => {
+        const res = await request(app)
+            .post('/api/v1/timers/corrections')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                requested_start_time: end.toISOString(),
+                requested_end_time: start.toISOString(),
+                reason: 'Bad time window',
+            });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/invalid correction time window/i);
+    });
+
+    it('allows users to list their correction requests', async () => {
+        (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([correction]);
+
+        const res = await request(app)
+            .get('/api/v1/timers/corrections')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.corrections).toHaveLength(1);
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: { user_id: 'user-emp-1' },
+        }));
     });
 });
 

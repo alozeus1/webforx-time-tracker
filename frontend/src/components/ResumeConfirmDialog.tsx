@@ -8,6 +8,7 @@ interface ResumeConfirmDialogProps {
     onResume: () => void;
     onSwitchTask: () => void;
     onStop: () => void;
+    onRequestCorrection: () => void;
 }
 
 const ResumeConfirmDialog: React.FC<ResumeConfirmDialogProps> = ({
@@ -17,6 +18,7 @@ const ResumeConfirmDialog: React.FC<ResumeConfirmDialogProps> = ({
     onResume,
     onSwitchTask,
     onStop,
+    onRequestCorrection,
 }) => (
     <AccessibleDialog
         isOpen={isOpen}
@@ -54,6 +56,13 @@ const ResumeConfirmDialog: React.FC<ResumeConfirmDialogProps> = ({
                     onClick={onStop}
                 >
                     Stop for the day
+                </button>
+                <button
+                    type="button"
+                    className="w-full rounded-md border border-slate-200 px-4 py-2.5 text-sm text-slate-500 text-left"
+                    onClick={onRequestCorrection}
+                >
+                    Request a time correction
                 </button>
             </div>
         </div>
