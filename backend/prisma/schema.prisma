@@ -16,6 +16,7 @@ model User {
   password_hash String
   first_name    String
   last_name     String
+  team_name     String?
   role          Role     @relation(fields: [role_id], references: [id])
   role_id       String
   is_active     Boolean  @default(true)
@@ -41,6 +42,8 @@ model User {
   invoices              Invoice[]
   project_templates     ProjectTemplate[]
   scheduled_reports     ScheduledReport[]
+
+  @@index([team_name])
 }
 
 model Role {

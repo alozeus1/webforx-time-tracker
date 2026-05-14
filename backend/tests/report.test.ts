@@ -18,6 +18,7 @@ jest.mock('../src/config/db', () => ({
         },
         project: {
             findMany: jest.fn(),
+            count: jest.fn(),
         },
         auditLog: {
             findMany: jest.fn(),
@@ -57,7 +58,46 @@ beforeEach(() => {
     ]);
     (prisma.notification.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.project.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.project.count as jest.Mock).mockResolvedValue(0);
     (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
+});
+
+describe('GET /api/v1/reports/dashboard', () => {
+    it('filters manager analytics by team name when no individual user is selected', async () => {
+        (prisma.timeEntry.findMany as jest.Mock)
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([]);
+
+        const res = await request(app)
+            .get('/api/v1/reports/dashboard?range=7d&teamName=DevSecOps&queryUserId=all')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.timeEntry.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            where: expect.objectContaining({
+                user: { team_name: 'DevSecOps' },
+                start_time: expect.any(Object),
+            }),
+        }));
+    });
+
+    it('keeps individual user filtering more specific than team filtering', async () => {
+        (prisma.timeEntry.findMany as jest.Mock)
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([]);
+
+        const res = await request(app)
+            .get('/api/v1/reports/dashboard?range=7d&teamName=DevSecOps&queryUserId=user-1')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.timeEntry.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+            where: expect.objectContaining({
+                user_id: 'user-1',
+            }),
+        }));
+        expect((prisma.timeEntry.findMany as jest.Mock).mock.calls[0][0].where.user).toBeUndefined();
+    });
 });
 
 describe('GET /api/v1/reports/operations', () => {
