@@ -14,33 +14,88 @@ const formatHoursMetric = (hours: number) => {
     return hours.toFixed(1);
 };
 
+const normalizeReportRangeStart = (range: unknown) => {
+    const now = new Date();
+    const startDate = new Date();
+    if (range === '7d') startDate.setDate(now.getDate() - 7);
+    else if (range === '30d') startDate.setDate(now.getDate() - 30);
+    else if (range === '90d') startDate.setDate(now.getDate() - 90);
+    else startDate.setDate(now.getDate() - 30);
+    return { now, startDate };
+};
+
+const normalizeOptionalFilter = (value: unknown): string | null => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed && trimmed !== 'all' ? trimmed : null;
+};
+
+const buildReportWhereClause = ({
+    req,
+    includeDateRange,
+}: {
+    req: AuthRequest;
+    includeDateRange: boolean;
+}) => {
+    const userId = req.user?.userId;
+    const role = req.user?.role;
+    const canViewAll = role === 'Manager' || role === 'Admin';
+    const selectedProjectId = normalizeOptionalFilter(req.query.projectId);
+    const selectedUserId = normalizeOptionalFilter(req.query.queryUserId);
+    const selectedTeamName = normalizeOptionalFilter(req.query.teamName);
+    const whereClause: Prisma.TimeEntryWhereInput = {};
+
+    if (!canViewAll) {
+        whereClause.user_id = userId;
+    } else if (selectedUserId) {
+        whereClause.user_id = selectedUserId;
+    } else if (selectedTeamName) {
+        whereClause.user = { team_name: selectedTeamName };
+    }
+
+    if (selectedProjectId) {
+        whereClause.project_id = selectedProjectId;
+    }
+
+    const { now, startDate } = normalizeReportRangeStart(req.query.range);
+    if (includeDateRange) {
+        whereClause.start_time = { gte: startDate };
+    }
+
+    return { whereClause, now, startDate, selectedProjectId };
+};
+
 export const exportTimeEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
-        const role = req.user?.role;
-        const canExportAllEntries = role === 'Manager' || role === 'Admin';
 
         if (!userId) {
             res.status(401).json({ message: 'Authenticated user is required' });
             return;
         }
 
+        const { whereClause } = buildReportWhereClause({ req, includeDateRange: true });
+
         const entries = await prisma.timeEntry.findMany({
-            where: canExportAllEntries ? undefined : { user_id: userId },
+            where: whereClause,
             include: {
-                user: { select: { first_name: true, last_name: true, email: true, hourly_rate: true } },
+                user: { select: { first_name: true, last_name: true, email: true, hourly_rate: true, team_name: true } },
                 project: { select: { name: true } }
             },
             orderBy: { start_time: 'desc' }
         });
 
         // Generate CSV content
-        let csvContent = 'Date,Employee,Email,Project,Task,Duration (Hours),Status,Billable Amount ($)\n';
+        let csvContent = 'Date,Employee,Email,Team,Project,Task,Duration (Hours),Status,Billable Amount ($)\n';
 
         entries.forEach(entry => {
             const date = new Date(entry.start_time).toLocaleDateString();
             const name = `"${entry.user.first_name} ${entry.user.last_name}"`;
             const email = entry.user.email;
+            const team = `"${entry.user.team_name || 'Unassigned'}"`;
             const project = `"${entry.project?.name || 'Unassigned'}"`;
             const task = `"${entry.task_description}"`;
             const hours = (entry.duration / 3600).toFixed(2);
@@ -50,7 +105,7 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
             const billable = (parseFloat(hours) * rate).toFixed(2);
 
-            csvContent += `${date},${name},${email},${project},${task},${hours},${status},${billable}\n`;
+            csvContent += `${date},${name},${email},${team},${project},${task},${hours},${status},${billable}\n`;
         });
 
         res.setHeader('Content-Type', 'text/csv');
@@ -66,41 +121,13 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
 export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user?.userId;
-        const role = req.user?.role;
-        const canViewAll = role === 'Manager' || role === 'Admin';
 
         if (!userId) {
             res.status(401).json({ message: 'Authenticated user is required' });
             return;
         }
 
-        const { range = '30d', projectId, queryUserId } = req.query;
-        const selectedProjectId = projectId && projectId !== 'all' ? String(projectId) : null;
-
-        // Build where clause
-        const whereClause: Prisma.TimeEntryWhereInput = {};
-
-        // 1. Role / User filter
-        if (!canViewAll) {
-            whereClause.user_id = userId;
-        } else if (queryUserId && queryUserId !== 'all') {
-            whereClause.user_id = String(queryUserId);
-        }
-
-        // 2. Project filter
-        if (selectedProjectId) {
-            whereClause.project_id = selectedProjectId;
-        }
-
-        // 3. Date Range
-        const now = new Date();
-        const startDate = new Date();
-        if (range === '7d') startDate.setDate(now.getDate() - 7);
-        else if (range === '30d') startDate.setDate(now.getDate() - 30);
-        else if (range === '90d') startDate.setDate(now.getDate() - 90);
-        else startDate.setDate(now.getDate() - 30); // Default 30d
-
-        whereClause.start_time = { gte: startDate };
+        const { whereClause, now, startDate, selectedProjectId } = buildReportWhereClause({ req, includeDateRange: true });
 
         // Fetch entries
         const entries = await prisma.timeEntry.findMany({
@@ -112,6 +139,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                         first_name: true,
                         last_name: true,
                         hourly_rate: true,
+                        team_name: true,
                         role: { select: { name: true } },
                     },
                 },
@@ -229,6 +257,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 userMap.set(uId, {
                     id: uId,
                     name: `${entry.user.first_name} ${entry.user.last_name}`,
+                    teamName: entry.user.team_name || 'Unassigned',
                     role: entry.user.role?.name || 'Employee',
                     initials: `${entry.user.first_name[0]}${entry.user.last_name[0]}`,
                     totalHours: 0,
@@ -259,6 +288,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 id: u.id,
                 name: u.name,
                 role: u.role,
+                teamName: u.teamName,
                 initials: u.initials,
                 primaryProject,
                 totalHours: formatHoursMetric(u.totalHours),

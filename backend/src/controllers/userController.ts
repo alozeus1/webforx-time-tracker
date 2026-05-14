@@ -25,6 +25,9 @@ type ImportedUserPayload = {
     user_type?: unknown;
     type?: unknown;
     password?: unknown;
+    team_name?: unknown;
+    department?: unknown;
+    group?: unknown;
     project_ids?: unknown;
     projects?: unknown;
     project?: unknown;
@@ -56,6 +59,11 @@ const ROLE_ALIAS_TO_CANONICAL: Record<string, string> = {
 const normalizeString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
 
 const normalizeEmail = (value: unknown): string => normalizeString(value).toLowerCase();
+
+const normalizeTeamName = (value: unknown): string | null => {
+    const normalized = normalizeString(value);
+    return normalized ? normalized.slice(0, 80) : null;
+};
 
 const splitName = (value: string): { firstName: string; lastName: string } => {
     const tokens = value.trim().split(/\s+/).filter(Boolean);
@@ -150,6 +158,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
             email: user.email,
             first_name: user.first_name,
             last_name: user.last_name,
+            team_name: user.team_name,
             role: user.role.name,
             is_active: user.is_active,
             weekly_hour_limit: user.weekly_hour_limit,
@@ -321,6 +330,7 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
                 email: true,
                 first_name: true,
                 last_name: true,
+                team_name: true,
                 is_active: true,
                 role: { select: { name: true } },
             },
@@ -364,6 +374,7 @@ export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promis
                 email: true,
                 first_name: true,
                 last_name: true,
+                team_name: true,
                 is_active: true,
                 role: { select: { name: true } },
             },
@@ -411,6 +422,7 @@ const resolveRoleId = async (roleId?: string, roleName?: string): Promise<string
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { email, password, first_name, last_name, role_id, role } = req.body;
+        const teamName = normalizeTeamName(req.body?.team_name);
 
         if (!email || !password || !first_name || !last_name) {
             res.status(400).json({ message: 'Missing required fields' });
@@ -440,6 +452,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 password_hash,
                 first_name,
                 last_name,
+                team_name: teamName,
                 role_id: resolvedRoleId,
             },
             select: {
@@ -447,6 +460,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 email: true,
                 first_name: true,
                 last_name: true,
+                team_name: true,
                 is_active: true,
                 role: { select: { name: true } },
             },
@@ -538,7 +552,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
-        const created: Array<{ id: string; email: string; first_name: string; last_name: string; role: string; assigned_projects: number }> = [];
+        const created: Array<{ id: string; email: string; first_name: string; last_name: string; team_name: string | null; role: string; assigned_projects: number }> = [];
         const skipped: Array<{ email: string; reason: string }> = [];
         const failed: Array<{ email: string; reason: string }> = [];
 
@@ -579,6 +593,10 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                 continue;
             }
 
+            const teamName = normalizeTeamName(row.team_name)
+                || normalizeTeamName(row.department)
+                || normalizeTeamName(row.group);
+
             const passwordValue = useEmailAsPassword
                 ? email
                 : normalizeString(row.password) || email;
@@ -592,6 +610,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                         password_hash,
                         first_name: firstName,
                         last_name: lastName,
+                        team_name: teamName,
                         role_id: roleRecord.id,
                     },
                     select: {
@@ -599,6 +618,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                         email: true,
                         first_name: true,
                         last_name: true,
+                        team_name: true,
                         role: { select: { name: true } },
                     },
                 });
@@ -647,6 +667,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                     email: newUser.email,
                     first_name: newUser.first_name,
                     last_name: newUser.last_name,
+                    team_name: newUser.team_name,
                     role: newUser.role.name,
                     assigned_projects: assignmentSet.size,
                 });
@@ -726,6 +747,10 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
             updateData.email = email.trim().toLowerCase();
         }
 
+        if ('team_name' in (req.body || {})) {
+            updateData.team_name = normalizeTeamName(req.body.team_name);
+        }
+
         if (typeof is_active === 'boolean') {
             updateData.is_active = is_active;
         }
@@ -798,6 +823,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
                 email: true,
                 first_name: true,
                 last_name: true,
+                team_name: true,
                 is_active: true,
                 role: { select: { name: true } },
             },
