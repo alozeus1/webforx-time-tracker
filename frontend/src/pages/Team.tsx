@@ -58,6 +58,7 @@ interface TeamFormState {
     last_name: string;
     email: string;
     password: string;
+    team_name: string;
     role: string;
     is_active: boolean;
 }
@@ -77,6 +78,7 @@ const emptyForm: TeamFormState = {
     last_name: '',
     email: '',
     password: '',
+    team_name: '',
     role: 'Employee',
     is_active: true,
 };
@@ -270,6 +272,7 @@ const Team: React.FC = () => {
             last_name: user.last_name,
             email: user.email,
             password: '',
+            team_name: user.team_name || '',
             role: user.role?.name || 'Employee',
             is_active: user.is_active,
         });
@@ -354,10 +357,10 @@ const Team: React.FC = () => {
 
     const handleImportTemplateDownload = () => {
         const templateRows = [
-            'email,first_name,last_name,user_type,projects',
-            'maya.okafor@webforxtech.com,Maya,Okafor,manager,"Platform Engineering"',
-            'chris.adewale@webforxtech.com,Chris,Adewale,employee,"EDUSUC;Web Forx Technology"',
-            'lea.khan@webforxtech.com,Lea,Khan,intern,"LAFABAH"',
+            'email,first_name,last_name,user_type,team_name,projects',
+            'maya.okafor@webforxtech.com,Maya,Okafor,manager,"Platform Engineering","Platform Engineering"',
+            'chris.adewale@webforxtech.com,Chris,Adewale,employee,Developers,"EDUSUC;Web Forx Technology"',
+            'lea.khan@webforxtech.com,Lea,Khan,intern,QA Teams,"LAFABAH"',
         ];
 
         const csv = `${templateRows.join('\n')}\n`;
@@ -456,6 +459,7 @@ const Team: React.FC = () => {
                     last_name: form.last_name.trim(),
                     email: form.email.trim().toLowerCase(),
                     password: form.password,
+                    team_name: form.team_name.trim() || null,
                     role: form.role,
                 });
                 setFeedback({ message: 'Team member added successfully', tone: 'success' });
@@ -466,6 +470,7 @@ const Team: React.FC = () => {
                     first_name: form.first_name.trim(),
                     last_name: form.last_name.trim(),
                     email: form.email.trim().toLowerCase(),
+                    team_name: form.team_name.trim() || null,
                     role: form.role,
                     is_active: form.is_active,
                     password: form.password.trim() ? form.password : undefined,
@@ -594,6 +599,7 @@ const Team: React.FC = () => {
                 !query
                 || `${user.first_name} ${user.last_name}`.toLowerCase().includes(query)
                 || user.email.toLowerCase().includes(query)
+                || (user.team_name || '').toLowerCase().includes(query)
                 || (user.role?.name || '').toLowerCase().includes(query);
 
             const matchesStatus =
@@ -673,9 +679,9 @@ const Team: React.FC = () => {
     }, [authEvents]);
 
     const handleExportTeam = () => {
-        const header = 'First Name,Last Name,Email,Role,Status\n';
+        const header = 'First Name,Last Name,Email,Team,Role,Status\n';
         const rows = filteredTeam
-            .map((user) => [user.first_name, user.last_name, user.email, user.role?.name || 'Employee', user.is_active ? 'Active' : 'Inactive'].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
+            .map((user) => [user.first_name, user.last_name, user.email, user.team_name || 'Unassigned', user.role?.name || 'Employee', user.is_active ? 'Active' : 'Inactive'].map((value) => `"${String(value).replace(/"/g, '""')}"`).join(','))
             .join('\n');
 
         const csv = `${header}${rows}\n`;
@@ -867,6 +873,7 @@ const Team: React.FC = () => {
                                             {user.first_name} {user.last_name}
                                         </p>
                                         <p className="truncate text-xs text-slate-500">{user.email}</p>
+                                        <p className="truncate text-xs font-medium text-slate-400">{user.team_name || 'Unassigned team'}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center justify-between text-xs">
@@ -945,13 +952,14 @@ const Team: React.FC = () => {
                             <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 text-xs uppercase tracking-wider">
                                 <tr>
                                     <th className="px-6 py-4 font-semibold">Member</th>
+                                    <th className="px-6 py-4 font-semibold">Team</th>
                                     <th className="px-6 py-4 font-semibold">Role</th>
                                     <th className="px-6 py-4 font-semibold">Status</th>
                                     <th className="px-6 py-4 font-semibold"></th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {loading && <tr><td colSpan={4} className="px-6 py-4 text-center">Loading...</td></tr>}
+                                {loading && <tr><td colSpan={5} className="px-6 py-4 text-center">Loading...</td></tr>}
                                 {!loading && filteredTeam.map((user) => {
                                     const isSelf = user.id === currentUserId;
                                     const isRoleSaving = roleSavingFor.has(user.id);
@@ -965,6 +973,9 @@ const Team: React.FC = () => {
                                                     <span className="text-xs text-slate-500">{user.email}</span>
                                                 </div>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">{user.team_name || 'Unassigned'}</span>
                                         </td>
                                         <td className="px-6 py-4">
                                             {isAdmin && !isSelf ? (
@@ -1311,6 +1322,20 @@ const Team: React.FC = () => {
                                 )}
                             </div>
 
+                            <div>
+                                <label htmlFor="team-member-team" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Team / Group</label>
+                                <input
+                                    id="team-member-team"
+                                    name="team"
+                                    type="text"
+                                    value={form.team_name}
+                                    onChange={(event) => setForm((prev) => ({ ...prev, team_name: event.target.value }))}
+                                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                    placeholder="DevSecOps, Platform Engineering, Developers, QA Teams, PoCs"
+                                    autoComplete="organization-title"
+                                />
+                            </div>
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label htmlFor="team-member-password" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">
@@ -1412,7 +1437,7 @@ const Team: React.FC = () => {
                                 <p className="font-semibold">Supported columns</p>
                                 <p className="mt-1">
                                     Required: <code>email</code>. Optional: <code>first_name</code>, <code>last_name</code>, <code>full_name</code>,
-                                    <code> user_type</code>/<code>role</code>, <code>projects</code>/<code>team</code>, <code>project_ids</code>.
+                                    <code> user_type</code>/<code>role</code>, <code>team_name</code>/<code>department</code>/<code>group</code>, <code>projects</code>, <code>project_ids</code>.
                                 </p>
                                 <p className="mt-1">User types accepted: employee, intern, manager.</p>
                             </div>
@@ -1470,7 +1495,8 @@ const Team: React.FC = () => {
                                                     <th className="px-4 py-2 font-semibold">Email</th>
                                                     <th className="px-4 py-2 font-semibold">Name</th>
                                                     <th className="px-4 py-2 font-semibold">Type/Role</th>
-                                                    <th className="px-4 py-2 font-semibold">Team/Projects</th>
+                                                    <th className="px-4 py-2 font-semibold">Team</th>
+                                                    <th className="px-4 py-2 font-semibold">Projects</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -1479,7 +1505,8 @@ const Team: React.FC = () => {
                                                         <td className="px-4 py-2">{row.email}</td>
                                                         <td className="px-4 py-2">{row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || '--'}</td>
                                                         <td className="px-4 py-2">{row.user_type || row.role || row.type || importForm.default_role}</td>
-                                                        <td className="px-4 py-2">{row.projects || row.project || row.team || '--'}</td>
+                                                        <td className="px-4 py-2">{row.team_name || row.department || row.group || '--'}</td>
+                                                        <td className="px-4 py-2">{row.projects || row.project || '--'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

@@ -7,6 +7,9 @@ export interface UserImportCsvRow {
     user_type?: string;
     type?: string;
     password?: string;
+    team_name?: string;
+    department?: string;
+    group?: string;
     project_ids?: string;
     projects?: string;
     project?: string;
@@ -36,6 +39,10 @@ const HEADER_ALIAS_TO_KEY: Record<string, keyof UserImportCsvRow> = {
     password: 'password',
     temp_password: 'password',
     temporary_password: 'password',
+    team_name: 'team_name',
+    teamname: 'team_name',
+    department: 'department',
+    group: 'group',
     project_id: 'project_ids',
     project_ids: 'project_ids',
     projectids: 'project_ids',

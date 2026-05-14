@@ -18,6 +18,7 @@ export interface UserSummary {
     email: string;
     first_name: string;
     last_name: string;
+    team_name?: string | null;
     is_active: boolean;
     role?: RoleSummary;
 }
@@ -46,6 +47,7 @@ export interface CreatedImportedUser {
     email: string;
     first_name: string;
     last_name: string;
+    team_name?: string | null;
     role: string;
     assigned_projects: number;
 }
@@ -190,6 +192,7 @@ export interface AnalyticsProjectDistribution {
 export interface AnalyticsUserBreakdown {
     id: string;
     name: string;
+    teamName?: string;
     role: string;
     initials: string;
     primaryProject: string;

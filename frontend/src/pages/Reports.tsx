@@ -7,6 +7,7 @@ import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, User
 import { hasAnyRole } from '../utils/session';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
+const DEFAULT_TEAM_OPTIONS = ['DevSecOps', 'Platform Engineering', 'Developers', 'QA Teams', 'PoCs'];
 
 const formatHoursText = (hours: number) => {
     if (hours <= 0) return '0.0h';
@@ -40,6 +41,7 @@ const Reports: React.FC = () => {
     const initialRange = ['7d', '30d', '90d'].includes(searchParams.get('range') || '') ? (searchParams.get('range') as string) : '30d';
     const initialProjectId = searchParams.get('projectId') || 'all';
     const initialQueryUserId = searchParams.get('queryUserId') || 'all';
+    const initialTeamName = searchParams.get('teamName') || 'all';
 
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
     const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
@@ -49,6 +51,7 @@ const Reports: React.FC = () => {
     const [range, setRange] = useState(initialRange);
     const [projectId, setProjectId] = useState(initialProjectId);
     const [queryUserId, setQueryUserId] = useState(initialQueryUserId);
+    const [teamName, setTeamName] = useState(initialTeamName);
 
     // Dropdown Data
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -56,6 +59,15 @@ const Reports: React.FC = () => {
     const [productivityFilter, setProductivityFilter] = useState<'all' | 'top' | 'needs_attention'>('all');
 
     const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
+    const teamOptions = useMemo(() => {
+        const values = new Set(DEFAULT_TEAM_OPTIONS);
+        users.forEach((user) => {
+            if (user.team_name?.trim()) {
+                values.add(user.team_name.trim());
+            }
+        });
+        return Array.from(values).sort((a, b) => a.localeCompare(b));
+    }, [users]);
 
     async function fetchApprovals() {
         try {
@@ -83,7 +95,7 @@ const Reports: React.FC = () => {
         setIsLoading(true);
         try {
             const res = await api.get<AnalyticsDashboardResponse>('/reports/dashboard', {
-                params: { range, projectId, queryUserId }
+                params: { range, projectId, queryUserId, teamName }
             });
             setAnalytics(res.data);
         } catch (error) {
@@ -91,7 +103,7 @@ const Reports: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [range, projectId, queryUserId]);
+    }, [range, projectId, queryUserId, teamName]);
 
     useEffect(() => {
         const init = async () => {
@@ -112,6 +124,7 @@ const Reports: React.FC = () => {
         nextParams.set('range', range);
         if (projectId !== 'all') nextParams.set('projectId', projectId);
         if (queryUserId !== 'all') nextParams.set('queryUserId', queryUserId);
+        if (teamName !== 'all') nextParams.set('teamName', teamName);
         const focusDate = searchParams.get('focusDate');
         const source = searchParams.get('source');
         if (focusDate) nextParams.set('focusDate', focusDate);
@@ -119,7 +132,7 @@ const Reports: React.FC = () => {
         setSearchParams(nextParams, { replace: true });
         // Intentionally keep this effect driven by active filters only.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [projectId, queryUserId, range, setSearchParams]);
+    }, [projectId, queryUserId, range, teamName, setSearchParams]);
 
     const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
         try {
@@ -132,7 +145,10 @@ const Reports: React.FC = () => {
 
     const handleExport = async () => {
         try {
-            const res = await api.get('/reports/export', { responseType: 'blob' });
+            const res = await api.get('/reports/export', {
+                params: { range, projectId, queryUserId, teamName },
+                responseType: 'blob',
+            });
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -191,12 +207,30 @@ const Reports: React.FC = () => {
                         {canReviewApprovals && (
                             <select
                                 value={queryUserId}
-                                onChange={(e) => setQueryUserId(e.target.value)}
+                                onChange={(e) => {
+                                    setQueryUserId(e.target.value);
+                                    if (e.target.value !== 'all') setTeamName('all');
+                                }}
                                 className={pillSelectClass}
                             >
                                 <option value="all">User: All</option>
                                 {users.map(u => (
                                     <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                                ))}
+                            </select>
+                        )}
+                        {canReviewApprovals && (
+                            <select
+                                value={teamName}
+                                onChange={(e) => {
+                                    setTeamName(e.target.value);
+                                    if (e.target.value !== 'all') setQueryUserId('all');
+                                }}
+                                className={pillSelectClass}
+                            >
+                                <option value="all">Team: All</option>
+                                {teamOptions.map((team) => (
+                                    <option key={team} value={team}>{team}</option>
                                 ))}
                             </select>
                         )}
@@ -476,6 +510,7 @@ const Reports: React.FC = () => {
                                     <thead className="bg-slate-50 dark:bg-slate-900/50">
                                         <tr>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">User</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Team</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Primary Project</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Hours</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efficiency</th>
@@ -485,7 +520,7 @@ const Reports: React.FC = () => {
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                         {filteredBreakdown.length === 0 ? (
                                             <tr>
-                                                <td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">
+                                                <td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">
                                                     No users match the selected productivity filter.
                                                 </td>
                                             </tr>
@@ -502,6 +537,7 @@ const Reports: React.FC = () => {
                                                         </div>
                                                     </div>
                                                 </td>
+                                                <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.teamName || 'Unassigned'}</td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.primaryProject}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{formatHoursText(Number(u.totalHours))}</td>
                                                 <td className="px-6 py-4">
