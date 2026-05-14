@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
 
 const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit'] as const;
+const DEFAULT_TEAM_OPTIONS = ['DevSecOps', 'Platform Engineering', 'Developers', 'QA Teams', 'PoCs'];
 const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
 const resolveProjectLogoSrc = (logoUrl?: string | null) => {
     if (!logoUrl) {
@@ -106,6 +107,7 @@ const Admin: React.FC = () => {
     const [corrections, setCorrections] = useState<TimerCorrectionRequestSummary[]>([]);
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
+    const [teamSavingFor, setTeamSavingFor] = useState<Set<string>>(new Set());
     
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -226,6 +228,33 @@ const Admin: React.FC = () => {
         }
     }
 
+    async function handleUpdateUserTeam(user: UserSummary, teamName: string) {
+        setTeamSavingFor((current) => new Set(current).add(user.id));
+
+        try {
+            await api.put(`/users/${user.id}`, {
+                first_name: user.first_name,
+                last_name: user.last_name,
+                email: user.email,
+                team_name: teamName === 'unassigned' ? null : teamName,
+            });
+            setUsers((current) => current.map((item) => (
+                item.id === user.id
+                    ? { ...item, team_name: teamName === 'unassigned' ? null : teamName }
+                    : item
+            )));
+        } catch (error) {
+            console.error('Error updating user team:', error);
+            alert('Failed to update user team.');
+        } finally {
+            setTeamSavingFor((current) => {
+                const next = new Set(current);
+                next.delete(user.id);
+                return next;
+            });
+        }
+    }
+
     useEffect(() => {
         const loadAdminData = async () => {
             await Promise.all([
@@ -241,6 +270,30 @@ const Admin: React.FC = () => {
 
         void loadAdminData();
     }, []);
+
+    const userCounts = useMemo(() => {
+        const active = users.filter((user) => user.is_active).length;
+        const inactive = users.length - active;
+        const assigned = users.filter((user) => user.team_name?.trim()).length;
+
+        return {
+            total: users.length,
+            active,
+            inactive,
+            assigned,
+            unassigned: users.length - assigned,
+        };
+    }, [users]);
+
+    const teamOptions = useMemo(() => {
+        const values = new Set(DEFAULT_TEAM_OPTIONS);
+        users.forEach((user) => {
+            if (user.team_name?.trim()) {
+                values.add(user.team_name.trim());
+            }
+        });
+        return Array.from(values).sort((a, b) => a.localeCompare(b));
+    }, [users]);
 
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -334,6 +387,15 @@ const Admin: React.FC = () => {
                             Create New Project
                         </button>
                     )}
+                    {activeTab === 'users' && (
+                        <Link
+                            to="/team"
+                            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                        >
+                            <span className="material-symbols-outlined text-base">groups</span>
+                            Open Team Management
+                        </Link>
+                    )}
                 </div>
 
                 <div className="mb-6">
@@ -350,6 +412,24 @@ const Admin: React.FC = () => {
                         ))}
                     </div>
                 </div>
+
+                {activeTab === 'users' && (
+                    <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                        {[
+                            ['Total Users', userCounts.total, 'All accounts'],
+                            ['Active Users', userCounts.active, 'Can sign in'],
+                            ['Inactive Users', userCounts.inactive, 'Access disabled'],
+                            ['Assigned to Teams', userCounts.assigned, 'Grouped for reports'],
+                            ['Unassigned', userCounts.unassigned, 'Needs team/group'],
+                        ].map(([label, value, caption]) => (
+                            <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">{label}</p>
+                                <p className="mt-2 text-2xl font-black text-slate-900">{value}</p>
+                                <p className="mt-1 text-xs text-slate-500">{caption}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                     <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
@@ -375,6 +455,7 @@ const Admin: React.FC = () => {
                                         <>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Name</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Email</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Team / Group</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
                                         </>
                                     )}
@@ -510,6 +591,20 @@ const Admin: React.FC = () => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-slate-500">{u.email}</td>
+                                        <td className="px-6 py-4">
+                                            <select
+                                                value={u.team_name || 'unassigned'}
+                                                onChange={(event) => void handleUpdateUserTeam(u, event.target.value)}
+                                                disabled={teamSavingFor.has(u.id)}
+                                                className="min-w-48 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                                aria-label={`Assign team for ${u.first_name} ${u.last_name}`}
+                                            >
+                                                <option value="unassigned">Unassigned</option>
+                                                {teamOptions.map((team) => (
+                                                    <option key={team} value={team}>{team}</option>
+                                                ))}
+                                            </select>
+                                        </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${u.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>
                                                 <span className={`h-1.5 w-1.5 rounded-full ${u.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`}></span> {u.is_active ? 'Active' : 'Inactive'}
