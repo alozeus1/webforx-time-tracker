@@ -3,11 +3,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import type { PieLabelRenderProps } from 'recharts';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, UserSummary } from '../types/api';
+import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
-const DEFAULT_TEAM_OPTIONS = ['DevSecOps', 'Platform Engineering', 'Developers', 'QA Teams', 'PoCs'];
 
 const formatHoursText = (hours: number) => {
     if (hours <= 0) return '0.0h';
@@ -56,18 +55,19 @@ const Reports: React.FC = () => {
     // Dropdown Data
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
+    const [managedTeams, setManagedTeams] = useState<TeamSummary[]>([]);
     const [productivityFilter, setProductivityFilter] = useState<'all' | 'top' | 'needs_attention'>('all');
 
     const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
     const teamOptions = useMemo(() => {
-        const values = new Set(DEFAULT_TEAM_OPTIONS);
+        const values = new Set(managedTeams.filter((team) => team.is_active).map((team) => team.name));
         users.forEach((user) => {
             if (user.team_name?.trim()) {
                 values.add(user.team_name.trim());
             }
         });
         return Array.from(values).sort((a, b) => a.localeCompare(b));
-    }, [users]);
+    }, [managedTeams, users]);
 
     async function fetchApprovals() {
         try {
@@ -86,6 +86,10 @@ const Reports: React.FC = () => {
             ]);
             setProjects(projRes.data || []);
             setUsers(usersRes.data || []);
+            if (canReviewApprovals) {
+                const teamsRes = await api.get<{ teams: TeamSummary[] }>('/admin/teams').catch(() => ({ data: { teams: [] as TeamSummary[] } }));
+                setManagedTeams(teamsRes.data.teams || []);
+            }
         } catch (error) {
             console.error('Failed to fetch filter options:', error);
         }
