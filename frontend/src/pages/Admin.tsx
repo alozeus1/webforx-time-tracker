@@ -2,11 +2,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
+import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
 
-const availableTabs = ['projects', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit'] as const;
-const DEFAULT_TEAM_OPTIONS = ['DevSecOps', 'Platform Engineering', 'Developers', 'QA Teams', 'PoCs'];
+const availableTabs = ['projects', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit'] as const;
 const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
 const resolveProjectLogoSrc = (logoUrl?: string | null) => {
     if (!logoUrl) {
@@ -100,6 +99,7 @@ const Admin: React.FC = () => {
 
     const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [teams, setTeams] = useState<TeamSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
     const [integrations, setIntegrations] = useState<IntegrationSummary[]>([]);
     const [auditLogs, setAuditLogs] = useState<AuditLogSummary[]>([]);
@@ -113,6 +113,8 @@ const Admin: React.FC = () => {
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [newProjectBudgetHours, setNewProjectBudgetHours] = useState('');
     const [newProjectBudgetAmount, setNewProjectBudgetAmount] = useState('');
+    const [newTeamName, setNewTeamName] = useState('');
+    const [newTeamDesc, setNewTeamDesc] = useState('');
     const [projectLogoPreview, setProjectLogoPreview] = useState<string | null>(null);
     const [projectLogoData, setProjectLogoData] = useState<string | null>(null);
     const [editingProject, setEditingProject] = useState<ProjectSummary | null>(null);
@@ -141,6 +143,15 @@ const Admin: React.FC = () => {
             setUsers(res.data);
         } catch (error) {
             console.error('Error fetching users:', error);
+        }
+    }
+
+    async function fetchTeams() {
+        try {
+            const res = await api.get<{ teams: TeamSummary[] }>('/admin/teams');
+            setTeams(res.data.teams || []);
+        } catch (error) {
+            console.error('Error fetching teams:', error);
         }
     }
 
@@ -255,10 +266,42 @@ const Admin: React.FC = () => {
         }
     }
 
+    async function handleCreateTeam(event: React.FormEvent) {
+        event.preventDefault();
+        const name = newTeamName.trim();
+        if (!name) return;
+
+        try {
+            await api.post('/admin/teams', {
+                name,
+                description: newTeamDesc.trim() || null,
+            });
+            setNewTeamName('');
+            setNewTeamDesc('');
+            void fetchTeams();
+            void fetchAuditLogs();
+        } catch (error) {
+            console.error('Error creating team:', error);
+            alert('Failed to create team.');
+        }
+    }
+
+    async function handleToggleTeam(team: TeamSummary) {
+        try {
+            await api.put(`/admin/teams/${team.id}`, { is_active: !team.is_active });
+            void fetchTeams();
+            void fetchAuditLogs();
+        } catch (error) {
+            console.error('Error updating team:', error);
+            alert('Failed to update team.');
+        }
+    }
+
     useEffect(() => {
         const loadAdminData = async () => {
             await Promise.all([
                 fetchProjects(), 
+                fetchTeams(),
                 fetchUsers(),
                 fetchIntegrations(),
                 fetchAuditLogs(),
@@ -286,14 +329,14 @@ const Admin: React.FC = () => {
     }, [users]);
 
     const teamOptions = useMemo(() => {
-        const values = new Set(DEFAULT_TEAM_OPTIONS);
+        const values = new Set(teams.filter((team) => team.is_active).map((team) => team.name));
         users.forEach((user) => {
             if (user.team_name?.trim()) {
                 values.add(user.team_name.trim());
             }
         });
         return Array.from(values).sort((a, b) => a.localeCompare(b));
-    }, [users]);
+    }, [teams, users]);
 
     const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -396,6 +439,37 @@ const Admin: React.FC = () => {
                             Open Team Management
                         </Link>
                     )}
+                    {activeTab === 'teams' && (
+                        <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => void handleCreateTeam(event)}>
+                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Team Name
+                                <input
+                                    type="text"
+                                    value={newTeamName}
+                                    onChange={(event) => setNewTeamName(event.target.value)}
+                                    placeholder="DevSecOps"
+                                    className="mt-1 w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                />
+                            </label>
+                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                Description
+                                <input
+                                    type="text"
+                                    value={newTeamDesc}
+                                    onChange={(event) => setNewTeamDesc(event.target.value)}
+                                    placeholder="Optional"
+                                    className="mt-1 w-56 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                />
+                            </label>
+                            <button
+                                type="submit"
+                                className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all"
+                            >
+                                <Plus size={16} />
+                                Create Team
+                            </button>
+                        </form>
+                    )}
                 </div>
 
                 <div className="mb-6">
@@ -457,6 +531,14 @@ const Admin: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Email</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Team / Group</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+                                        </>
+                                    )}
+                                    {activeTab === 'teams' && (
+                                        <>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Team</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Description</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Action</th>
                                         </>
                                     )}
                                     {activeTab === 'integrations' && (
@@ -612,6 +694,29 @@ const Admin: React.FC = () => {
                                         </td>
                                     </tr>
                                 ))}
+                                {activeTab === 'teams' && (teams.length === 0 ? (
+                                    <tr><td colSpan={4} className="px-6 py-8 text-center text-slate-500 text-sm">No teams created yet.</td></tr>
+                                ) : teams.map((team) => (
+                                    <tr key={team.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                        <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-slate-100">{team.name}</td>
+                                        <td className="px-6 py-4 text-sm text-slate-500">{team.description || 'No description'}</td>
+                                        <td className="px-6 py-4 text-center">
+                                            <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${team.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                                <span className={`h-1.5 w-1.5 rounded-full ${team.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+                                                {team.is_active ? 'Active' : 'Archived'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button
+                                                type="button"
+                                                className={`text-xs font-bold ${team.is_active ? 'text-rose-600' : 'text-emerald-600'}`}
+                                                onClick={() => void handleToggleTeam(team)}
+                                            >
+                                                {team.is_active ? 'Archive' : 'Restore'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                )))}
                                 {activeTab === 'integrations' && (integrations.length === 0 ? (
                                     <tr><td colSpan={3} className="px-6 py-8 text-center text-slate-500 text-sm">No integrations configured.</td></tr>
                                 ) : integrations.map((intg, i) => (

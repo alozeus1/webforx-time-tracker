@@ -35,6 +35,15 @@ export interface ProjectSummary {
     is_active?: boolean;
 }
 
+export interface TeamSummary {
+    id: string;
+    name: string;
+    description?: string | null;
+    is_active: boolean;
+    created_at?: string;
+    updated_at?: string;
+}
+
 export interface UserImportResultSummary {
     total: number;
     created: number;

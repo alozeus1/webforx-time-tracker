@@ -53,6 +53,17 @@ model Role {
   users       User[]
 }
 
+model Team {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([is_active, name])
+}
+
 model Project {
   id            String   @id @default(uuid())
   name          String   @unique

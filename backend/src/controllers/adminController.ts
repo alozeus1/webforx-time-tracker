@@ -122,6 +122,116 @@ export const deleteSystemNotification = async (req: AuthRequest, res: Response):
     }
 };
 
+export const getTeams = async (_req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const teams = await prisma.team.findMany({
+            orderBy: [{ is_active: 'desc' }, { name: 'asc' }],
+        });
+
+        res.status(200).json({ teams });
+    } catch (error) {
+        console.error('Failed to get teams:', error);
+        res.status(500).json({ message: 'Internal server error while loading teams' });
+    }
+};
+
+export const createTeam = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+        const description = typeof req.body?.description === 'string' && req.body.description.trim()
+            ? req.body.description.trim()
+            : null;
+
+        if (!name) {
+            res.status(400).json({ message: 'Team name is required' });
+            return;
+        }
+
+        const team = await prisma.team.create({
+            data: { name: name.slice(0, 80), description },
+        });
+
+        if (req.user?.userId) {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: req.user.userId,
+                    action: 'team_created',
+                    resource: 'team',
+                    metadata: { team_id: team.id, name: team.name },
+                },
+            });
+        }
+
+        res.status(201).json({ team });
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === 'P2002') {
+            res.status(409).json({ message: 'A team with this name already exists' });
+            return;
+        }
+
+        console.error('Failed to create team:', error);
+        res.status(500).json({ message: 'Internal server error while creating team' });
+    }
+};
+
+export const updateTeam = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const teamId = String(req.params.teamId);
+        const updateData: { name?: string; description?: string | null; is_active?: boolean } = {};
+
+        if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+            updateData.name = req.body.name.trim().slice(0, 80);
+        }
+
+        if ('description' in (req.body || {})) {
+            updateData.description = typeof req.body.description === 'string' && req.body.description.trim()
+                ? req.body.description.trim()
+                : null;
+        }
+
+        if (typeof req.body?.is_active === 'boolean') {
+            updateData.is_active = req.body.is_active;
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            res.status(400).json({ message: 'No valid team fields provided' });
+            return;
+        }
+
+        const team = await prisma.team.update({
+            where: { id: teamId },
+            data: updateData,
+        });
+
+        if (req.user?.userId) {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: req.user.userId,
+                    action: 'team_updated',
+                    resource: 'team',
+                    metadata: { team_id: team.id, updated_fields: Object.keys(updateData) },
+                },
+            });
+        }
+
+        res.status(200).json({ team });
+    } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === 'P2025') {
+            res.status(404).json({ message: 'Team not found' });
+            return;
+        }
+        if (code === 'P2002') {
+            res.status(409).json({ message: 'A team with this name already exists' });
+            return;
+        }
+
+        console.error('Failed to update team:', error);
+        res.status(500).json({ message: 'Internal server error while updating team' });
+    }
+};
+
 export const getTimerPolicy = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
         const policy = await getGlobalTimerPolicy();

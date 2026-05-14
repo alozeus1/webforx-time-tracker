@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import api, { getApiErrorMessage } from '../services/api';
-import type { AuthEventSummary, BulkUserImportResponse, ProjectSummary, RoleOption, UserSummary } from '../types/api';
+import type { AuthEventSummary, BulkUserImportResponse, ProjectSummary, RoleOption, TeamSummary, UserSummary } from '../types/api';
 import { getStoredRole, getStoredUserProfile } from '../utils/session';
 import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
 import AccessibleDialog from '../components/AccessibleDialog';
@@ -93,6 +93,7 @@ const buildImportFormDefaults = (roleName: string): ImportFormState => ({
 
 const Team: React.FC = () => {
     const [team, setTeam] = useState<UserSummary[]>([]);
+    const [managedTeams, setManagedTeams] = useState<TeamSummary[]>([]);
     const [roles, setRoles] = useState<RoleOption[]>([]);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [loading, setLoading] = useState(true);
@@ -148,6 +149,20 @@ const Team: React.FC = () => {
         }
     }, [canManageTeam]);
 
+    const loadManagedTeams = useCallback(async () => {
+        if (!canManageTeam) {
+            return;
+        }
+
+        try {
+            const response = await api.get<{ teams: TeamSummary[] }>('/admin/teams');
+            setManagedTeams(response.data.teams || []);
+        } catch (error) {
+            console.error('Failed to load managed teams', error);
+            setManagedTeams([]);
+        }
+    }, [canManageTeam]);
+
     const loadProjects = useCallback(async () => {
         if (!canManageTeam) {
             return;
@@ -198,13 +213,13 @@ const Team: React.FC = () => {
     useEffect(() => {
         const load = async () => {
             setLoading(true);
-            await Promise.all([loadTeam(), loadRoles()]);
+            await Promise.all([loadTeam(), loadRoles(), loadManagedTeams()]);
             setLoading(false);
             void loadTeamHours();
         };
 
         void load();
-    }, [loadRoles, loadTeam, loadTeamHours]);
+    }, [loadManagedTeams, loadRoles, loadTeam, loadTeamHours]);
 
     useEffect(() => {
         if (importModalOpen && canManageTeam && projects.length === 0) {
@@ -238,6 +253,15 @@ const Team: React.FC = () => {
     const inactiveCount = team.length - activeCount;
     const adminsCount = team.filter((user) => user.role?.name === 'Admin').length;
     const defaultEmployeeRole = roles.find((item) => item.name === 'Employee')?.name || roles[0]?.name || 'Employee';
+    const teamOptions = useMemo(() => {
+        const values = new Set(managedTeams.filter((item) => item.is_active).map((item) => item.name));
+        team.forEach((member) => {
+            if (member.team_name?.trim()) {
+                values.add(member.team_name.trim());
+            }
+        });
+        return Array.from(values).sort((a, b) => a.localeCompare(b));
+    }, [managedTeams, team]);
 
     useEffect(() => {
         setImportForm((previous) => {
@@ -1324,16 +1348,23 @@ const Team: React.FC = () => {
 
                             <div>
                                 <label htmlFor="team-member-team" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Team / Group</label>
-                                <input
+                                <select
                                     id="team-member-team"
                                     name="team"
-                                    type="text"
                                     value={form.team_name}
                                     onChange={(event) => setForm((prev) => ({ ...prev, team_name: event.target.value }))}
                                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                                    placeholder="DevSecOps, Platform Engineering, Developers, QA Teams, PoCs"
-                                    autoComplete="organization-title"
-                                />
+                                >
+                                    <option value="">Unassigned</option>
+                                    {teamOptions.map((option) => (
+                                        <option key={option} value={option}>{option}</option>
+                                    ))}
+                                </select>
+                                {teamOptions.length === 0 && (
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        Admins can create selectable teams from Organization Management.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
