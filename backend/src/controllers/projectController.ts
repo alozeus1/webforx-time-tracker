@@ -42,10 +42,10 @@ const persistProjectLogo = (logoData: string): string | null => {
     return `/uploads/projects/${fileName}`;
 };
 
-export const getAllProjects = async (req: Request, res: Response): Promise<void> => {
+export const getAllProjects = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const projects = await prisma.project.findMany({
-            where: { is_active: true },
+            where: { organization_id: req.user!.organization_id, is_active: true },
             include: {
                 _count: {
                     select: { members: true },
@@ -95,6 +95,7 @@ export const searchProjectsAndTasks = async (req: AuthRequest, res: Response): P
         const [projects, tasks] = await Promise.all([
             prisma.project.findMany({
                 where: {
+                    organization_id: req.user!.organization_id,
                     is_active: true,
                     name: { contains: query, mode: 'insensitive' },
                 },
@@ -104,6 +105,7 @@ export const searchProjectsAndTasks = async (req: AuthRequest, res: Response): P
             }),
             prisma.timeEntry.findMany({
                 where: {
+                    organization_id: req.user!.organization_id,
                     ...(canViewAll ? {} : { user_id: userId }),
                     task_description: { contains: query, mode: 'insensitive' },
                 },
@@ -135,7 +137,9 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const { name, description, budget_hours, budget_amount, logo_data } = req.body;
 
-        const existingProject = await prisma.project.findUnique({ where: { name } });
+        const existingProject = await prisma.project.findFirst({
+            where: { name, organization_id: req.user!.organization_id },
+        });
         if (existingProject) {
             res.status(400).json({ message: 'Project with this name already exists' });
             return;
@@ -153,6 +157,7 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
                 logo_url,
                 budget_hours: budget_hours ? parseInt(budget_hours) : null,
                 budget_amount: budget_amount ? parseFloat(budget_amount) : null,
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -161,6 +166,7 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
                 await prisma.auditLog.create({
                     data: {
                         user_id: req.user.userId,
+                        organization_id: req.user.organization_id,
                         action: 'project_created',
                         resource: 'project',
                         metadata: {
@@ -184,6 +190,14 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const projectId = req.params.id as string;
         const { name, description, budget_hours, budget_amount, logo_data, is_active } = req.body;
+
+        const project = await prisma.project.findFirst({
+            where: { id: projectId, organization_id: req.user!.organization_id },
+        });
+        if (!project) {
+            res.status(404).json({ message: 'Project not found' });
+            return;
+        }
 
         const updateData: Record<string, unknown> = {};
 
@@ -214,6 +228,7 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
                 await prisma.auditLog.create({
                     data: {
                         user_id: req.user.userId,
+                        organization_id: req.user.organization_id,
                         action: 'project_updated',
                         resource: 'project',
                         metadata: { project_id: projectId, updated_fields: Object.keys(updateData) },
@@ -233,7 +248,7 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
 export const getProjectBudgets = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const projects = await prisma.project.findMany({
-            where: { is_active: true },
+            where: { organization_id: req.user!.organization_id, is_active: true },
             select: {
                 id: true,
                 name: true,
@@ -284,6 +299,14 @@ export const deleteProject = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const projectId = req.params.id as string;
 
+        const project = await prisma.project.findFirst({
+            where: { id: projectId, organization_id: req.user!.organization_id },
+        });
+        if (!project) {
+            res.status(404).json({ message: 'Project not found' });
+            return;
+        }
+
         await prisma.project.update({
             where: { id: projectId },
             data: { is_active: false },
@@ -294,6 +317,7 @@ export const deleteProject = async (req: AuthRequest, res: Response): Promise<vo
                 await prisma.auditLog.create({
                     data: {
                         user_id: req.user.userId,
+                        organization_id: req.user.organization_id,
                         action: 'project_deleted',
                         resource: 'project',
                         metadata: { project_id: projectId },

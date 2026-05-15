@@ -2,9 +2,9 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 
-export const listTags = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const listTags = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const tags = await prisma.tag.findMany({ orderBy: { name: 'asc' } });
+        const tags = await prisma.tag.findMany({ where: { organization_id: req.user!.organization_id }, orderBy: { name: 'asc' } });
         res.status(200).json({ tags });
     } catch (error) {
         console.error('Failed to list tags:', error);
@@ -22,13 +22,13 @@ export const createTag = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
-        const existing = await prisma.tag.findUnique({ where: { name } });
+        const existing = await prisma.tag.findFirst({ where: { name, organization_id: req.user!.organization_id } });
         if (existing) {
             res.status(409).json({ message: 'Tag already exists' });
             return;
         }
 
-        const tag = await prisma.tag.create({ data: { name, color } });
+        const tag = await prisma.tag.create({ data: { name, color, organization_id: req.user!.organization_id } });
         res.status(201).json(tag);
     } catch (error) {
         console.error('Failed to create tag:', error);
@@ -39,7 +39,7 @@ export const createTag = async (req: AuthRequest, res: Response): Promise<void> 
 export const deleteTag = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const id = req.params.id as string;
-        await prisma.tag.delete({ where: { id } });
+        await prisma.tag.delete({ where: { id, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Tag deleted' });
     } catch (error) {
         if ((error as { code?: string }).code === 'P2025') {

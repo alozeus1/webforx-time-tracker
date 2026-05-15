@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import userRoutes from './routes/userRoutes';
@@ -21,12 +22,16 @@ import webhookRoutes from './routes/webhookRoutes';
 import invoiceRoutes from './routes/invoiceRoutes';
 import templateRoutes from './routes/templateRoutes';
 import scheduledReportRoutes from './routes/scheduledReportRoutes';
+import organizationRoutes from './routes/organizationRoutes';
 import publicRoutes from './routes/publicRoutes';
 import contactRoutes from './routes/contactRoutes';
 import { logAuthEvent } from './services/authEventService';
 import { notificationWorker } from './workers/notificationWorker';
 import { startIdleTracker } from './workers/idleTracker';
 import { startBurnoutTracker } from './workers/burnoutTracker';
+import { securityHeaders } from './config/security';
+import { correlationId } from './middlewares/correlationId';
+import { requestLogger } from './middlewares/requestLogger';
 import prisma from './config/db';
 import { env } from './config/env';
 
@@ -68,6 +73,7 @@ const allowAnyOrigin = allowedOrigins.includes('*');
 
 app.use(
     cors({
+        credentials: true,
         origin: (origin, callback) => {
             // Allow requests without an Origin header (for server-to-server calls, health checks, etc).
             if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
@@ -80,7 +86,10 @@ app.use(
     }),
 );
 
-app.use(helmet());
+app.use(securityHeaders);
+app.use(correlationId);
+app.use(requestLogger);
+app.use(cookieParser());
 
 const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -141,6 +150,7 @@ app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/templates', templateRoutes);
 app.use('/api/v1/scheduled-reports', scheduledReportRoutes);
+app.use('/api/v1/organizations', organizationRoutes);
 
 const swaggerSpec = swaggerJsdoc({
     definition: {

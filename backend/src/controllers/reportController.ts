@@ -46,7 +46,9 @@ const buildReportWhereClause = ({
     const selectedProjectId = normalizeOptionalFilter(req.query.projectId);
     const selectedUserId = normalizeOptionalFilter(req.query.queryUserId);
     const selectedTeamName = normalizeOptionalFilter(req.query.teamName);
-    const whereClause: Prisma.TimeEntryWhereInput = {};
+    const whereClause: Prisma.TimeEntryWhereInput = {
+        organization_id: req.user!.organization_id,
+    };
 
     if (!canViewAll) {
         whereClause.user_id = userId;
@@ -160,8 +162,8 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         const totalHours = totalDurationSec / 3600;
         const activeProjectsCount = await prisma.project.count({
             where: selectedProjectId
-                ? { id: selectedProjectId, is_active: true }
-                : { is_active: true },
+                ? { id: selectedProjectId, is_active: true, organization_id: req.user!.organization_id }
+                : { is_active: true, organization_id: req.user!.organization_id },
         });
         let billableSeconds = 0;
         entries.forEach(entry => {
@@ -321,9 +323,9 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
     }
 };
 
-export const getOperationsDashboard = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const getOperationsDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const insights = await getOperationsInsights();
+        const insights = await getOperationsInsights(req.user!.organization_id);
         res.status(200).json(insights);
     } catch (error) {
         console.error('Failed to load operations dashboard:', error);
@@ -339,7 +341,7 @@ export const getOperationsDashboard = async (_req: AuthRequest, res: Response): 
 
 type ShareArtifactType = 'operations' | 'project-burn' | 'invoice-evidence';
 
-const buildSharedArtifactPayload = async (type: ShareArtifactType, id?: string) => {
+const buildSharedArtifactPayload = async (type: ShareArtifactType, id?: string, organizationId?: string) => {
     if (type === 'operations') {
         const operations = await getOperationsInsights();
         return {
@@ -356,8 +358,8 @@ const buildSharedArtifactPayload = async (type: ShareArtifactType, id?: string) 
             throw new Error('project_id is required');
         }
 
-        const project = await prisma.project.findUnique({
-            where: { id },
+        const project = await prisma.project.findFirst({
+            where: { id, organization_id: organizationId },
             include: {
                 time_entries: {
                     select: {
@@ -399,8 +401,8 @@ const buildSharedArtifactPayload = async (type: ShareArtifactType, id?: string) 
         throw new Error('invoice_id is required');
     }
 
-    const invoice = await prisma.invoice.findUnique({
-        where: { id },
+    const invoice = await prisma.invoice.findFirst({
+        where: { id, organization_id: organizationId },
         include: {
             project: { select: { name: true } },
             creator: { select: { first_name: true, last_name: true } },
@@ -442,7 +444,7 @@ export const createShareLink = async (req: AuthRequest, res: Response): Promise<
             return;
         }
 
-        const payload = await buildSharedArtifactPayload(type, id);
+        const payload = await buildSharedArtifactPayload(type, id, req.user!.organization_id);
         const token = jwt.sign(
             {
                 type,

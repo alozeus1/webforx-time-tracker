@@ -20,10 +20,11 @@ type AdminAuditFeedEntry = {
     metadata?: unknown;
 };
 
-export const getAuditLogs = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const getAuditLogs = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const [auditLogs, authEvents] = await Promise.all([
             prisma.auditLog.findMany({
+                where: { organization_id: req.user!.organization_id },
                 orderBy: { created_at: 'desc' },
                 take: 100,
                 include: {
@@ -31,6 +32,7 @@ export const getAuditLogs = async (_req: AuthRequest, res: Response): Promise<vo
                 }
             }),
             prisma.authEvent.findMany({
+                where: { organization_id: req.user!.organization_id },
                 orderBy: { created_at: 'desc' },
                 take: 100,
                 include: {
@@ -73,10 +75,10 @@ export const getAuditLogs = async (_req: AuthRequest, res: Response): Promise<vo
     }
 };
 
-export const getSystemNotifications = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const getSystemNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const notifications = await prisma.notification.findMany({
-            where: { deleted_at: null },
+            where: { deleted_at: null, organization_id: req.user!.organization_id },
             orderBy: { created_at: 'desc' },
             take: 100,
             include: {
@@ -98,6 +100,7 @@ export const deleteSystemNotification = async (req: AuthRequest, res: Response):
             where: {
                 id: notificationId,
                 deleted_at: null,
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -107,7 +110,7 @@ export const deleteSystemNotification = async (req: AuthRequest, res: Response):
         }
 
         await prisma.notification.update({
-            where: { id: notification.id },
+            where: { id: notification.id, organization_id: req.user!.organization_id },
             data: {
                 deleted_at: new Date(),
                 is_read: true,
@@ -155,6 +158,7 @@ export const createTeam = async (req: AuthRequest, res: Response): Promise<void>
             await prisma.auditLog.create({
                 data: {
                     user_id: req.user.userId,
+                    organization_id: req.user.organization_id,
                     action: 'team_created',
                     resource: 'team',
                     metadata: { team_id: team.id, name: team.name },
@@ -208,6 +212,7 @@ export const updateTeam = async (req: AuthRequest, res: Response): Promise<void>
             await prisma.auditLog.create({
                 data: {
                     user_id: req.user.userId,
+                    organization_id: req.user.organization_id,
                     action: 'team_updated',
                     resource: 'team',
                     metadata: { team_id: team.id, updated_fields: Object.keys(updateData) },
@@ -297,6 +302,7 @@ export const updateTimerPolicy = async (req: AuthRequest, res: Response): Promis
             await prisma.auditLog.create({
                 data: {
                     user_id: actorId,
+                    organization_id: req.user!.organization_id,
                     action: 'timer_policy_updated',
                     resource: 'timer_policy_config',
                     metadata: {

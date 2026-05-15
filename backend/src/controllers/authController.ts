@@ -6,22 +6,38 @@ import prisma from '../config/db';
 import { env } from '../config/env';
 import { logAuthEvent } from '../services/authEventService';
 import { sendPasswordResetEmail } from '../services/emailService';
+import { accessTokenCookieOptions, refreshTokenCookieOptions } from '../config/cookies';
+import { loginSchema, passwordResetSchema, passwordResetConfirmSchema, formatZodIssues } from '../validation/schemas';
+
+const generateTokens = (user: { id: string; email: string; organization_id: string; role: { name: string } }) => {
+    const payload = {
+        userId: user.id,
+        email: user.email,
+        role: user.role.name,
+        organization_id: user.organization_id,
+    };
+
+    const accessToken = jwt.sign(payload, env.jwtSecret, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, env.jwtSecret, { expiresIn: '7d' });
+
+    return { accessToken, refreshToken };
+};
 
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
-        const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-        const password = typeof req.body?.password === 'string' ? req.body.password : '';
+        const rawEmail = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+        const rawPassword = typeof req.body?.password === 'string' ? req.body.password : '';
 
-        if (!email || !password) {
+        if (!rawEmail || !rawPassword) {
             await logAuthEvent(req, {
-                email: email || null,
+                email: rawEmail || null,
                 eventType: 'login_attempt',
                 outcome: 'failure',
                 reason: 'missing_credentials',
                 metadata: {
                     missing: [
-                        !email ? 'email' : null,
-                        !password ? 'password' : null,
+                        !rawEmail ? 'email' : null,
+                        !rawPassword ? 'password' : null,
                     ].filter(Boolean),
                 },
             });
@@ -29,14 +45,25 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { role: true }
+        const parseResult = loginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            res.status(400).json({
+                message: 'Validation failed',
+                errors: formatZodIssues(parseResult.error),
+            });
+            return;
+        }
+
+        const { email, password } = parseResult.data;
+
+        const user = await prisma.user.findFirst({
+            where: { email: email.toLowerCase() },
+            include: { role: true },
         });
 
         if (!user) {
             await logAuthEvent(req, {
-                email,
+                email: email.toLowerCase(),
                 eventType: 'login_attempt',
                 outcome: 'failure',
                 reason: 'user_not_found',
@@ -75,33 +102,25 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             email: user.email,
             eventType: 'login_attempt',
             outcome: 'success',
-            metadata: {
-                role: user.role.name,
-            },
+            metadata: { role: user.role.name },
         });
 
-        const token = jwt.sign(
-            { userId: user.id, email: user.email, role: user.role.name },
-            env.jwtSecret,
-            { expiresIn: '1h' }
-        );
+        const { accessToken, refreshToken } = generateTokens(user);
 
-        const refreshToken = jwt.sign(
-            { userId: user.id, type: 'refresh' },
-            env.jwtSecret,
-            { expiresIn: '7d' }
-        );
+        res.cookie('access_token', accessToken, accessTokenCookieOptions);
+        res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions);
 
         res.status(200).json({
-            token,
+            token: accessToken,
             refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
                 first_name: user.first_name,
                 last_name: user.last_name,
-                role: user.role.name
-            }
+                role: user.role.name,
+                organization_id: user.organization_id,
+            },
         });
     } catch (error) {
         console.error('Login error:', error);
@@ -109,30 +128,29 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 };
 
-export const logout = async (req: Request, res: Response): Promise<void> => {
+export const logout = async (_req: Request, res: Response): Promise<void> => {
+    res.clearCookie('access_token', { path: '/', httpOnly: true });
+    res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh', httpOnly: true });
     res.status(200).json({ message: 'Logged out successfully' });
 };
 
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
     try {
-        const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-
-        if (!email) {
-            await logAuthEvent(req, {
-                eventType: 'password_reset_request',
-                outcome: 'failure',
-                reason: 'missing_email',
+        const parseResult = passwordResetSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            res.status(400).json({
+                message: 'Validation failed',
+                errors: formatZodIssues(parseResult.error),
             });
-            res.status(400).json({ message: 'Email is required' });
             return;
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const { email } = parseResult.data;
+        const user = await prisma.user.findFirst({ where: { email: email.toLowerCase() }, include: { role: true } });
 
-        // Always return success to prevent email enumeration
         if (!user) {
             await logAuthEvent(req, {
-                email,
+                email: email.toLowerCase(),
                 eventType: 'password_reset_request',
                 outcome: 'failure',
                 reason: 'user_not_found',
@@ -141,14 +159,13 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        // Invalidate any existing tokens for this user
         await prisma.passwordResetToken.updateMany({
             where: { user_id: user.id, used: false },
             data: { used: true },
         });
 
         const token = crypto.randomBytes(4).toString('hex').toUpperCase();
-        const expires_at = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+        const expires_at = new Date(Date.now() + 30 * 60 * 1000);
 
         await prisma.passwordResetToken.create({
             data: { user_id: user.id, token, expires_at },
@@ -161,7 +178,6 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             outcome: 'success',
         });
 
-        // Send password reset email (fire-and-forget — response already committed to anti-enum message)
         const resetUrl = `${env.frontendUrl}/reset-password?code=${token}`;
         sendPasswordResetEmail({
             to: user.email,
@@ -170,9 +186,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             resetUrl,
         }).catch((err) => console.error('Failed to send password reset email:', err));
 
-        res.status(200).json({
-            message: 'If that email exists, a reset code has been sent.',
-        });
+        res.status(200).json({ message: 'If that email exists, a reset code has been sent.' });
     } catch (error) {
         console.error('Forgot password error:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -181,73 +195,29 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
     try {
-        const code = typeof req.body?.code === 'string' ? req.body.code.trim().toUpperCase() : '';
-        const newPassword = typeof req.body?.password === 'string' ? req.body.password : '';
-
-        if (!code || !newPassword) {
-            await logAuthEvent(req, {
-                eventType: 'password_reset_completion',
-                outcome: 'failure',
-                reason: 'missing_reset_details',
-                metadata: {
-                    has_code: Boolean(code),
-                    has_password: Boolean(newPassword),
-                },
+        const parseResult = passwordResetConfirmSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            res.status(400).json({
+                message: 'Validation failed',
+                errors: formatZodIssues(parseResult.error),
             });
-            res.status(400).json({ message: 'Reset code and new password are required' });
             return;
         }
 
-        if (newPassword.length < 6) {
-            await logAuthEvent(req, {
-                eventType: 'password_reset_completion',
-                outcome: 'failure',
-                reason: 'password_too_short',
-                metadata: {
-                    code_length: code.length,
-                },
-            });
-            res.status(400).json({ message: 'Password must be at least 6 characters' });
-            return;
-        }
+        const { token: code, password: newPassword } = parseResult.data;
 
         const resetToken = await prisma.passwordResetToken.findUnique({
-            where: { token: code },
+            where: { token: code.toUpperCase() },
             include: { user: true },
         });
 
-        if (!resetToken) {
+        if (!resetToken || resetToken.used || resetToken.expires_at < new Date()) {
             await logAuthEvent(req, {
+                userId: resetToken?.user_id,
+                email: resetToken?.user.email,
                 eventType: 'password_reset_completion',
                 outcome: 'failure',
-                reason: 'invalid_reset_code',
-                metadata: {
-                    code_length: code.length,
-                },
-            });
-            res.status(400).json({ message: 'Invalid or expired reset code' });
-            return;
-        }
-
-        if (resetToken.used) {
-            await logAuthEvent(req, {
-                userId: resetToken.user_id,
-                email: resetToken.user.email,
-                eventType: 'password_reset_completion',
-                outcome: 'failure',
-                reason: 'used_reset_code',
-            });
-            res.status(400).json({ message: 'Invalid or expired reset code' });
-            return;
-        }
-
-        if (resetToken.expires_at < new Date()) {
-            await logAuthEvent(req, {
-                userId: resetToken.user_id,
-                email: resetToken.user.email,
-                eventType: 'password_reset_completion',
-                outcome: 'failure',
-                reason: 'expired_reset_code',
+                reason: resetToken?.used ? 'used_reset_code' : 'invalid_or_expired',
             });
             res.status(400).json({ message: 'Invalid or expired reset code' });
             return;
@@ -282,7 +252,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 
 export const refreshAccessToken = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { refreshToken } = req.body ?? {};
+        const refreshToken = req.cookies?.refresh_token || req.body?.refreshToken;
         if (typeof refreshToken !== 'string' || !refreshToken) {
             res.status(400).json({ message: 'Refresh token is required' });
             return;
@@ -304,19 +274,12 @@ export const refreshAccessToken = async (req: Request, res: Response): Promise<v
             return;
         }
 
-        const newAccessToken = jwt.sign(
-            { userId: user.id, email: user.email, role: user.role.name },
-            env.jwtSecret,
-            { expiresIn: '1h' }
-        );
+        const { accessToken, refreshToken: newRefreshToken } = generateTokens(user);
 
-        const newRefreshToken = jwt.sign(
-            { userId: user.id, type: 'refresh' },
-            env.jwtSecret,
-            { expiresIn: '7d' }
-        );
+        res.cookie('access_token', accessToken, accessTokenCookieOptions);
+        res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions);
 
-        res.status(200).json({ token: newAccessToken, refreshToken: newRefreshToken });
+        res.status(200).json({ token: accessToken, refreshToken: newRefreshToken });
     } catch {
         res.status(401).json({ message: 'Invalid or expired refresh token' });
     }

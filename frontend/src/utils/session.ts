@@ -16,6 +16,7 @@ export interface StoredUserProfile {
     first_name: string;
     last_name: string;
     role: string;
+    organization_id?: string;
 }
 
 export const getStoredUserProfile = (): StoredUserProfile | null => {
@@ -41,6 +42,9 @@ export const setStoredSession = (token: string, role: string, user?: StoredUserP
 
     if (user) {
         window.localStorage.setItem('user_profile', JSON.stringify(user));
+        if (user.organization_id) {
+            window.localStorage.setItem('organization_id', user.organization_id);
+        }
     }
 };
 
@@ -53,6 +57,7 @@ export const clearStoredSession = () => {
     window.localStorage.removeItem('refreshToken');
     window.localStorage.removeItem('user_role');
     window.localStorage.removeItem('user_profile');
+    window.localStorage.removeItem('organization_id');
 };
 
 export const hasAnyRole = (roles: string[]) => {

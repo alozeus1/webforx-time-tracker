@@ -184,7 +184,7 @@ export const scoreTimeEntryRisk = (entry: {
     };
 };
 
-export const getOperationsInsights = async (): Promise<OperationsInsights> => {
+export const getOperationsInsights = async (organizationId?: string): Promise<OperationsInsights> => {
     const degradedWarnings: string[] = [];
     const safeQuery = async <T>(label: string, query: () => Promise<T>, fallback: T): Promise<T> => {
         try {
@@ -195,6 +195,8 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
             return fallback;
         }
     };
+
+    const orgFilter = organizationId ? { organization_id: organizationId } : {};
 
     const now = new Date();
     const sevenDaysAgo = new Date(now);
@@ -208,7 +210,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
 
     const [users, pendingEntries, rejectedEntries, notifications, projects, auditLogs, approvedEntries] = await Promise.all([
         safeQuery('users', () => prisma.user.findMany({
-            where: { is_active: true },
+            where: { is_active: true, ...orgFilter },
             select: {
                 id: true,
                 first_name: true,
@@ -218,7 +220,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
             },
         }), []),
         safeQuery('pending_entries', () => prisma.timeEntry.findMany({
-            where: { status: 'pending' },
+            where: { status: 'pending', ...orgFilter },
             include: {
                 user: { select: { id: true, first_name: true, last_name: true, email: true } },
                 project: { select: { id: true, name: true } },
@@ -226,7 +228,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
             orderBy: { created_at: 'desc' },
         }), []),
         safeQuery('rejected_entries', () => prisma.timeEntry.findMany({
-            where: { status: 'rejected', updated_at: { gte: fourteenDaysAgo } },
+            where: { status: 'rejected', updated_at: { gte: fourteenDaysAgo }, ...orgFilter },
             include: {
                 user: { select: { first_name: true, last_name: true } },
                 project: { select: { name: true } },
@@ -238,6 +240,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
             where: {
                 type: { in: ['idle_warning', 'overtime_alert', 'burnout_alert'] },
                 created_at: { gte: fourteenDaysAgo },
+                ...orgFilter,
             },
             include: {
                 user: { select: { id: true, first_name: true, last_name: true } },
@@ -245,7 +248,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
             orderBy: { created_at: 'desc' },
         }), []),
         safeQuery('projects', () => prisma.project.findMany({
-            where: { is_active: true },
+            where: { is_active: true, ...orgFilter },
             select: {
                 id: true,
                 name: true,
@@ -262,11 +265,12 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
             where: {
                 action: { in: ['timesheet_approve', 'timesheet_reject'] },
                 created_at: { gte: thirtyDaysAgo },
+                ...orgFilter,
             },
             orderBy: { created_at: 'desc' },
         }), []),
         safeQuery('approved_entries', () => prisma.timeEntry.findMany({
-            where: { status: 'approved' },
+            where: { status: 'approved', ...orgFilter },
             select: {
                 id: true,
                 user_id: true,
@@ -280,7 +284,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
 
     const sevenDayEntryRows = await safeQuery('seven_day_entry_rows', () => prisma.timeEntry.groupBy({
         by: ['user_id'],
-        where: { start_time: { gte: sevenDaysAgo } },
+        where: { start_time: { gte: sevenDaysAgo }, ...orgFilter },
         _sum: { duration: true },
     }), []);
 
@@ -357,7 +361,7 @@ export const getOperationsInsights = async (): Promise<OperationsInsights> => {
 
     const referencedEntries = referencedEntryIds.length > 0
         ? await safeQuery('referenced_entries', () => prisma.timeEntry.findMany({
-            where: { id: { in: referencedEntryIds } },
+            where: { id: { in: referencedEntryIds }, ...orgFilter },
             select: { id: true, created_at: true },
         }), [])
         : [];

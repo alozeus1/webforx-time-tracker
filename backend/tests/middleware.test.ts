@@ -23,6 +23,7 @@ describe('authenticateToken middleware', () => {
             userId: 'user-1',
             email: 'user@test.com',
             role: 'Employee',
+            organization_id: 'org-1',
         };
         const token = jwt.sign(payload, JWT_SECRET);
 

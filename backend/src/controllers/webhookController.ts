@@ -14,9 +14,9 @@ const isValidUrl = (value: string): boolean => {
     }
 };
 
-export const listWebhooks = async (_req: AuthRequest, res: Response): Promise<void> => {
+export const listWebhooks = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const subs = await prisma.webhookSubscription.findMany({ orderBy: { created_at: 'desc' } });
+        const subs = await prisma.webhookSubscription.findMany({ where: { organization_id: req.user!.organization_id }, orderBy: { created_at: 'desc' } });
         res.status(200).json({ webhooks: subs });
     } catch (error) {
         console.error('Failed to list webhooks:', error);
@@ -55,6 +55,7 @@ export const createWebhook = async (req: AuthRequest, res: Response): Promise<vo
                 url,
                 events: uniqueEvents as Prisma.InputJsonValue,
                 secret,
+                organization_id: req.user!.organization_id,
             },
         });
 
@@ -68,7 +69,7 @@ export const createWebhook = async (req: AuthRequest, res: Response): Promise<vo
 export const deleteWebhook = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const id = req.params.id as string;
-        await prisma.webhookSubscription.delete({ where: { id } });
+        await prisma.webhookSubscription.delete({ where: { id, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Webhook deleted' });
     } catch (error) {
         if ((error as { code?: string }).code === 'P2025') {

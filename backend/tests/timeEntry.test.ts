@@ -13,6 +13,7 @@ jest.mock('../src/config/db', () => ({
     __esModule: true,
     default: {
         activeTimer: {
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
             create: jest.fn(),
             delete: jest.fn(),
@@ -24,6 +25,7 @@ jest.mock('../src/config/db', () => ({
         timerCorrectionRequest: {
             create: jest.fn(),
             findMany: jest.fn(),
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
             update: jest.fn(),
         },
@@ -47,6 +49,7 @@ jest.mock('../src/config/db', () => ({
             findMany: jest.fn().mockResolvedValue([]),
         },
         user: {
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
         },
         // $transaction executes the callback synchronously with a tx object
@@ -58,8 +61,10 @@ import prisma from '../src/config/db';
 
 const JWT_SECRET = 'test-jwt-secret';
 
+const TEST_ORG_ID = 'org-1';
+
 const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role }, JWT_SECRET);
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: TEST_ORG_ID }, JWT_SECRET);
 
 const app = express();
 app.use(express.json());
@@ -72,6 +77,7 @@ const adminToken = makeToken('user-admin-1', 'Admin');
 const mockActiveTimer = {
     id: 'timer-1',
     user_id: 'user-emp-1',
+    organization_id: TEST_ORG_ID,
     project_id: 'proj-1',
     task_description: 'Working on feature',
     start_time: new Date(Date.now() - 3600_000), // 1 hour ago
@@ -87,6 +93,7 @@ const mockActiveTimer = {
 const mockTimeEntry = {
     id: 'entry-1',
     user_id: 'user-emp-1',
+    organization_id: TEST_ORG_ID,
     project_id: 'proj-1',
     task_description: 'Working on feature',
     start_time: new Date(Date.now() - 3600_000),
@@ -109,7 +116,7 @@ beforeEach(() => {
 
 describe('POST /api/v1/timers/start', () => {
     it('returns 201 with new timer on success', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
         (prisma.activeTimer.create as jest.Mock).mockResolvedValue(mockActiveTimer);
 
         const res = await request(app)
@@ -120,10 +127,13 @@ describe('POST /api/v1/timers/start', () => {
         expect(res.status).toBe(201);
         expect(res.body.id).toBe('timer-1');
         expect(res.body.task_description).toBe('Working on feature');
+        expect(prisma.activeTimer.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ organization_id: TEST_ORG_ID }),
+        }));
     });
 
     it('returns 400 when timer already running', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(mockActiveTimer);
 
         const res = await request(app)
             .post('/api/v1/timers/start')
@@ -135,7 +145,7 @@ describe('POST /api/v1/timers/start', () => {
     });
 
     it('returns 400 when task_description is missing', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app)
             .post('/api/v1/timers/start')
@@ -159,7 +169,7 @@ describe('POST /api/v1/timers/start', () => {
 
 describe('POST /api/v1/timers/stop', () => {
     it('returns 200 with time entry on success', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(mockActiveTimer);
         // $transaction receives a callback (tx => ...) — execute it with a mock tx object
         (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
             const tx = {
@@ -181,7 +191,7 @@ describe('POST /api/v1/timers/stop', () => {
     });
 
     it('returns 404 when no active timer exists', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app)
             .post('/api/v1/timers/stop')
@@ -253,7 +263,7 @@ describe('GET /api/v1/timers/me', () => {
     it('returns 200 with entries array', async () => {
         (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([mockTimeEntry]);
         (prisma.timeEntry.count as jest.Mock).mockResolvedValue(1);
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app)
             .get('/api/v1/timers/me')
@@ -268,7 +278,7 @@ describe('GET /api/v1/timers/me', () => {
     it('returns 200 with empty entries array when no entries exist', async () => {
         (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
         (prisma.timeEntry.count as jest.Mock).mockResolvedValue(0);
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app)
             .get('/api/v1/timers/me')
@@ -283,7 +293,7 @@ describe('GET /api/v1/timers/me', () => {
 
 describe('POST /api/v1/timers/ping', () => {
     it('returns 200 on successful ping', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(mockActiveTimer);
         (prisma.activeTimer.update as jest.Mock).mockResolvedValue({
             ...mockActiveTimer,
             last_active_ping: new Date(),
@@ -312,7 +322,7 @@ describe('POST /api/v1/timers/ping', () => {
     });
 
     it('returns 404 when no active timer to ping', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app)
             .post('/api/v1/timers/ping')
@@ -336,7 +346,7 @@ describe('POST /api/v1/timers/ping', () => {
             persisted_state: {},
         };
 
-        (prisma.activeTimer.findUnique as jest.Mock)
+        (prisma.activeTimer.findFirst as jest.Mock)
             .mockResolvedValueOnce(staleTimer) // pingTimer lookup
             .mockResolvedValueOnce(staleTimer); // stopActiveTimerWithReason lookup
 
@@ -392,6 +402,7 @@ describe('GET /api/v1/timers/approvals', () => {
 describe('POST /api/v1/timers/approvals/:entryId', () => {
     it('returns 200 when approving a timesheet', async () => {
         const approvedEntry = { ...mockTimeEntry, status: 'approved' };
+        (prisma.timeEntry.findFirst as jest.Mock).mockResolvedValue(mockTimeEntry);
         (prisma.timeEntry.update as jest.Mock).mockResolvedValue(approvedEntry);
 
         const res = await request(app)
@@ -405,6 +416,7 @@ describe('POST /api/v1/timers/approvals/:entryId', () => {
 
     it('returns 200 when rejecting a timesheet', async () => {
         const rejectedEntry = { ...mockTimeEntry, status: 'rejected' };
+        (prisma.timeEntry.findFirst as jest.Mock).mockResolvedValue(mockTimeEntry);
         (prisma.timeEntry.update as jest.Mock).mockResolvedValue(rejectedEntry);
 
         const res = await request(app)
@@ -431,8 +443,9 @@ describe('POST /api/v1/timers/approvals/:entryId', () => {
 
 describe('POST /api/v1/timers/pause-beacon', () => {
     it('pauses the active timer when a valid token is provided in the body', async () => {
-        // pauseBeacon calls pauseActiveTimer which: findUnique → update → notification.create → auditLog.create
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        // pauseBeacon calls pauseActiveTimer which: user lookup → timer lookup → update → notification.create → auditLog.create
+        (prisma.user.findUnique as jest.Mock).mockResolvedValue({ organization_id: TEST_ORG_ID });
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(mockActiveTimer);
         (prisma.activeTimer.update as jest.Mock).mockResolvedValue({ ...mockActiveTimer, is_paused: true });
 
         const validToken = makeToken('user-emp-1', 'Employee');
@@ -443,7 +456,7 @@ describe('POST /api/v1/timers/pause-beacon', () => {
 
         expect(res.status).toBe(200);
         expect(prisma.activeTimer.update).toHaveBeenCalledWith(expect.objectContaining({
-            where: { user_id: 'user-emp-1' },
+            where: { id: 'timer-1' },
             data: expect.objectContaining({ is_paused: true }),
         }));
         expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -477,7 +490,7 @@ describe('POST /api/v1/timers/pause-beacon', () => {
 
 describe('POST /api/v1/timers/ping — timestamp validation', () => {
     beforeEach(() => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(mockActiveTimer);
         (prisma.activeTimer.update as jest.Mock).mockResolvedValue({ ...mockActiveTimer });
     });
 
@@ -589,7 +602,7 @@ describe('Timer correction requests', () => {
 
         expect(res.status).toBe(200);
         expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({
-            where: { user_id: 'user-emp-1' },
+            where: { organization_id: TEST_ORG_ID, user_id: 'user-emp-1' },
         }));
     });
 
@@ -626,7 +639,7 @@ describe('Timer correction requests', () => {
         const txTimeEntryCreate = jest.fn().mockResolvedValue({ id: 'entry-correction-1' });
         const txCorrectionUpdate = jest.fn().mockResolvedValue({ ...correction, status: 'APPROVED' });
 
-        (prisma.timerCorrectionRequest.findUnique as jest.Mock).mockResolvedValue(correction);
+        (prisma.timerCorrectionRequest.findFirst as jest.Mock).mockResolvedValue(correction);
         (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
             timerCorrectionRequest: { update: txCorrectionUpdate },
             timeEntry: {
@@ -666,7 +679,7 @@ describe('Timer correction requests', () => {
         };
         const txTimeEntryCreate = jest.fn();
 
-        (prisma.timerCorrectionRequest.findUnique as jest.Mock).mockResolvedValue(correction);
+        (prisma.timerCorrectionRequest.findFirst as jest.Mock).mockResolvedValue(correction);
         (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
             timerCorrectionRequest: { update: jest.fn().mockResolvedValue({ ...correction, status: 'REJECTED' }) },
             timeEntry: {

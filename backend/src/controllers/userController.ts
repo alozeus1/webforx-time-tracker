@@ -143,8 +143,8 @@ const respondWithUserServiceError = (res: Response, error: unknown, fallbackLogM
 
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const user = await prisma.user.findUnique({
-            where: { id: requireUserId(req) },
+        const user = await prisma.user.findFirst({
+            where: { id: requireUserId(req), organization_id: req.user!.organization_id },
             include: { role: true },
         });
 
@@ -177,6 +177,7 @@ export const getMyNotifications = async (req: AuthRequest, res: Response): Promi
 
         const baseWhere = {
             user_id: userId,
+            organization_id: req.user!.organization_id,
             ...(includeDeleted ? {} : { deleted_at: null }),
         };
 
@@ -214,6 +215,7 @@ export const getMyNotification = async (req: AuthRequest, res: Response): Promis
             where: {
                 id: notificationId,
                 user_id: userId,
+                organization_id: req.user!.organization_id,
                 deleted_at: null,
             },
             include: {
@@ -230,7 +232,7 @@ export const getMyNotification = async (req: AuthRequest, res: Response): Promis
         const updated = notification.is_read
             ? notification
             : await prisma.notification.update({
-                where: { id: notification.id },
+                where: { id: notification.id, organization_id: req.user!.organization_id },
                 data: { is_read: true, read_at: openedAt },
                 include: {
                     user: { select: { email: true, first_name: true, last_name: true } },
@@ -252,6 +254,7 @@ export const markMyNotificationRead = async (req: AuthRequest, res: Response): P
             where: {
                 id: notificationId,
                 user_id: userId,
+                organization_id: req.user!.organization_id,
                 deleted_at: null,
             },
         });
@@ -262,7 +265,7 @@ export const markMyNotificationRead = async (req: AuthRequest, res: Response): P
         }
 
         const updated = await prisma.notification.update({
-            where: { id: notification.id },
+            where: { id: notification.id, organization_id: req.user!.organization_id },
             data: {
                 is_read: true,
                 read_at: notification.read_at ?? new Date(),
@@ -287,6 +290,7 @@ export const deleteMyNotification = async (req: AuthRequest, res: Response): Pro
             where: {
                 id: notificationId,
                 user_id: userId,
+                organization_id: req.user!.organization_id,
                 deleted_at: null,
             },
         });
@@ -297,7 +301,7 @@ export const deleteMyNotification = async (req: AuthRequest, res: Response): Pro
         }
 
         await prisma.notification.update({
-            where: { id: notification.id },
+            where: { id: notification.id, organization_id: req.user!.organization_id },
             data: {
                 deleted_at: new Date(),
                 is_read: true,
@@ -322,9 +326,10 @@ export const getMyWellbeing = async (req: AuthRequest, res: Response): Promise<v
     }
 };
 
-export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
+export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const users = await prisma.user.findMany({
+            where: { organization_id: req.user!.organization_id },
             select: {
                 id: true,
                 email: true,
@@ -341,9 +346,10 @@ export const getAllUsers = async (req: Request, res: Response): Promise<void> =>
     }
 };
 
-export const getRoles = async (_req: Request, res: Response): Promise<void> => {
+export const getRoles = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const roles = await prisma.role.findMany({
+            where: { organization_id: req.user!.organization_id },
             select: { id: true, name: true },
             orderBy: { name: 'asc' },
         });
@@ -367,8 +373,8 @@ export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promis
         const requestedLimit = Number.parseInt(String(req.query.limit ?? '25'), 10);
         const limit = Number.isInteger(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 100)) : 25;
 
-        const user = await prisma.user.findUnique({
-            where: { id: userId },
+        const user = await prisma.user.findFirst({
+            where: { id: userId, organization_id: req.user!.organization_id },
             select: {
                 id: true,
                 email: true,
@@ -387,6 +393,7 @@ export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promis
 
         const events = await prisma.authEvent.findMany({
             where: {
+                organization_id: req.user!.organization_id,
                 OR: [
                     { user_id: user.id },
                     { email: user.email },
@@ -402,13 +409,13 @@ export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promis
     }
 };
 
-const resolveRoleId = async (roleId?: string, roleName?: string): Promise<string> => {
+const resolveRoleId = async (organizationId: string, roleId?: string, roleName?: string): Promise<string> => {
     if (roleId?.trim()) {
         return roleId.trim();
     }
 
     if (roleName?.trim()) {
-        const role = await prisma.role.findUnique({ where: { name: roleName.trim() } });
+        const role = await prisma.role.findFirst({ where: { name: roleName.trim(), organization_id: organizationId } });
         if (!role) {
             throw new Error('Invalid role');
         }
@@ -429,7 +436,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const existingUser = await prisma.user.findUnique({ where: { email } });
+        const existingUser = await prisma.user.findFirst({ where: { email, organization_id: req.user!.organization_id } });
         if (existingUser) {
             res.status(400).json({ message: 'User with this email already exists' });
             return;
@@ -437,7 +444,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
 
         let resolvedRoleId: string;
         try {
-            resolvedRoleId = await resolveRoleId(role_id, role);
+            resolvedRoleId = await resolveRoleId(req.user!.organization_id, role_id, role);
         } catch (error) {
             res.status(400).json({ message: 'Invalid or missing role' });
             return;
@@ -454,6 +461,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 last_name,
                 team_name: teamName,
                 role_id: resolvedRoleId,
+                organization_id: req.user!.organization_id,
             },
             select: {
                 id: true,
@@ -470,6 +478,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             await prisma.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
+                    organization_id: req.user!.organization_id,
                     action: 'user_created',
                     resource: 'user',
                     metadata: {
@@ -521,8 +530,8 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
         const defaultProjectIdsFromPayload = toStringArray(options.default_project_ids);
 
         const [roleRecords, projectRecords] = await Promise.all([
-            prisma.role.findMany({ select: { id: true, name: true } }),
-            prisma.project.findMany({ select: { id: true, name: true } }),
+            prisma.role.findMany({ where: { organization_id: req.user!.organization_id }, select: { id: true, name: true } }),
+            prisma.project.findMany({ where: { organization_id: req.user!.organization_id }, select: { id: true, name: true } }),
         ]);
 
         const roleByName = new Map<string, { id: string; name: string }>();
@@ -580,7 +589,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
             }
 
             if (skipExisting) {
-                const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+                const existing = await prisma.user.findFirst({ where: { email, organization_id: req.user!.organization_id }, select: { id: true } });
                 if (existing) {
                     skipped.push({ email, reason: 'User already exists' });
                     continue;
@@ -612,6 +621,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                         last_name: lastName,
                         team_name: teamName,
                         role_id: roleRecord.id,
+                        organization_id: req.user!.organization_id,
                     },
                     select: {
                         id: true,
@@ -692,6 +702,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
             await prisma.auditLog.create({
                 data: {
                     user_id: actorUserId,
+                    organization_id: req.user!.organization_id,
                     action: 'users_imported',
                     resource: 'user',
                     metadata: {
@@ -776,25 +787,26 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
 
             let resolvedRoleId: string;
             try {
-                resolvedRoleId = await resolveRoleId(role_id, role);
+                resolvedRoleId = await resolveRoleId(req.user!.organization_id, role_id, role);
             } catch {
                 res.status(400).json({ message: 'Invalid role' });
                 return;
             }
 
             // Determine the canonical name of the role being assigned
-            const targetRoleRecord = await prisma.role.findUnique({ where: { id: resolvedRoleId }, select: { name: true } });
+            const targetRoleRecord = await prisma.role.findFirst({ where: { id: resolvedRoleId, organization_id: req.user!.organization_id }, select: { name: true } });
             const targetRoleName = targetRoleRecord?.name ?? '';
 
             // If changing AWAY from Admin, verify at least one other Admin remains
-            const currentTarget = await prisma.user.findUnique({
-                where: { id: userId },
+            const currentTarget = await prisma.user.findFirst({
+                where: { id: userId, organization_id: req.user!.organization_id },
                 select: { role: { select: { name: true } } },
             });
 
             if (currentTarget?.role?.name === 'Admin' && targetRoleName !== 'Admin') {
                 const remainingAdmins = await prisma.user.count({
                     where: {
+                        organization_id: req.user!.organization_id,
                         role: { name: 'Admin' },
                         is_active: true,
                         id: { not: userId },
@@ -816,7 +828,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
         }
 
         const updatedUser = await prisma.user.update({
-            where: { id: userId },
+            where: { id: userId, organization_id: req.user!.organization_id },
             data: updateData,
             select: {
                 id: true,
@@ -834,6 +846,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
             await prisma.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
+                    organization_id: req.user!.organization_id,
                     action: isRoleChange ? 'role_changed' : 'user_updated',
                     resource: 'user',
                     metadata: {
@@ -882,7 +895,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const target = await prisma.user.findUnique({ where: { id: userId } });
+        const target = await prisma.user.findFirst({ where: { id: userId, organization_id: req.user!.organization_id } });
         if (!target) {
             res.status(404).json({ message: 'User not found' });
             return;
@@ -890,7 +903,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
 
         // Soft-delete: deactivate + anonymize
         await prisma.user.update({
-            where: { id: userId },
+            where: { id: userId, organization_id: req.user!.organization_id },
             data: { is_active: false },
         });
 
@@ -898,6 +911,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
             await prisma.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
+                    organization_id: req.user!.organization_id,
                     action: 'user_deleted',
                     resource: 'user',
                     metadata: { target_user_id: userId, target_email: target.email },
@@ -929,8 +943,8 @@ export const permanentlyDeleteUser = async (req: AuthRequest, res: Response): Pr
         }
 
         // Only allow deletion of already-deactivated users (safety gate)
-        const target = await prisma.user.findUnique({
-            where: { id: userId },
+        const target = await prisma.user.findFirst({
+            where: { id: userId, organization_id: req.user!.organization_id },
             select: { id: true, email: true, first_name: true, last_name: true, is_active: true },
         });
 
@@ -949,21 +963,22 @@ export const permanentlyDeleteUser = async (req: AuthRequest, res: Response): Pr
         // Hard delete — manually remove records that lack onDelete: Cascade,
         // then delete the user. Wrapped in a transaction for atomicity.
         await prisma.$transaction([
-            prisma.scheduledReport.deleteMany({ where: { user_id: userId } }),
-            prisma.notification.deleteMany({ where: { user_id: userId } }),
-            prisma.auditLog.deleteMany({ where: { user_id: userId } }),
+            prisma.scheduledReport.deleteMany({ where: { user_id: userId, organization_id: req.user!.organization_id } }),
+            prisma.notification.deleteMany({ where: { user_id: userId, organization_id: req.user!.organization_id } }),
+            prisma.auditLog.deleteMany({ where: { user_id: userId, organization_id: req.user!.organization_id } }),
             prisma.projectMember.deleteMany({ where: { user_id: userId } }),
             prisma.passwordResetToken.deleteMany({ where: { user_id: userId } }),
-            prisma.activeTimer.deleteMany({ where: { user_id: userId } }),
-            prisma.invoice.deleteMany({ where: { user_id: userId } }),
-            prisma.timeEntry.deleteMany({ where: { user_id: userId } }),
-            prisma.user.delete({ where: { id: userId } }),
+            prisma.activeTimer.deleteMany({ where: { user_id: userId, organization_id: req.user!.organization_id } }),
+            prisma.invoice.deleteMany({ where: { user_id: userId, organization_id: req.user!.organization_id } }),
+            prisma.timeEntry.deleteMany({ where: { user_id: userId, organization_id: req.user!.organization_id } }),
+            prisma.user.delete({ where: { id: userId, organization_id: req.user!.organization_id } }),
         ]);
 
         try {
             await prisma.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
+                    organization_id: req.user!.organization_id,
                     action: 'user_permanently_deleted',
                     resource: 'user',
                     metadata: { target_user_id: userId, target_email: target.email },
@@ -1009,7 +1024,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
         }
 
         const updatedUser = await prisma.user.update({
-            where: { id: userId },
+            where: { id: userId, organization_id: req.user!.organization_id },
             data: updateData,
             include: { role: true },
         });
@@ -1018,6 +1033,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
             await prisma.auditLog.create({
                 data: {
                     user_id: userId,
+                    organization_id: req.user!.organization_id,
                     action: 'profile_updated',
                     resource: 'user',
                     metadata: {

@@ -15,6 +15,7 @@ export const auditLog = (action: string, resourcePath?: string) => {
                 await prisma.auditLog.create({
                     data: {
                         user_id: req.user.userId,
+                        organization_id: req.user.organization_id,
                         action: action,
                         resource: resourcePath || req.originalUrl,
                         metadata: {

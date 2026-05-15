@@ -9,6 +9,7 @@ const configuredBaseUrl = resolveApiBaseUrl(
 
 const api = axios.create({
     baseURL: configuredBaseUrl.replace(/\/+$/, ''),
+    withCredentials: true,
 });
 
 const STATUS_MESSAGES: Record<number, string> = {
@@ -156,7 +157,7 @@ api.interceptors.response.use(
                 isRefreshing = true;
 
                 try {
-                    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, { refreshToken });
+                    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
                     const newToken = typeof res.data?.token === 'string' ? res.data.token.trim() : '';
                     const newRefresh = typeof res.data?.refreshToken === 'string' ? res.data.refreshToken.trim() : '';
 

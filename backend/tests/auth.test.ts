@@ -21,6 +21,7 @@ jest.mock('../src/config/db', () => ({
     __esModule: true,
     default: {
         user: {
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
             update: jest.fn(),
         },
@@ -63,7 +64,7 @@ describe('Auth Routes', () => {
     });
 
     it('POST /api/v1/auth/login should fail with invalid credentials and log the reason', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app).post('/api/v1/auth/login').send({
             email: 'invalid@example.com',
@@ -83,9 +84,10 @@ describe('Auth Routes', () => {
     });
 
     it('POST /api/v1/auth/login should log successful sign-ins', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue({
             id: 'user-1',
             email: 'alice@test.com',
+            organization_id: 'org-1',
             first_name: 'Alice',
             last_name: 'Smith',
             password_hash: 'hashed-password',
@@ -101,6 +103,7 @@ describe('Auth Routes', () => {
 
         expect(res.status).toBe(200);
         expect(res.body.user.email).toBe('alice@test.com');
+        expect(res.body.user.organization_id).toBe('org-1');
         expect(prisma.authEvent.create).toHaveBeenCalledWith(expect.objectContaining({
             data: expect.objectContaining({
                 user_id: 'user-1',

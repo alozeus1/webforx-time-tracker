@@ -47,24 +47,45 @@ async function main() {
         );
     }
 
-    // 1. Create Roles
+    // 0. Create default Organization
+    const defaultOrg = await prisma.organization.upsert({
+        where: { slug: 'webforx-tech' },
+        update: {},
+        create: {
+            name: 'Web Forx Technology',
+            slug: 'webforx-tech',
+            billing_email: 'admin@webforxtech.com',
+            plan: 'enterprise',
+            status: 'active',
+        },
+    });
+    console.log(`✅ Organization seeded: ${defaultOrg.name} (${defaultOrg.id})`);
+
+    // 1. Create Roles (scoped to organization)
     const roles = ['Admin', 'Manager', 'Employee', 'Intern'];
 
     for (const roleName of roles) {
         await prisma.role.upsert({
-            where: { name: roleName },
+            where: { name_organization_id: { name: roleName, organization_id: defaultOrg.id } },
             update: {},
             create: {
                 name: roleName,
+                organization_id: defaultOrg.id,
             },
         });
     }
 
     console.log(`✅ Roles seeded: ${roles.join(', ')}`);
 
-    const adminRole = await prisma.role.findUnique({ where: { name: 'Admin' } });
-    const managerRole = await prisma.role.findUnique({ where: { name: 'Manager' } });
-    const employeeRole = await prisma.role.findUnique({ where: { name: 'Employee' } });
+    const adminRole = await prisma.role.findUnique({
+        where: { name_organization_id: { name: 'Admin', organization_id: defaultOrg.id } },
+    });
+    const managerRole = await prisma.role.findUnique({
+        where: { name_organization_id: { name: 'Manager', organization_id: defaultOrg.id } },
+    });
+    const employeeRole = await prisma.role.findUnique({
+        where: { name_organization_id: { name: 'Employee', organization_id: defaultOrg.id } },
+    });
 
     if (!adminRole) {
         throw new Error('Admin role not found after creation.');
@@ -86,8 +107,14 @@ async function main() {
         'password123',
     );
 
+    // 2. Create Users (scoped to organization)
     const adminUser = await prisma.user.upsert({
-        where: { email: 'admin@webforxtech.com' },
+        where: {
+            email_organization_id: {
+                email: 'admin@webforxtech.com',
+                organization_id: defaultOrg.id,
+            },
+        },
         update: {
             first_name: 'Amina',
             last_name: 'Bello',
@@ -101,6 +128,7 @@ async function main() {
             last_name: 'Bello',
             password_hash: await bcrypt.hash(adminPassword.value, 10),
             role_id: adminRole.id,
+            organization_id: defaultOrg.id,
             is_active: true,
         },
     });
@@ -109,7 +137,12 @@ async function main() {
 
     if (managerRole) {
         const managerUser = await prisma.user.upsert({
-            where: { email: 'manager@webforxtech.com' },
+            where: {
+                email_organization_id: {
+                    email: 'manager@webforxtech.com',
+                    organization_id: defaultOrg.id,
+                },
+            },
             update: {
                 first_name: 'Maya',
                 last_name: 'Okafor',
@@ -124,6 +157,7 @@ async function main() {
                 last_name: 'Okafor',
                 password_hash: await bcrypt.hash(managerPassword.value, 10),
                 role_id: managerRole.id,
+                organization_id: defaultOrg.id,
                 is_active: true,
                 hourly_rate: 85,
             },
@@ -134,7 +168,12 @@ async function main() {
 
     if (employeeRole) {
         const employeeUser = await prisma.user.upsert({
-            where: { email: 'employee@webforxtech.com' },
+            where: {
+                email_organization_id: {
+                    email: 'employee@webforxtech.com',
+                    organization_id: defaultOrg.id,
+                },
+            },
             update: {
                 first_name: 'Chris',
                 last_name: 'Adewale',
@@ -149,6 +188,7 @@ async function main() {
                 last_name: 'Adewale',
                 password_hash: await bcrypt.hash(employeePassword.value, 10),
                 role_id: employeeRole.id,
+                organization_id: defaultOrg.id,
                 is_active: true,
                 hourly_rate: 55,
             },
@@ -165,7 +205,12 @@ async function main() {
 
         if (employeeRole) {
             const demoUser = await prisma.user.upsert({
-                where: { email: 'demo@webforxtech.com' },
+                where: {
+                    email_organization_id: {
+                        email: 'demo@webforxtech.com',
+                        organization_id: defaultOrg.id,
+                    },
+                },
                 update: {
                     first_name: 'Demo',
                     last_name: 'User',
@@ -178,6 +223,7 @@ async function main() {
                     last_name: 'User',
                     password_hash: await bcrypt.hash(demoPassword, 10),
                     role_id: employeeRole.id,
+                    organization_id: defaultOrg.id,
                     is_active: true,
                 },
             });
@@ -185,6 +231,7 @@ async function main() {
         }
     }
 
+    // 3. Create initial Projects (scoped to organization)
     const initialProjects = [
         {
             name: 'EDUSUC',
@@ -218,7 +265,12 @@ async function main() {
 
     for (const project of initialProjects) {
         await prisma.project.upsert({
-            where: { name: project.name },
+            where: {
+                name_organization_id: {
+                    name: project.name,
+                    organization_id: defaultOrg.id,
+                },
+            },
             update: {
                 description: project.description,
                 is_active: true,
@@ -226,12 +278,25 @@ async function main() {
             create: {
                 name: project.name,
                 description: project.description,
+                organization_id: defaultOrg.id,
                 is_active: true,
             },
         });
     }
 
     console.log(`✅ Initial projects seeded: ${initialProjects.map((project) => project.name).join(', ')}`);
+
+    // 4. Create default timer policy for organization
+    await prisma.timerPolicyConfig.upsert({
+        where: { scope_type_scope_id: { scope_type: 'ORGANIZATION', scope_id: defaultOrg.id } },
+        update: {},
+        create: {
+            scope_type: 'ORGANIZATION',
+            scope_id: defaultOrg.id,
+            organization_id: defaultOrg.id,
+        },
+    });
+    console.log('✅ Default timer policy seeded');
 
     if (adminPassword.source === 'generated') {
         console.log('[seed] Admin password was generated. Persist it now or set SEED_ADMIN_PASSWORD for stable credentials.');
