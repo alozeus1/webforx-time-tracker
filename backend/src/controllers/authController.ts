@@ -179,12 +179,18 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         });
 
         const resetUrl = `${env.frontendUrl}/reset-password?code=${token}`;
-        sendPasswordResetEmail({
-            to: user.email,
-            firstName: user.first_name,
-            resetCode: token,
-            resetUrl,
-        }).catch((err) => console.error('Failed to send password reset email:', err));
+        try {
+            await sendPasswordResetEmail({
+                to: user.email,
+                firstName: user.first_name,
+                resetCode: token,
+                resetUrl,
+            });
+        } catch (emailErr) {
+            // Log but do not surface — avoids leaking user existence and keeps the
+            // response consistent whether or not the email provider succeeds.
+            console.error('Failed to send password reset email:', emailErr);
+        }
 
         res.status(200).json({ message: 'If that email exists, a reset code has been sent.' });
     } catch (error) {
