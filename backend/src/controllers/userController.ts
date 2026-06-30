@@ -391,9 +391,13 @@ export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
+        // Query by user_id / email only — NOT organization_id.
+        // The user lookup above already validates the target belongs to the requesting
+        // org. Filtering by organization_id would exclude any event row where that
+        // column is null (events written before the column was populated), causing
+        // legitimate historical events to silently disappear from the panel.
         const events = await prisma.authEvent.findMany({
             where: {
-                organization_id: req.user!.organization_id,
                 OR: [
                     { user_id: user.id },
                     { email: user.email },

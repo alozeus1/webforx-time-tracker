@@ -695,17 +695,10 @@ const Team: React.FC = () => {
             event.event_type === 'login_attempt' && event.outcome === 'success',
         ) || null;
 
-        // Events visible in the activity list are capped at the same 30-day window
-        // so the list is always consistent with the stat card date ranges.
-        const recentEvents = authEvents.filter(
-            (event) => new Date(event.created_at).getTime() >= thirtyDaysAgo,
-        );
-
         return {
             failedLogins,
             resetRequests,
             lastSuccessfulLogin,
-            recentEvents,
         };
     }, [authEvents]);
 
@@ -1221,17 +1214,17 @@ const Team: React.FC = () => {
                             </div>
                         )}
 
-                        {!authEventsLoading && !authEventsError && selectedDiagnosticsUser && authSummary.recentEvents.length === 0 && (
-                            <p className="text-sm text-slate-500">No auth events recorded for this user in the last 30 days.</p>
+                        {!authEventsLoading && !authEventsError && selectedDiagnosticsUser && authEvents.length === 0 && (
+                            <p className="text-sm text-slate-500">No auth events recorded for this user.</p>
                         )}
 
-                        {!authEventsLoading && !authEventsError && authSummary.recentEvents.length > 0 && (
+                        {!authEventsLoading && !authEventsError && authEvents.length > 0 && (
                             <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                                Activity — last 30 days
+                                Auth Event History
                             </p>
                         )}
 
-                        {!authEventsLoading && !authEventsError && authSummary.recentEvents.map((event) => (
+                        {!authEventsLoading && !authEventsError && authEvents.map((event) => (
                             <article key={event.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div>

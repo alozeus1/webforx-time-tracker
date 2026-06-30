@@ -10,8 +10,11 @@
  * Bug 2 (Frontend): authSummary used a 7-day window for failedLogins but
  *   the raw event list showed ALL returned events (no date gate). An event
  *   from >7 days ago appeared in the list but counted as 0.
- *   Fixed: authSummary.recentEvents filters to last 30 days, the list now
- *   renders recentEvents, and a "Activity — last 30 days" label is shown.
+ *   Fixed: stat counts use correct date windows (7d for failed logins, 30d
+ *   for reset requests). The event list renders ALL events the API returns
+ *   (no frontend date gate) under an "Auth Event History" label — this
+ *   prevents historical events from being hidden when the backend was still
+ *   backfilling organization_id on existing rows.
  *
  * These tests exercise the Manager/Team page Access Diagnostics section.
  * All API calls are mocked at the network layer.
@@ -169,33 +172,34 @@ test.describe('Access Diagnostics — stats accuracy (Bug 2 frontend fix)', () =
     });
 
     // -----------------------------------------------------------------------
-    // 2. Old failure outside 7-day window → count is 0, event NOT shown in list
+    // 2. Old failure outside 7-day window → count is 0, but event IS shown in list
+    //    (list shows all events the API returns — no frontend date gate)
     // -----------------------------------------------------------------------
-    test('old failure event (>30 days) is excluded from both count and event list', async ({ page }) => {
+    test('old failure event (>7 days) is excluded from FAILED LOGINS count but still visible in list', async ({ page }) => {
         await setupManagerSession(page);
-        // Only old event — outside both 7-day and 30-day windows
+        // Only old event — outside 7-day window so count = 0, but API returns it and list shows it
         await mockTeamAPIs(page, [OLD_FAILURE]);
         await page.goto('/team');
 
         const section = page.getByText('Access Diagnostics').first();
         await expect(section).toBeVisible({ timeout: 10000 });
 
-        // Old event should NOT appear in the 30-day filtered list
-        await expect(page.getByText('102.90.116.71').first()).not.toBeVisible();
-        // Empty state should be shown instead
-        await expect(page.getByText(/No auth events recorded.*last 30 days/i)).toBeVisible({ timeout: 5000 });
+        // Count must be 0 (outside 7-day window)
+        await expect(page.getByText('0').first()).toBeVisible({ timeout: 5000 });
+        // But the event IS visible in the history list (no frontend date filter on list)
+        await expect(page.getByText('197.211.58.38').first()).toBeVisible({ timeout: 8000 });
     });
 
     // -----------------------------------------------------------------------
-    // 3. Date range label is rendered above the event list
+    // 3. History label is rendered above the event list
     // -----------------------------------------------------------------------
-    test('shows "Activity — last 30 days" label when events are present', async ({ page }) => {
+    test('shows "Auth Event History" label when events are present', async ({ page }) => {
         await setupManagerSession(page);
         await mockTeamAPIs(page, [RECENT_FAILURE, RECENT_SUCCESS, RECENT_RESET]);
         await page.goto('/team');
 
         await expect(page.getByText('Access Diagnostics').first()).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText(/Activity.*last 30 days/i)).toBeVisible({ timeout: 8000 });
+        await expect(page.getByText(/Auth Event History/i)).toBeVisible({ timeout: 8000 });
     });
 
     // -----------------------------------------------------------------------
@@ -212,31 +216,32 @@ test.describe('Access Diagnostics — stats accuracy (Bug 2 frontend fix)', () =
     });
 
     // -----------------------------------------------------------------------
-    // 5. Mixed: recent + old events — only recent appear in list, count is accurate
+    // 5. Mixed: recent + old events — BOTH appear in list; count only counts recent
     // -----------------------------------------------------------------------
-    test('only events within 30 days appear in the event list when mixed old and new', async ({ page }) => {
+    test('both recent and old events appear in the history list; count only tallies recent', async ({ page }) => {
         await setupManagerSession(page);
-        // Mix: one recent failure (within 7d), one old failure (67d ago, outside 30d)
+        // Mix: one recent failure (within 7d), one old failure (67d ago)
         await mockTeamAPIs(page, [RECENT_FAILURE, OLD_FAILURE]);
         await page.goto('/team');
 
         await expect(page.getByText('Access Diagnostics').first()).toBeVisible({ timeout: 10000 });
-        // The old failure's IP should NOT appear (filtered from list)
-        await expect(page.getByText('197.211.58.38')).not.toBeVisible();
+        // Both events' IPs should appear — list has no frontend date gate
+        await expect(page.getByText('102.90.116.71').first()).toBeVisible({ timeout: 8000 });
+        await expect(page.getByText('197.211.58.38').first()).toBeVisible({ timeout: 8000 });
     });
 
     // -----------------------------------------------------------------------
-    // 6. Empty state message reflects the 30-day scope
+    // 6. Empty state when API returns no events
     // -----------------------------------------------------------------------
-    test('empty state says "last 30 days" not generic "no recent events"', async ({ page }) => {
+    test('empty state shows generic message when API returns no events', async ({ page }) => {
         await setupManagerSession(page);
-        // Return events but all older than 30 days
-        await mockTeamAPIs(page, [OLD_FAILURE]);
+        // Return zero events
+        await mockTeamAPIs(page, []);
         await page.goto('/team');
 
         await expect(page.getByText('Access Diagnostics').first()).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText(/No auth events recorded.*last 30 days/i)).toBeVisible({ timeout: 5000 });
-        // Old generic message should be gone
-        await expect(page.getByText('No recent auth events were recorded for this user.')).not.toBeVisible();
+        await expect(page.getByText(/No auth events recorded for this user/i)).toBeVisible({ timeout: 5000 });
+        // Date-scoped message should be gone
+        await expect(page.getByText(/No auth events recorded.*last 30 days/i)).not.toBeVisible();
     });
 });
