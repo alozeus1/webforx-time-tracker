@@ -52,3 +52,4 @@ docs/releases/
 .codex.local.toml
 .codex.local.json
 .superpowers/
+.claude-secrets

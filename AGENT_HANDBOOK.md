@@ -1,6 +1,6 @@
 # Web Forx Time Tracker Agent Handbook
 
-Last updated: 2026-03-26 (America/Chicago)
+Last updated: 2026-06-30 (America/Chicago)
 
 This document is the single operational reference for any coding agent working in this repository.
 
@@ -376,7 +376,72 @@ When any agent starts work, do this first:
 2. Read `docs/mvp.md` and `docs/app-route.md`.
 3. Confirm whether task targets frontend, backend, desktop, or docs.
 4. Confirm env assumptions (local vs production).
-5. If deployment-impacting, verify current Vercel URLs and env key presence before changing code.
-6. Execute the smallest safe change and run build checks.
-7. Update this handbook if deployment topology or core behavior changed.
+5. Before GitHub operations, run `gh auth status --hostname github.com` and confirm the active account is `alozeus1`.
+6. If deployment-impacting, verify current Vercel URLs and env key presence before changing code.
+7. Execute the smallest safe change and run build checks.
+8. Update this handbook if deployment topology or core behavior changed.
 
+## 18. GitHub Repository And Authentication
+
+- GitHub account: `alozeus1`
+- Repository: `https://github.com/alozeus1/webforx-time-tracker`
+- Git remote: `origin`
+- Git protocol: HTTPS
+
+Authentication is stored in the macOS Keychain for the local OS account. Codex,
+Claude, Kimi, and other local agents running as this user should use the existing
+credential store:
+
+```bash
+gh auth status --hostname github.com
+gh auth setup-git
+git fetch origin
+```
+
+Never put a GitHub PAT in this handbook, a Git remote URL, an environment file,
+shell history, source code, or a commit. If authentication expires, the operator
+must rotate or replace the credential using `gh auth login --hostname github.com`
+and then rerun `gh auth setup-git`.
+
+### 18a. Claude Cowork Sandbox Authentication
+
+The Cowork sandbox is an isolated Linux environment. It mounts the project folder
+but cannot access the macOS Keychain or the Mac's global `~/.gitconfig`. The
+`gh` credential store is therefore unavailable inside the sandbox.
+
+**Credential file (operator creates once, never committed):**
+
+The operator should create a file `.claude-secrets` in the project root:
+
+```
+GITHUB_USERNAME=alozeus1
+GITHUB_PAT=ghp_xxxxxxxxxxxxxxxxxxxx
+```
+
+This file is gitignored (see `.gitignore`). Claude must never create or modify
+this file — the operator owns it. Claude must never log its contents.
+
+**What Claude does at the start of any session that requires a git push:**
+
+1. Check whether `.claude-secrets` exists in the project root.
+2. If it exists, read `GITHUB_USERNAME` and `GITHUB_PAT` from it.
+3. Run the following to configure credentials for all `github.com` repos in
+   this sandbox session (ephemeral — resets when the session ends):
+
+```bash
+source .claude-secrets
+git config --global \
+  url."https://${GITHUB_USERNAME}:${GITHUB_PAT}@github.com/".insteadOf \
+  "https://github.com/"
+```
+
+4. Proceed with `git add -A && git commit -m "..." && git push`.
+5. After pushing, verify with `git log --oneline -1`.
+
+**Required PAT permissions (Fine-grained, scoped to `webforx-time-tracker`):**
+
+- Contents → Read & Write
+- Metadata → Read-only (granted automatically)
+
+**Token rotation:** When the PAT expires, the operator updates `.claude-secrets`
+with the new token. No other file changes are needed.
