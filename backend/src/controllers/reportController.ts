@@ -221,9 +221,11 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
 
         const prevEntries = await prisma.timeEntry.findMany({
             where: prevWhereClause,
-            include: {
+            select: {
+                duration: true,
+                project_id: true,
+                is_billable: true,
                 user: { select: { hourly_rate: true } },
-                project: { select: { id: true } },
             },
         });
 
@@ -237,7 +239,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             if (entry.project_id) prevProjectIds.add(entry.project_id);
             const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
             prevBillable += (entry.duration / 3600) * rate;
-            if ((entry as any).is_billable !== false) {
+            if (entry.is_billable !== false) {
                 prevBillableSec += entry.duration;
             }
         });
@@ -449,6 +451,9 @@ export const createShareLink = async (req: AuthRequest, res: Response): Promise<
             {
                 type,
                 id,
+                // Embed org_id so getSharedArtifact can enforce tenant isolation
+                // when re-fetching the artifact from the database.
+                organization_id: req.user!.organization_id,
                 exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
             },
             env.jwtSecret,
@@ -468,8 +473,15 @@ export const createShareLink = async (req: AuthRequest, res: Response): Promise<
 export const getSharedArtifact = async (req: Request, res: Response): Promise<void> => {
     try {
         const token = req.params.token as string;
-        const payload = jwt.verify(token, env.jwtSecret) as { type: ShareArtifactType; id?: string };
-        const artifact = await buildSharedArtifactPayload(payload.type, payload.id);
+        const payload = jwt.verify(token, env.jwtSecret) as { type: ShareArtifactType; id?: string; organization_id?: string };
+        // Pass organization_id from the token so every DB lookup is tenant-scoped.
+        // Tokens created before this fix won't have organization_id — those will
+        // receive a 404 (safe: they can re-share to generate a new scoped token).
+        if (!payload.organization_id) {
+            res.status(404).json({ message: 'Shared artifact not found or expired' });
+            return;
+        }
+        const artifact = await buildSharedArtifactPayload(payload.type, payload.id, payload.organization_id);
         res.status(200).json(artifact);
     } catch (error) {
         console.error('Failed to load shared artifact:', error);

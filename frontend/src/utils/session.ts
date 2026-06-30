@@ -54,6 +54,8 @@ export const clearStoredSession = () => {
     }
 
     window.localStorage.removeItem('token');
+    // refreshToken is no longer stored in localStorage — it lives in an httpOnly cookie.
+    // Keep this removal for users upgrading from a previous session that may have stored it.
     window.localStorage.removeItem('refreshToken');
     window.localStorage.removeItem('user_role');
     window.localStorage.removeItem('user_profile');

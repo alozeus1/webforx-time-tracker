@@ -113,9 +113,11 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions);
 
+        // NOTE: refreshToken is delivered ONLY via the httpOnly cookie set above.
+        // Returning it in the JSON body would allow XSS to steal the 7-day token
+        // and bypass cookie protections entirely.
         res.status(200).json({
             token: accessToken,
-            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -167,7 +169,8 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             data: { used: true },
         });
 
-        const token = crypto.randomBytes(4).toString('hex').toUpperCase();
+        // 6 bytes → 12 uppercase hex chars (281 trillion combinations vs the old 4-byte / 4.3B)
+        const token = crypto.randomBytes(6).toString('hex').toUpperCase();
         const expires_at = new Date(Date.now() + 30 * 60 * 1000);
 
         await prisma.passwordResetToken.create({
@@ -291,7 +294,8 @@ export const refreshAccessToken = async (req: Request, res: Response): Promise<v
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions);
 
-        res.status(200).json({ token: accessToken, refreshToken: newRefreshToken });
+        // Refresh token is in the httpOnly cookie only — not returned in body.
+        res.status(200).json({ token: accessToken });
     } catch {
         res.status(401).json({ message: 'Invalid or expired refresh token' });
     }

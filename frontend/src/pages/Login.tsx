@@ -39,9 +39,8 @@ const Login: React.FC = () => {
         try {
             const response = await api.post('/auth/login', { email, password });
             setStoredSession(response.data.token, response.data.user.role, response.data.user);
-            if (response.data.refreshToken) {
-                localStorage.setItem('refreshToken', response.data.refreshToken);
-            }
+            // Refresh token is delivered via httpOnly cookie only — not in the response body.
+            // No localStorage storage needed; the cookie is sent automatically by the browser.
             resetAuthFailureState();
             navigate('/dashboard');
         } catch (error) {

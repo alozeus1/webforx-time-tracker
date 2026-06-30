@@ -27,8 +27,8 @@ import publicRoutes from './routes/publicRoutes';
 import contactRoutes from './routes/contactRoutes';
 import { logAuthEvent } from './services/authEventService';
 import { notificationWorker } from './workers/notificationWorker';
-import { startIdleTracker } from './workers/idleTracker';
-import { startBurnoutTracker } from './workers/burnoutTracker';
+// startIdleTracker / startBurnoutTracker imports removed — these in-process cron jobs are
+// replaced by Vercel Cron Jobs that call /api/v1/cron/idle and /api/v1/cron/workload.
 import { securityHeaders } from './config/security';
 import { correlationId } from './middlewares/correlationId';
 import { requestLogger } from './middlewares/requestLogger';
@@ -199,8 +199,10 @@ const bootstrap = async () => {
 
     if (env.enableBackgroundWorkers) {
         notificationWorker.start();
-        startIdleTracker();
-        startBurnoutTracker();
+        // startIdleTracker() and startBurnoutTracker() are INTENTIONALLY omitted here.
+        // On Vercel serverless the process is torn down after every request, so in-process
+        // node-cron jobs never fire. Both are now invoked exclusively via Vercel Cron Jobs
+        // that call /api/v1/cron/idle and /api/v1/cron/workload respectively — see vercel.json.
     }
 
     if (process.env.VERCEL !== '1') {

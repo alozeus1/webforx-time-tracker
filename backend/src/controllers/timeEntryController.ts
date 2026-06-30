@@ -182,6 +182,11 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
 
         res.status(201).json(newTimer);
     } catch (error) {
+        // P2002 = unique constraint violated — concurrent request already created the timer.
+        if ((error as { code?: string })?.code === 'P2002') {
+            res.status(409).json({ message: 'Timer already running for this user' });
+            return;
+        }
         console.error('Failed to start timer:', error);
         res.status(500).json({ message: 'Internal server error while starting timer' });
     }
@@ -260,14 +265,9 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
             console.error('Failed to write timer stop audit log:', error);
         }
 
-        res.status(200).json(timeEntry);
-
-        // Fire-and-forget: webhook + overtime check
-        emitWebhookEvent('timer.stopped', {
-            time_entry_id: timeEntry.id, user_id, duration: timeEntry.duration, project_id: timeEntry.project_id,
-        }).catch(() => {});
-
-        // Overtime weekly limit check
+        // Overtime weekly limit check — must run BEFORE res.json so it commits in the
+        // same Vercel function invocation. On serverless, anything after res.json is
+        // unreliable (the process may be frozen/torn down).
         try {
             const user = await prisma.user.findFirst({
                 where: { id: user_id, organization_id: req.user!.organization_id },
@@ -304,6 +304,14 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
         } catch (err) {
             console.error('Overtime check failed:', err);
         }
+
+        res.status(200).json(timeEntry);
+
+        // Fire-and-forget webhook — runs after response; acceptable if it's occasionally
+        // dropped on Vercel (non-critical side effect).
+        emitWebhookEvent('timer.stopped', {
+            time_entry_id: timeEntry.id, user_id, duration: timeEntry.duration, project_id: timeEntry.project_id,
+        }).catch(() => {});
     } catch (error) {
         console.error('Failed to stop timer:', error);
         res.status(500).json({ message: 'Internal server error while stopping timer' });
@@ -373,42 +381,51 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
-        const timeEntry = await prisma.timeEntry.create({
-            data: {
-                user_id,
-                organization_id: req.user!.organization_id,
-                project_id: typeof project_id === 'string' && project_id.trim() ? project_id : null,
-                task_description: task_description.trim(),
-                start_time: start,
-                end_time: end,
-                duration,
-                entry_type: 'manual',
-                notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
-                is_billable,
-            },
-        });
-
-        await prisma.auditLog.create({
-            data: {
-                user_id,
-                organization_id: req.user!.organization_id,
-                action: 'manual_time_entry_created',
-                resource: 'time_entry',
-                metadata: {
-                    entry_id: timeEntry.id,
-                    project_id,
-                    start_time,
-                    end_time,
+        // Transaction: if tag linking fails the entry is rolled back — no orphaned entries.
+        const timeEntry = await prisma.$transaction(async (tx) => {
+            const entry = await tx.timeEntry.create({
+                data: {
+                    user_id,
+                    organization_id: req.user!.organization_id,
+                    project_id: typeof project_id === 'string' && project_id.trim() ? project_id : null,
+                    task_description: task_description.trim(),
+                    start_time: start,
+                    end_time: end,
+                    duration,
+                    entry_type: 'manual',
+                    notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
+                    is_billable,
                 },
-            },
+            });
+
+            if (tag_ids.length > 0) {
+                await tx.timeEntryTag.createMany({
+                    data: tag_ids.map((tag_id: string) => ({ time_entry_id: entry.id, tag_id })),
+                    skipDuplicates: true,
+                });
+            }
+
+            return entry;
         });
 
-        if (tag_ids.length > 0) {
-            const tagLinks = tag_ids.map((tag_id: string) => ({
-                time_entry_id: timeEntry.id,
-                tag_id,
-            }));
-            await prisma.timeEntryTag.createMany({ data: tagLinks, skipDuplicates: true });
+        // Audit log is best-effort — failure should NOT roll back the time entry.
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id,
+                    organization_id: req.user!.organization_id,
+                    action: 'manual_time_entry_created',
+                    resource: 'time_entry',
+                    metadata: {
+                        entry_id: timeEntry.id,
+                        project_id,
+                        start_time,
+                        end_time,
+                    },
+                },
+            });
+        } catch (auditError) {
+            console.error('Failed to write manual entry audit log:', auditError);
         }
 
         res.status(201).json(timeEntry);
@@ -799,7 +816,9 @@ export const pauseBeacon = async (req: Request, res: Response): Promise<void> =>
 
         let userId: string;
         try {
-            const payload = jwt.verify(rawToken, env.jwtSecret) as { userId: string };
+            const payload = jwt.verify(rawToken, env.jwtSecret) as { userId: string; type?: string };
+            // Guard: refresh tokens are longer-lived and must not be accepted here.
+            if (payload.type === 'refresh') throw new Error('Refresh token not accepted for beacon');
             userId = payload.userId;
             if (!userId) throw new Error('No userId in token');
         } catch {
@@ -876,19 +895,25 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
             return;
         }
 
-        const updatedEntry = await prisma.timeEntry.update({
-            where: { id: entryId },
-            data: { status: statusMap[action as keyof typeof statusMap] }
-        });
+        // Transaction: status update + notification must both commit or both roll back.
+        // Also scopes the UPDATE to the org so a malicious entryId from another tenant
+        // cannot be approved by a manager in a different org (TOCTOU mitigation).
+        const updatedEntry = await prisma.$transaction(async (tx) => {
+            const updated = await tx.timeEntry.update({
+                where: { id: entryId, organization_id: req.user!.organization_id },
+                data: { status: statusMap[action as keyof typeof statusMap] },
+            });
 
-        // Notify the user about the decision
-        await prisma.notification.create({
-            data: {
-                user_id: updatedEntry.user_id,
-                organization_id: req.user!.organization_id,
-                message: `Your timesheet for ${updatedEntry.task_description} was ${statusMap[action as keyof typeof statusMap]} by your manager.`,
-                type: 'approval_status'
-            }
+            await tx.notification.create({
+                data: {
+                    user_id: updated.user_id,
+                    organization_id: req.user!.organization_id,
+                    message: `Your timesheet for ${updated.task_description} was ${statusMap[action as keyof typeof statusMap]} by your manager.`,
+                    type: 'approval_status',
+                },
+            });
+
+            return updated;
         });
 
         try {
@@ -949,7 +974,9 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
         }
 
         const updated = await prisma.$transaction(async (tx) => {
-            const result = await tx.timeEntry.update({ where: { id: entryId }, data });
+            // Include org_id in the UPDATE WHERE to close the TOCTOU window between
+            // the findFirst check above and this write.
+            const result = await tx.timeEntry.update({ where: { id: entryId, organization_id: req.user!.organization_id }, data });
 
             if (Array.isArray(tag_ids)) {
                 await tx.timeEntryTag.deleteMany({ where: { time_entry_id: entryId } });
@@ -985,7 +1012,8 @@ export const deleteEntry = async (req: AuthRequest, res: Response): Promise<void
             res.status(403).json({ message: 'Not authorized to delete this entry' }); return;
         }
 
-        await prisma.timeEntry.delete({ where: { id: entryId } });
+        // Scope DELETE to org_id to close the TOCTOU window between the findFirst above and this write.
+        await prisma.timeEntry.delete({ where: { id: entryId, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Time entry deleted' });
     } catch (error) {
         console.error('Failed to delete entry:', error);

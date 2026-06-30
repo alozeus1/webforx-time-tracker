@@ -5,7 +5,8 @@ import { listOrganizations, getOrganization, createOrganization, updateOrganizat
 const router = Router();
 
 router.get('/', authenticateToken, requireRole(['Admin', 'Manager']), listOrganizations);
-router.get('/:id', authenticateToken, getOrganization);
+// Employees must not see org billing/plan details — restrict to Admin/Manager.
+router.get('/:id', authenticateToken, requireRole(['Admin', 'Manager']), getOrganization);
 router.post('/', createOrganization); // Public for self-service signup
 router.put('/me', authenticateToken, requireRole(['Admin']), updateOrganization);
 

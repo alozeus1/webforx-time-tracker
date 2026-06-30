@@ -59,8 +59,22 @@ export const passwordResetSchema = z.object({
 
 export const passwordResetConfirmSchema = z.object({
   token: z.string().trim().min(1, 'Reset code is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  // Raised to 12 chars to match the strengthened OTP — keeps the bar consistent.
+  password: z.string().min(12, 'Password must be at least 12 characters'),
 });
+
+// Used by the Admin "Create User" endpoint — enforces the same floor as self-registration.
+export const createUserSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  first_name: z.string().min(1, 'First name is required'),
+  last_name: z.string().min(1, 'Last name is required'),
+  // role or role_id — controller resolves whichever is present.
+  role: z.string().optional(),
+  role_id: z.string().uuid().optional(),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
+  team_name: z.string().optional(),
+  hourly_rate: z.number().nonnegative().optional(),
+}).refine((d) => d.role || d.role_id, { message: 'role or role_id is required', path: ['role'] });
 
 export const uuidParamSchema = z.object({
   id: z.string().uuid(),

@@ -6,6 +6,7 @@ import { logAuthEvent } from '../services/authEventService';
 import { getUserWellbeingSummary } from '../services/wellbeingService';
 import { sendWelcomeEmail } from '../services/emailService';
 import { env } from '../config/env';
+import { createUserSchema, formatZodIssues } from '../validation/schemas';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -391,16 +392,20 @@ export const getUserAuthEvents = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
-        // Query by user_id / email only — NOT organization_id.
-        // The user lookup above already validates the target belongs to the requesting
-        // org. Filtering by organization_id would exclude any event row where that
-        // column is null (events written before the column was populated), causing
-        // legitimate historical events to silently disappear from the panel.
+        // Filter by org_id OR null so that:
+        //   - Events written after the org_id fix (non-null) are included for this org only.
+        //   - Legacy events written before the fix (null) are still visible to avoid
+        //     the panel appearing empty after the column was backfilled.
+        //   - Events from *other* orgs (non-null, different org) are excluded.
+        // The user lookup above already confirms the target belongs to the requester's org.
         const events = await prisma.authEvent.findMany({
             where: {
-                OR: [
-                    { user_id: user.id },
-                    { email: user.email },
+                AND: [
+                    // Include events for this org, OR events where org_id is null
+                    // (legacy rows written before the column was populated).
+                    { OR: [{ organization_id: req.user!.organization_id }, { organization_id: null }] },
+                    // Must still belong to the target user by id or email.
+                    { OR: [{ user_id: user.id }, { email: user.email }] },
                 ],
             },
             orderBy: { created_at: 'desc' },
@@ -432,10 +437,17 @@ const resolveRoleId = async (organizationId: string, roleId?: string, roleName?:
 
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
+        // Validate with Zod before any DB work — rejects weak/missing passwords early.
+        const parsed = createUserSchema.safeParse(req.body);
+        if (!parsed.success) {
+            res.status(400).json({ message: 'Validation failed', errors: formatZodIssues(parsed.error) });
+            return;
+        }
+
         const { email, password, first_name, last_name, role_id, role } = req.body;
         const teamName = normalizeTeamName(req.body?.team_name);
 
-        if (!email || !password || !first_name || !last_name) {
+        if (!email || !first_name || !last_name) {
             res.status(400).json({ message: 'Missing required fields' });
             return;
         }
@@ -565,6 +577,22 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
+        // ── Fix N+1: pre-fetch existing emails in one query ───────────────────
+        // Old: prisma.user.findFirst() per row inside the loop = O(n) queries.
+        // New: single findMany + Set lookup = O(1) queries.
+        const allInputEmails = users
+            .map((row) => normalizeEmail(row.email))
+            .filter((e): e is string => !!e && looksLikeEmail(e));
+
+        const existingEmailSet = new Set<string>();
+        if (skipExisting && allInputEmails.length > 0) {
+            const existingUsers = await prisma.user.findMany({
+                where: { email: { in: allInputEmails }, organization_id: req.user!.organization_id },
+                select: { email: true },
+            });
+            existingUsers.forEach((u) => existingEmailSet.add(u.email));
+        }
+
         const created: Array<{ id: string; email: string; first_name: string; last_name: string; team_name: string | null; role: string; assigned_projects: number }> = [];
         const skipped: Array<{ email: string; reason: string }> = [];
         const failed: Array<{ email: string; reason: string }> = [];
@@ -592,12 +620,9 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                 continue;
             }
 
-            if (skipExisting) {
-                const existing = await prisma.user.findFirst({ where: { email, organization_id: req.user!.organization_id }, select: { id: true } });
-                if (existing) {
-                    skipped.push({ email, reason: 'User already exists' });
-                    continue;
-                }
+            if (skipExisting && existingEmailSet.has(email)) {
+                skipped.push({ email, reason: 'User already exists' });
+                continue;
             }
 
             const { firstName, lastName } = deriveName(row, email);

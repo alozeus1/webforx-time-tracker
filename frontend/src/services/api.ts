@@ -138,9 +138,11 @@ api.interceptors.response.use(
         }
 
         if (isAuthFailureResponse(error) && originalRequest && !originalRequest._retry) {
-            const refreshToken = localStorage.getItem('refreshToken');
+            // Refresh token lives in an httpOnly cookie — it is NOT stored in localStorage.
+            // The cookie is sent automatically by the browser via withCredentials.
+            const isNavigablePage = window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password';
 
-            if (refreshToken && window.location.pathname !== '/login' && window.location.pathname !== '/forgot-password') {
+            if (isNavigablePage) {
                 if (isRefreshing) {
                     return new Promise((resolve, reject) => {
                         failedQueue.push({
@@ -159,14 +161,13 @@ api.interceptors.response.use(
                 try {
                     const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
                     const newToken = typeof res.data?.token === 'string' ? res.data.token.trim() : '';
-                    const newRefresh = typeof res.data?.refreshToken === 'string' ? res.data.refreshToken.trim() : '';
 
                     if (!newToken) {
                         throw new Error('Refresh response did not include a valid token');
                     }
 
                     localStorage.setItem('token', newToken);
-                    if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+                    // New refresh token cookie is set automatically by the server response.
 
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;
                     resetAuthFailureState();
