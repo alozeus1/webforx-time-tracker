@@ -59,6 +59,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         const user = await prisma.user.findFirst({
             where: { email: email.toLowerCase() },
             include: { role: true },
+            // mfa_enabled and mfa_secret are selected by default (scalar fields)
         });
 
         if (!user) {
@@ -107,6 +108,17 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             outcome: 'success',
             metadata: { role: user.role.name },
         });
+
+        // If MFA is enabled, return a short-lived challenge token instead of a full session
+        if ((user as any).mfa_enabled) {
+            const challengeToken = jwt.sign(
+                { userId: user.id, type: 'mfa_challenge' },
+                env.jwtSecret,
+                { expiresIn: '5m' }
+            );
+            res.status(200).json({ mfa_required: true, mfa_challenge_token: challengeToken });
+            return;
+        }
 
         const { accessToken, refreshToken } = generateTokens(user);
 

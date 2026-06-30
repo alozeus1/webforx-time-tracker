@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, CheckCircle, DollarSign, FileText, Plus, Send, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
+import { BadgeCheck, CheckCircle, DollarSign, Download, FileText, Plus, Send, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import type { InvoiceSummary, ProjectSummary } from '../types/api';
 
@@ -154,6 +154,22 @@ const Invoices: React.FC = () => {
             setFeedback({ message: getApiErrorMessage(error, 'Failed to generate invoice evidence link'), tone: 'error' });
         } finally {
             setShareInvoiceId(null);
+        }
+    };
+
+    const downloadPdf = async (invoiceId: string, invoiceNumber: string) => {
+        try {
+            const response = await api.get(`/invoices/${invoiceId}/pdf`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([response.data as BlobPart], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `invoice-${invoiceNumber}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+        } catch {
+            setFeedback({ message: 'Failed to download PDF', tone: 'error' });
         }
     };
 
@@ -475,6 +491,7 @@ const Invoices: React.FC = () => {
                                                 >
                                                     <ShieldCheck size={16} />
                                                 </button>
+                                                <button type="button" onClick={() => void downloadPdf(inv.id, inv.invoice_number)} title="Download PDF" className="p-1.5 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-600 transition-colors"><Download size={16} /></button>
                                                 <button type="button" onClick={() => updateStatus(inv.id, 'sent')} disabled={statusUpdatingId === inv.id} title="Mark as Sent" className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-blue-600 transition-colors disabled:opacity-50"><Send size={16} /></button>
                                                 <button type="button" onClick={() => deleteInvoice(inv.id)} disabled={deletingId === inv.id} title="Delete" className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors disabled:opacity-50"><Trash2 size={16} /></button>
                                             </>
@@ -490,19 +507,23 @@ const Invoices: React.FC = () => {
                                                 >
                                                     <ShieldCheck size={16} />
                                                 </button>
+                                                <button type="button" onClick={() => void downloadPdf(inv.id, inv.invoice_number)} title="Download PDF" className="p-1.5 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-600 transition-colors"><Download size={16} /></button>
                                                 <button type="button" onClick={() => updateStatus(inv.id, 'paid')} disabled={statusUpdatingId === inv.id} title="Mark as Paid" className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-emerald-600 transition-colors disabled:opacity-50"><CheckCircle size={16} /></button>
                                             </>
                                         )}
                                         {inv.status === 'paid' && (
-                                            <button
-                                                type="button"
-                                                onClick={() => createShareLink(inv.id)}
-                                                disabled={shareInvoiceId === inv.id}
-                                                title="Create invoice evidence link"
-                                                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors disabled:opacity-50"
-                                            >
-                                                <ShieldCheck size={16} />
-                                            </button>
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => createShareLink(inv.id)}
+                                                    disabled={shareInvoiceId === inv.id}
+                                                    title="Create invoice evidence link"
+                                                    className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors disabled:opacity-50"
+                                                >
+                                                    <ShieldCheck size={16} />
+                                                </button>
+                                                <button type="button" onClick={() => void downloadPdf(inv.id, inv.invoice_number)} title="Download PDF" className="p-1.5 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 text-violet-600 transition-colors"><Download size={16} /></button>
+                                            </>
                                         )}
                                     </div>
                                 </div>

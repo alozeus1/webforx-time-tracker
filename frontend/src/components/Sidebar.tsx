@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Clock, Calendar, FileText, BarChart2,
     Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle,
     Sun, Moon, Receipt, FolderCog, Globe, CalendarClock, Sparkles,
-    ChevronLeft, ChevronRight,
+    ChevronLeft, ChevronRight, CalendarDays,
 } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
@@ -43,6 +43,7 @@ const NAV_GROUPS: NavGroup[] = [
         items: [
             { name: 'Timeline', path: '/timeline', icon: <Calendar size={20} /> },
             { name: 'Timesheet', path: '/timesheet', icon: <FileText size={20} /> },
+            { name: 'Leave & PTO', path: '/leave', icon: <CalendarDays size={20} /> },
             { name: 'Reports', path: '/reports', icon: <BarChart2 size={20} /> },
         ],
     },

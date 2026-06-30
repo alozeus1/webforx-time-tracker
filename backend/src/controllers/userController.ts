@@ -338,6 +338,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
                 last_name: true,
                 team_name: true,
                 is_active: true,
+                hourly_rate: true,
                 role: { select: { name: true } },
             },
         });
@@ -766,7 +767,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
     try {
         const userIdParam = req.params.id;
         const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
-        const { first_name, last_name, email, password, role_id, role, is_active } = req.body;
+        const { first_name, last_name, email, password, role_id, role, is_active, hourly_rate } = req.body;
 
         if (!userId) {
             res.status(400).json({ message: 'User id is required' });
@@ -793,6 +794,15 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
 
         if (typeof is_active === 'boolean') {
             updateData.is_active = is_active;
+        }
+
+        if (hourly_rate !== undefined && hourly_rate !== null) {
+            const rate = parseFloat(String(hourly_rate));
+            if (!isNaN(rate) && rate >= 0) {
+                updateData.hourly_rate = rate;
+            }
+        } else if (hourly_rate === null) {
+            updateData.hourly_rate = null;
         }
 
         if (typeof password === 'string' && password.trim()) {

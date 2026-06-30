@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { Response } from 'express';
+import PDFDocument from 'pdfkit';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { sendApiError } from '../utils/http';
@@ -403,5 +404,117 @@ export const deleteInvoice = async (req: AuthRequest, res: Response): Promise<vo
     } catch (error) {
         console.error('Failed to delete invoice:', error);
         sendApiError(res, 500, 'INVOICE_DELETE_FAILED', 'Internal server error');
+    }
+};
+
+/**
+ * GET /invoices/:id/pdf
+ * Streams a PDF version of the invoice to the client.
+ */
+export const downloadInvoicePdf = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const invoiceId = req.params.id as string;
+        const invoice = await prisma.invoice.findFirst({
+            where: { id: invoiceId, organization_id: req.user!.organization_id },
+            include: {
+                project: { select: { name: true } },
+                creator: { select: { first_name: true, last_name: true, email: true } },
+                line_items: true,
+            },
+        });
+
+        if (!invoice) {
+            sendApiError(res, 404, 'INVOICE_NOT_FOUND', 'Invoice not found');
+            return;
+        }
+
+        const doc = new PDFDocument({ margin: 50, size: 'A4' });
+        const filename = `invoice-${invoice.invoice_number}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        doc.pipe(res);
+
+        // ── Header ───────────────────────────────────────────────────────────
+        doc.fontSize(24).font('Helvetica-Bold').text('INVOICE', 50, 50);
+        doc.fontSize(10).font('Helvetica').fillColor('#64748b')
+            .text(`Invoice #${invoice.invoice_number}`, 50, 82)
+            .text(`Issued: ${invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString() : new Date(invoice.created_at).toLocaleDateString()}`, 50, 96)
+            .text(`Due: ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'On receipt'}`, 50, 110);
+
+        // Status badge
+        const statusColor = invoice.status === 'paid' ? '#16a34a' : invoice.status === 'sent' ? '#2563eb' : '#92400e';
+        doc.roundedRect(400, 50, 140, 26, 4).fill(statusColor);
+        doc.fillColor('white').fontSize(11).font('Helvetica-Bold')
+            .text(invoice.status.toUpperCase(), 400, 57, { width: 140, align: 'center' });
+
+        // ── Bill To ──────────────────────────────────────────────────────────
+        doc.fillColor('#0f172a').fontSize(10).font('Helvetica-Bold').text('BILL TO', 50, 150);
+        doc.font('Helvetica').fillColor('#334155')
+            .text(invoice.client_name, 50, 165)
+            .text(invoice.client_email ?? '', 50, 179);
+
+        // Project
+        if (invoice.project?.name) {
+            doc.fillColor('#64748b').text(`Project: ${invoice.project.name}`, 50, 196);
+        }
+
+        // ── From ─────────────────────────────────────────────────────────────
+        doc.fillColor('#0f172a').font('Helvetica-Bold').text('FROM', 350, 150);
+        doc.font('Helvetica').fillColor('#334155')
+            .text(`${invoice.creator.first_name} ${invoice.creator.last_name}`, 350, 165)
+            .text(invoice.creator.email, 350, 179);
+
+        // ── Line items table ─────────────────────────────────────────────────
+        const tableTop = 240;
+        doc.fillColor('#f1f5f9').rect(50, tableTop, 495, 22).fill();
+        doc.fillColor('#475569').fontSize(9).font('Helvetica-Bold')
+            .text('DESCRIPTION', 58, tableTop + 6)
+            .text('HRS', 330, tableTop + 6, { width: 50, align: 'right' })
+            .text('RATE', 388, tableTop + 6, { width: 60, align: 'right' })
+            .text('AMOUNT', 455, tableTop + 6, { width: 85, align: 'right' });
+
+        let y = tableTop + 30;
+        for (const item of invoice.line_items) {
+            doc.fillColor('#0f172a').font('Helvetica').fontSize(9)
+                .text(item.description, 58, y, { width: 265 })
+                .text(Number(item.hours).toFixed(2), 330, y, { width: 50, align: 'right' })
+                .text(`$${Number(item.rate).toFixed(2)}`, 388, y, { width: 60, align: 'right' })
+                .text(`$${Number(item.amount).toFixed(2)}`, 455, y, { width: 85, align: 'right' });
+            y += 18;
+            doc.fillColor('#f8fafc').rect(50, y - 1, 495, 1).fill();
+        }
+
+        // ── Totals ───────────────────────────────────────────────────────────
+        y += 10;
+        doc.fillColor('#64748b').font('Helvetica').fontSize(9)
+            .text('Subtotal', 370, y, { width: 85 })
+            .text(`$${Number(invoice.subtotal).toFixed(2)}`, 455, y, { width: 85, align: 'right' });
+        y += 16;
+        if (invoice.tax_rate && Number(invoice.tax_rate) > 0) {
+            const tax = Number(invoice.subtotal) * (Number(invoice.tax_rate) / 100);
+            doc.text(`Tax (${Number(invoice.tax_rate)}%)`, 370, y, { width: 85 })
+                .text(`$${tax.toFixed(2)}`, 455, y, { width: 85, align: 'right' });
+            y += 16;
+        }
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(11)
+            .text('Total', 370, y, { width: 85 })
+            .text(`$${Number(invoice.total).toFixed(2)}`, 455, y, { width: 85, align: 'right' });
+
+        // ── Notes ────────────────────────────────────────────────────────────
+        if (invoice.notes) {
+            y += 40;
+            doc.fillColor('#64748b').font('Helvetica').fontSize(9)
+                .text('Notes', 50, y).moveDown(0.3)
+                .fillColor('#334155').text(invoice.notes, 50, undefined, { width: 495 });
+        }
+
+        // ── Footer ───────────────────────────────────────────────────────────
+        doc.fontSize(8).fillColor('#94a3b8')
+            .text('Generated by Web Forx Time Tracker', 50, 780, { align: 'center', width: 495 });
+
+        doc.end();
+    } catch (error) {
+        console.error('Failed to generate invoice PDF:', error);
+        sendApiError(res, 500, 'PDF_FAILED', 'Failed to generate PDF');
     }
 };

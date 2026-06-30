@@ -20,6 +20,7 @@ export interface UserSummary {
     last_name: string;
     team_name?: string | null;
     is_active: boolean;
+    hourly_rate?: number | null;
     role?: RoleSummary;
 }
 

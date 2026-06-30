@@ -41,6 +41,7 @@ model Organization {
   access_requests   AccessRequest[]
   payroll_periods   PayrollPeriod[]
   branding_config   BrandingConfig?
+  leave_requests    LeaveRequest[]
 
   @@index([status, created_at])
 }
@@ -62,6 +63,8 @@ model User {
   oidc_issuer   String?
   oidc_subject  String?
   last_login_provider String?
+  mfa_secret    String?
+  mfa_enabled   Boolean  @default(false)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
@@ -80,6 +83,8 @@ model User {
   project_templates     ProjectTemplate[]
   scheduled_reports     ScheduledReport[]
   locked_payroll_periods PayrollPeriod[] @relation("PayrollPeriodLocker")
+  leave_requests         LeaveRequest[]
+  reviewed_leave_requests LeaveRequest[] @relation("LeaveReviewer")
 
   @@unique([email, organization_id])
   @@index([organization_id, is_active])
@@ -514,4 +519,28 @@ model AccessRequest {
   updated_at DateTime @updatedAt
 
   @@index([organization_id, status, created_at])
+}
+
+model LeaveRequest {
+  id              String    @id @default(uuid())
+  user_id         String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  leave_type      String    // "annual" | "sick" | "unpaid" | "public_holiday" | "other"
+  start_date      DateTime
+  end_date        DateTime
+  days            Decimal   @db.Decimal(4, 1) // supports half-days (e.g. 0.5)
+  reason          String?
+  status          String    @default("pending") // "pending" | "approved" | "rejected"
+  reviewed_by     String?
+  reviewed_at     DateTime?
+  reviewer_note   String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  user     User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer User? @relation("LeaveReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([organization_id, user_id, start_date])
+  @@index([organization_id, status, start_date])
 }

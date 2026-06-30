@@ -24,6 +24,7 @@ import Webhooks from './pages/Webhooks';
 import ScheduledReports from './pages/ScheduledReports';
 import SharedArtifact from './pages/SharedArtifact';
 import Demo from './pages/Demo';
+import Leave from './pages/Leave';
 import { getStoredRole, getStoredToken } from './utils/session';
 
 // Auth Guard
@@ -91,6 +92,7 @@ const App: React.FC = () => {
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/integrations/taiga" element={<Integrations />} />
           <Route path="/integrations/mattermost" element={<Integrations />} />
+          <Route path="/leave" element={<Leave />} />
         </Route>
       </Routes>
     </BrowserRouter>

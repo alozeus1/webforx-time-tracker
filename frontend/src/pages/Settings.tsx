@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getStoredPrivacyMode, setStoredPrivacyMode, type PrivacyMode } from '../utils/privacyMode';
+import api from '../services/api';
 
 const devSettings = [
     {
@@ -23,6 +24,16 @@ const devSettings = [
 const Settings: React.FC = () => {
     const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
     const [privacyMode, setPrivacyMode] = useState<PrivacyMode>(() => getStoredPrivacyMode());
+
+    // ── MFA state ────────────────────────────────────────────────────────────
+    const [mfaEnabled, setMfaEnabled] = useState(false);
+    const [mfaLoading, setMfaLoading] = useState(true);
+    const [mfaStep, setMfaStep] = useState<'idle' | 'setup' | 'disable'>('idle');
+    const [mfaQr, setMfaQr] = useState('');
+    const [mfaSecret, setMfaSecret] = useState('');
+    const [mfaTotpCode, setMfaTotpCode] = useState('');
+    const [mfaPassword, setMfaPassword] = useState('');
+    const [mfaFeedback, setMfaFeedback] = useState<{ type: 'ok' | 'err'; msg: string } | null>(null);
 
     const [notifPrefs, setNotifPrefs] = useState(() => {
         const defaults = {
@@ -65,6 +76,57 @@ const Settings: React.FC = () => {
     const updatePrivacyMode = (mode: PrivacyMode) => {
         setPrivacyMode(mode);
         setStoredPrivacyMode(mode);
+    };
+
+    // Load MFA status on mount
+    useEffect(() => {
+        api.get<{ mfa_enabled: boolean }>('/auth/mfa/status')
+            .then(r => setMfaEnabled(r.data.mfa_enabled))
+            .catch(() => { /* not fatal */ })
+            .finally(() => setMfaLoading(false));
+    }, []);
+
+    const handleMfaSetup = async () => {
+        setMfaFeedback(null);
+        try {
+            const r = await api.post<{ qr_code: string; secret: string }>('/auth/mfa/setup');
+            setMfaQr(r.data.qr_code);
+            setMfaSecret(r.data.secret);
+            setMfaStep('setup');
+        } catch {
+            setMfaFeedback({ type: 'err', msg: 'Failed to start MFA setup.' });
+        }
+    };
+
+    const handleMfaVerify = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMfaFeedback(null);
+        try {
+            await api.post('/auth/mfa/verify', { totp_code: mfaTotpCode });
+            setMfaEnabled(true);
+            setMfaStep('idle');
+            setMfaTotpCode('');
+            setMfaQr('');
+            setMfaSecret('');
+            setMfaFeedback({ type: 'ok', msg: 'MFA enabled successfully! Your account is now protected.' });
+        } catch {
+            setMfaFeedback({ type: 'err', msg: 'Invalid code. Make sure your device clock is synced.' });
+        }
+    };
+
+    const handleMfaDisable = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setMfaFeedback(null);
+        try {
+            await api.post('/auth/mfa/disable', { password: mfaPassword, totp_code: mfaTotpCode });
+            setMfaEnabled(false);
+            setMfaStep('idle');
+            setMfaTotpCode('');
+            setMfaPassword('');
+            setMfaFeedback({ type: 'ok', msg: 'MFA disabled.' });
+        } catch {
+            setMfaFeedback({ type: 'err', msg: 'Incorrect password or code.' });
+        }
     };
 
     return (
@@ -180,6 +242,83 @@ const Settings: React.FC = () => {
                             </div>
                         ))}
                     </div>
+                </div>
+
+                {/* MFA / Two-Factor Authentication */}
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-1" style={{ fontFamily: 'var(--font-family-display)' }}>
+                        Two-Factor Authentication
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                        Add a second layer of security using an authenticator app (Google Authenticator, Authy, etc.).
+                    </p>
+
+                    {mfaFeedback && (
+                        <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${mfaFeedback.type === 'ok' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-900/20 dark:text-rose-300'}`}>
+                            {mfaFeedback.msg}
+                        </div>
+                    )}
+
+                    {mfaLoading ? (
+                        <p className="text-sm text-slate-500">Loading…</p>
+                    ) : mfaStep === 'idle' ? (
+                        <div className="flex items-center gap-4">
+                            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${mfaEnabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'}`}>
+                                {mfaEnabled ? '✓ Enabled' : '✗ Disabled'}
+                            </span>
+                            {mfaEnabled ? (
+                                <button type="button" onClick={() => { setMfaStep('disable'); setMfaFeedback(null); }}
+                                    className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/10">
+                                    Disable MFA
+                                </button>
+                            ) : (
+                                <button type="button" onClick={() => void handleMfaSetup()}
+                                    className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90">
+                                    Enable MFA
+                                </button>
+                            )}
+                        </div>
+                    ) : mfaStep === 'setup' ? (
+                        <div className="space-y-4">
+                            <p className="text-sm text-slate-700 dark:text-slate-300">
+                                1. Scan this QR code with your authenticator app:
+                            </p>
+                            {mfaQr && <img src={mfaQr} alt="MFA QR Code" className="w-48 h-48 rounded-xl border border-slate-200" />}
+                            <p className="text-xs text-slate-500">
+                                Or enter manually: <code className="rounded bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs font-mono">{mfaSecret}</code>
+                            </p>
+                            <form onSubmit={(e) => void handleMfaVerify(e)} className="flex items-end gap-3">
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    2. Enter the 6-digit code to confirm
+                                    <input type="text" inputMode="numeric" pattern="[0-9 ]*" maxLength={7}
+                                        value={mfaTotpCode} onChange={e => setMfaTotpCode(e.target.value)}
+                                        placeholder="000 000" autoFocus required
+                                        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 w-36" />
+                                </label>
+                                <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90">Activate</button>
+                                <button type="button" onClick={() => { setMfaStep('idle'); setMfaTotpCode(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+                            </form>
+                        </div>
+                    ) : (
+                        <form onSubmit={(e) => void handleMfaDisable(e)} className="space-y-3">
+                            <p className="text-sm text-slate-700 dark:text-slate-300">Confirm your password and current authenticator code to disable MFA.</p>
+                            <div className="flex flex-wrap gap-3 items-end">
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Password
+                                    <input type="password" value={mfaPassword} onChange={e => setMfaPassword(e.target.value)} required autoFocus
+                                        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 w-48" />
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Authenticator Code
+                                    <input type="text" inputMode="numeric" pattern="[0-9 ]*" maxLength={7}
+                                        value={mfaTotpCode} onChange={e => setMfaTotpCode(e.target.value)} required placeholder="000 000"
+                                        className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 w-36" />
+                                </label>
+                                <button type="submit" className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700">Disable MFA</button>
+                                <button type="button" onClick={() => { setMfaStep('idle'); setMfaTotpCode(''); setMfaPassword(''); }} className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50">Cancel</button>
+                            </div>
+                        </form>
+                    )}
                 </div>
 
                 {/* Developer / Advanced Configuration — collapsed by default */}

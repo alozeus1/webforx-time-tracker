@@ -1,11 +1,11 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, X, Lock, Unlock, Shield, Globe, Palette } from 'lucide-react';
+import { Plus, X, Lock, Unlock, Shield, Globe, Palette, TrendingUp, AlertTriangle, CheckCircle2, CircleDashed, Pencil } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
 
-const availableTabs = ['projects', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
+const availableTabs = ['projects', 'budgets', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
 
 interface PayrollPeriod {
     id: string;
@@ -15,6 +15,18 @@ interface PayrollPeriod {
     status: 'open' | 'locked';
     locked_at: string | null;
     locker: { first_name: string; last_name: string } | null;
+}
+
+interface BudgetSummary {
+    id: string;
+    name: string;
+    budget_hours: number | null;
+    budget_amount: number | null;
+    hours_used: number;
+    hours_used_pct: number | null;
+    amount_used: number;
+    amount_used_pct: number | null;
+    over_budget: boolean;
 }
 const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
 const resolveProjectLogoSrc = (logoUrl?: string | null) => {
@@ -118,6 +130,8 @@ const Admin: React.FC = () => {
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
     const [teamSavingFor, setTeamSavingFor] = useState<Set<string>>(new Set());
+    const [editingRateUserId, setEditingRateUserId] = useState<string | null>(null);
+    const [editingRateValue, setEditingRateValue] = useState('');
 
     // ── Feature 1: Payroll / Timesheet Locking ──────────────────────────────
     const [payrollPeriods, setPayrollPeriods] = useState<PayrollPeriod[]>([]);
@@ -151,7 +165,11 @@ const Admin: React.FC = () => {
     const [brandingLoaded, setBrandingLoaded] = useState(false);
     const [brandingSaving, setBrandingSaving] = useState(false);
     const [brandingFeedback, setBrandingFeedback] = useState<string | null>(null);
-    
+
+    const [budgets, setBudgets] = useState<BudgetSummary[]>([]);
+    const [budgetsLoaded, setBudgetsLoaded] = useState(false);
+    const [budgetsLoading, setBudgetsLoading] = useState(false);
+
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
     const [newProjectBudgetHours, setNewProjectBudgetHours] = useState('');
@@ -396,6 +414,19 @@ const Admin: React.FC = () => {
     }
 
     // ── Branding functions ────────────────────────────────────────────────────
+    async function fetchBudgets() {
+        setBudgetsLoading(true);
+        try {
+            const res = await api.get<{ budgets: BudgetSummary[] }>('/projects/budgets');
+            setBudgets(res.data.budgets);
+        } catch (error) {
+            console.error('Error fetching budgets:', error);
+        } finally {
+            setBudgetsLoaded(true);
+            setBudgetsLoading(false);
+        }
+    }
+
     async function fetchBrandingSettings() {
         try {
             const res = await api.get<{ app_name?: string; logo_url?: string; favicon_url?: string; primary_color?: string; secondary_color?: string; custom_domain?: string; email_from_name?: string; email_from_address?: string } | null>('/branding');
@@ -479,6 +510,18 @@ const Admin: React.FC = () => {
         }
     }
 
+    async function handleSaveRate(userId: string) {
+        const rate = parseFloat(editingRateValue);
+        if (isNaN(rate) || rate < 0) { alert('Enter a valid rate (0 or higher).'); return; }
+        try {
+            await api.put(`/users/${userId}`, { hourly_rate: rate });
+            setUsers(current => current.map(u => u.id === userId ? { ...u, hourly_rate: rate } : u));
+            setEditingRateUserId(null);
+        } catch {
+            alert('Failed to save billing rate.');
+        }
+    }
+
     async function handleCreateTeam(event: React.FormEvent) {
         event.preventDefault();
         const name = newTeamName.trim();
@@ -532,6 +575,7 @@ const Admin: React.FC = () => {
         if (activeTab === 'bots' && !slackConfigLoaded) void fetchBotsConfig();
         if (activeTab === 'compliance' && !complianceLoaded) void fetchComplianceSettings();
         if (activeTab === 'branding' && !brandingLoaded) void fetchBrandingSettings();
+        if (activeTab === 'budgets' && !budgetsLoaded) void fetchBudgets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab]);
 
@@ -603,6 +647,7 @@ const Admin: React.FC = () => {
         try {
             await api.delete(`/projects/${project.id}`);
             void fetchProjects();
+            void fetchBudgets();
             setProjectMenuOpen(null);
         } catch {
             alert('Failed to archive project.');
@@ -627,6 +672,7 @@ const Admin: React.FC = () => {
             }
             resetProjectForm();
             void fetchProjects();
+            void fetchBudgets();
         } catch (error) {
             console.error('Error saving project:', error);
             alert('Failed to save project.');
@@ -710,6 +756,7 @@ const Admin: React.FC = () => {
                                     tab === 'bots' ? 'Bot Integrations' :
                                     tab === 'compliance' ? 'Compliance' :
                                     tab === 'branding' ? 'Branding' :
+                                    tab === 'budgets' ? 'Budgets' :
                                     tab
                                 }</p>
                             </button>
@@ -1085,8 +1132,127 @@ const Admin: React.FC = () => {
                     </div>
                 )}
 
+                {/* ═══════════ BUDGETS TAB ═══════════ */}
+                {activeTab === 'budgets' && (
+                    <div className="space-y-6 mb-8">
+                        {budgetsLoading && !budgetsLoaded ? (
+                            <div className="text-center py-16 text-slate-400">Loading budget data…</div>
+                        ) : (
+                            <>
+                                {/* Summary cards */}
+                                {(() => {
+                                    const overBudget = budgets.filter(b => b.over_budget).length;
+                                    const onTrack = budgets.filter(b => !b.over_budget && (b.budget_hours || b.budget_amount)).length;
+                                    const noBudget = budgets.filter(b => !b.budget_hours && !b.budget_amount).length;
+                                    return (
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                            {[
+                                                { label: 'Total Projects', value: budgets.length, icon: <TrendingUp size={18} />, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' },
+                                                { label: 'Over Budget', value: overBudget, icon: <AlertTriangle size={18} />, color: 'text-rose-600 bg-rose-50 dark:bg-rose-900/20' },
+                                                { label: 'On Track', value: onTrack, icon: <CheckCircle2 size={18} />, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' },
+                                                { label: 'No Budget Set', value: noBudget, icon: <CircleDashed size={18} />, color: 'text-slate-500 bg-slate-100 dark:bg-slate-700' },
+                                            ].map(card => (
+                                                <div key={card.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex items-center gap-4">
+                                                    <div className={`p-2 rounded-lg ${card.color}`}>{card.icon}</div>
+                                                    <div>
+                                                        <p className="text-2xl font-black text-slate-900 dark:text-white">{card.value}</p>
+                                                        <p className="text-xs text-slate-500">{card.label}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* Budget table */}
+                                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
+                                        <h3 className="font-bold text-slate-900 dark:text-white">Project Budget Health</h3>
+                                        <p className="text-xs text-slate-500 mt-0.5">Hours and cost burn against each project's set budget. Edit a project to update its budget.</p>
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="bg-slate-50 dark:bg-slate-900/50">
+                                                    <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400">Project</th>
+                                                    <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400">Hours Used</th>
+                                                    <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400">Cost Used</th>
+                                                    <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+                                                    <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                                                {budgets.length === 0 ? (
+                                                    <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-400 text-sm">No projects found.</td></tr>
+                                                ) : budgets.map(b => {
+                                                    const hPct = Math.min(b.hours_used_pct ?? 0, 100);
+                                                    const aPct = Math.min(b.amount_used_pct ?? 0, 100);
+                                                    const noBudget = !b.budget_hours && !b.budget_amount;
+                                                    const statusColor = b.over_budget ? 'text-rose-600 bg-rose-50 dark:bg-rose-900/20' :
+                                                        noBudget ? 'text-slate-500 bg-slate-100 dark:bg-slate-700' :
+                                                        ((b.hours_used_pct ?? 0) >= 80 || (b.amount_used_pct ?? 0) >= 80) ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' :
+                                                        'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20';
+                                                    const statusLabel = b.over_budget ? 'Over Budget' : noBudget ? 'No Budget' :
+                                                        ((b.hours_used_pct ?? 0) >= 80 || (b.amount_used_pct ?? 0) >= 80) ? 'Near Limit' : 'On Track';
+                                                    return (
+                                                        <tr key={b.id} className={`hover:bg-slate-50 dark:hover:bg-slate-900/30 transition-colors ${b.over_budget ? 'bg-rose-50/30 dark:bg-rose-900/10' : ''}`}>
+                                                            <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white text-sm">{b.name}</td>
+                                                            <td className="px-6 py-4">
+                                                                {b.budget_hours ? (
+                                                                    <div className="min-w-[140px]">
+                                                                        <div className="flex justify-between text-xs mb-1">
+                                                                            <span className="text-slate-500">{b.hours_used}h / {b.budget_hours}h</span>
+                                                                            <span className={`font-bold ${hPct >= 100 ? 'text-rose-600' : hPct >= 80 ? 'text-amber-600' : 'text-emerald-600'}`}>{b.hours_used_pct}%</span>
+                                                                        </div>
+                                                                        <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                            <div className={`h-full rounded-full transition-all ${hPct >= 100 ? 'bg-rose-500' : hPct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${hPct}%` }} />
+                                                                        </div>
+                                                                    </div>
+                                                                ) : <span className="text-xs text-slate-400">Not set</span>}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                {b.budget_amount ? (
+                                                                    <div className="min-w-[140px]">
+                                                                        <div className="flex justify-between text-xs mb-1">
+                                                                            <span className="text-slate-500">${b.amount_used.toFixed(0)} / ${b.budget_amount.toFixed(0)}</span>
+                                                                            <span className={`font-bold ${aPct >= 100 ? 'text-rose-600' : aPct >= 80 ? 'text-amber-600' : 'text-emerald-600'}`}>{b.amount_used_pct}%</span>
+                                                                        </div>
+                                                                        <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                                                                            <div className={`h-full rounded-full transition-all ${aPct >= 100 ? 'bg-rose-500' : aPct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${aPct}%` }} />
+                                                                        </div>
+                                                                    </div>
+                                                                ) : <span className="text-xs text-slate-400">Not set</span>}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-center">
+                                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${statusColor}`}>{statusLabel}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button
+                                                                    type="button"
+                                                                    title="Edit project budget"
+                                                                    onClick={() => {
+                                                                        const proj = projects.find(p => p.id === b.id);
+                                                                        if (proj) openEditProject(proj);
+                                                                    }}
+                                                                    className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                                                >
+                                                                    <Pencil size={14} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
                 {/* ═══════════ ORIGINAL TABLE (legacy tabs) ═══════════ */}
-                {!['payroll', 'bots', 'compliance', 'branding'].includes(activeTab) && (
+                {!['payroll', 'bots', 'compliance', 'branding', 'budgets'].includes(activeTab) && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                     <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
                         <h3 className="font-bold text-slate-900 dark:text-white capitalize">
@@ -1112,6 +1278,7 @@ const Admin: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Name</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Email</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Team / Group</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Rate ($/hr)</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
                                         </>
                                     )}
@@ -1268,6 +1435,34 @@ const Admin: React.FC = () => {
                                                     <option key={team} value={team}>{team}</option>
                                                 ))}
                                             </select>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            {editingRateUserId === u.id ? (
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <span className="text-sm text-slate-400">$</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={editingRateValue}
+                                                        onChange={e => setEditingRateValue(e.target.value)}
+                                                        onKeyDown={e => { if (e.key === 'Enter') void handleSaveRate(u.id); if (e.key === 'Escape') setEditingRateUserId(null); }}
+                                                        className="w-20 rounded border border-primary px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                                        autoFocus
+                                                    />
+                                                    <button type="button" onClick={() => void handleSaveRate(u.id)} className="text-xs font-bold text-emerald-600 hover:text-emerald-700 px-1">✓</button>
+                                                    <button type="button" onClick={() => setEditingRateUserId(null)} className="text-xs text-slate-400 hover:text-slate-600 px-1">✕</button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setEditingRateUserId(u.id); setEditingRateValue(u.hourly_rate?.toString() ?? '0'); }}
+                                                    className="text-sm font-semibold text-slate-700 dark:text-slate-300 hover:text-primary transition-colors group"
+                                                    title="Click to edit billing rate"
+                                                >
+                                                    {u.hourly_rate != null && u.hourly_rate > 0 ? `$${Number(u.hourly_rate).toFixed(2)}` : <span className="text-slate-300 dark:text-slate-600 group-hover:text-primary">Set rate</span>}
+                                                </button>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${u.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>

@@ -28,6 +28,7 @@ import contactRoutes from './routes/contactRoutes';
 import payrollRoutes from './routes/payrollRoutes';
 import botRoutes from './routes/botRoutes';
 import brandingRoutes from './routes/brandingRoutes';
+import leaveRoutes from './routes/leaveRoutes';
 import { logAuthEvent } from './services/authEventService';
 import { notificationWorker } from './workers/notificationWorker';
 // startIdleTracker / startBurnoutTracker imports removed — these in-process cron jobs are
@@ -157,6 +158,7 @@ app.use('/api/v1/organizations', organizationRoutes);
 app.use('/api/v1/payroll', payrollRoutes);
 app.use('/api/v1/bots', botRoutes);
 app.use('/api/v1/branding', brandingRoutes);
+app.use('/api/v1/leave', leaveRoutes);
 
 const swaggerSpec = swaggerJsdoc({
     definition: {
