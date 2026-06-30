@@ -5,6 +5,7 @@ import prisma from '../config/db';
 type AuthEventInput = {
     userId?: string | null;
     email?: string | null;
+    organizationId?: string | null;
     eventType: string;
     outcome: string;
     reason?: string | null;
@@ -41,6 +42,7 @@ export const logAuthEvent = async (req: Request, input: AuthEventInput): Promise
             data: {
                 user_id: input.userId ?? null,
                 email: input.email?.trim().toLowerCase() || null,
+                organization_id: input.organizationId ?? null,
                 event_type: input.eventType,
                 outcome: input.outcome,
                 reason: input.reason ?? null,

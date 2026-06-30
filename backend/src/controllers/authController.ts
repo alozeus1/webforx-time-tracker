@@ -76,6 +76,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             await logAuthEvent(req, {
                 userId: user.id,
                 email: user.email,
+                organizationId: user.organization_id,
                 eventType: 'login_attempt',
                 outcome: 'failure',
                 reason: 'account_disabled',
@@ -89,6 +90,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             await logAuthEvent(req, {
                 userId: user.id,
                 email: user.email,
+                organizationId: user.organization_id,
                 eventType: 'login_attempt',
                 outcome: 'failure',
                 reason: 'invalid_password',
@@ -100,6 +102,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         await logAuthEvent(req, {
             userId: user.id,
             email: user.email,
+            organizationId: user.organization_id,
             eventType: 'login_attempt',
             outcome: 'success',
             metadata: { role: user.role.name },
@@ -174,6 +177,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
         await logAuthEvent(req, {
             userId: user.id,
             email: user.email,
+            organizationId: user.organization_id,
             eventType: 'password_reset_request',
             outcome: 'success',
         });
@@ -220,7 +224,8 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         if (!resetToken || resetToken.used || resetToken.expires_at < new Date()) {
             await logAuthEvent(req, {
                 userId: resetToken?.user_id,
-                email: resetToken?.user.email,
+                email: resetToken?.user?.email,
+                organizationId: resetToken?.user?.organization_id,
                 eventType: 'password_reset_completion',
                 outcome: 'failure',
                 reason: resetToken?.used ? 'used_reset_code' : 'invalid_or_expired',
@@ -245,6 +250,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
         await logAuthEvent(req, {
             userId: resetToken.user_id,
             email: resetToken.user.email,
+            organizationId: resetToken.user.organization_id,
             eventType: 'password_reset_completion',
             outcome: 'success',
         });

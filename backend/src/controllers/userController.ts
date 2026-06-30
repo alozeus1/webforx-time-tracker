@@ -864,6 +864,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
             await logAuthEvent(req, {
                 userId: updatedUser.id,
                 email: updatedUser.email,
+                organizationId: req.user!.organization_id,
                 eventType: 'password_change',
                 outcome: 'success',
                 reason: 'manager_reset',
@@ -1049,6 +1050,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
             await logAuthEvent(req, {
                 userId,
                 email: updatedUser.email,
+                organizationId: req.user!.organization_id,
                 eventType: 'password_change',
                 outcome: 'success',
                 reason: 'self_service',
