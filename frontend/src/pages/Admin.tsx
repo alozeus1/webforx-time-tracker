@@ -694,7 +694,9 @@ const Admin: React.FC = () => {
                 </div>
 
                 <div className="mb-6">
-                    <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto">
+                    <div className="relative">
+                    <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto scrollbar-hide" style={{scrollbarWidth:'none', msOverflowStyle:'none'}}>
+                    <style>{`.scrollbar-hide::-webkit-scrollbar{display:none}`}</style>
                         {availableTabs.map(tab => (
                             <button
                                 key={tab}
@@ -712,6 +714,9 @@ const Admin: React.FC = () => {
                                 }</p>
                             </button>
                         ))}
+                    </div>
+                    {/* Right-edge fade to signal more tabs are scrollable */}
+                    <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white dark:from-slate-900 to-transparent" />
                     </div>
                 </div>
 
