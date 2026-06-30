@@ -7,6 +7,9 @@ import { emitWebhookEvent } from '../services/webhookService';
 import { scoreTimeEntryRisk } from '../services/opsInsightsService';
 import { pauseActiveTimer, resumeActiveTimer, stopActiveTimerWithReason } from '../services/activeTimerService';
 import { getGlobalTimerPolicy } from '../services/timerPolicyService';
+import { assertPeriodNotLocked } from '../services/payrollLockService';
+import { assertComplianceAllowsDelete, assertComplianceAllowsEdit, notifyWtdIfNeeded } from '../services/complianceService';
+import { applyRounding } from '../services/roundingService';
 
 type GuardrailActiveTimer = {
     id: string;
@@ -305,6 +308,9 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
             console.error('Overtime check failed:', err);
         }
 
+        // WTD compliance check — fire-and-forget, non-blocking
+        notifyWtdIfNeeded(req.user!.organization_id, user_id).catch(() => {});
+
         res.status(200).json(timeEntry);
 
         // Fire-and-forget webhook — runs after response; acceptable if it's occasionally
@@ -381,6 +387,38 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
+        // Payroll period lock check
+        try {
+            await assertPeriodNotLocked(req.user!.organization_id, start);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === 'PERIOD_LOCKED') {
+                res.status(423).json({ message: (e as Error).message });
+                return;
+            }
+            throw e;
+        }
+
+        // Compliance mode checks (DCAA requires project_id on every entry)
+        {
+            const { getOrgComplianceMode } = await import('../services/complianceService');
+            const complianceMode = await getOrgComplianceMode(req.user!.organization_id);
+            if (complianceMode === 'dcaa') {
+                const resolvedProjectId = typeof project_id === 'string' && project_id.trim() ? project_id : null;
+                if (!resolvedProjectId) {
+                    res.status(400).json({ message: 'DCAA compliance mode requires a project code on every time entry.' });
+                    return;
+                }
+            }
+        }
+
+        // Apply time rounding if org has a rounding rule configured
+        const roundedStart = await applyRounding(req.user!.organization_id, start, 'start');
+        const roundedEnd = await applyRounding(req.user!.organization_id, end, 'end');
+        const roundedDuration = Math.floor((roundedEnd.getTime() - roundedStart.getTime()) / 1000);
+        const effectiveStart = roundedDuration > 0 ? roundedStart : start;
+        const effectiveEnd = roundedDuration > 0 ? roundedEnd : end;
+        const effectiveDuration = roundedDuration > 0 ? roundedDuration : duration;
+
         // Transaction: if tag linking fails the entry is rolled back — no orphaned entries.
         const timeEntry = await prisma.$transaction(async (tx) => {
             const entry = await tx.timeEntry.create({
@@ -389,9 +427,9 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
                     organization_id: req.user!.organization_id,
                     project_id: typeof project_id === 'string' && project_id.trim() ? project_id : null,
                     task_description: task_description.trim(),
-                    start_time: start,
-                    end_time: end,
-                    duration,
+                    start_time: effectiveStart,
+                    end_time: effectiveEnd,
+                    duration: effectiveDuration,
                     entry_type: 'manual',
                     notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
                     is_billable,
@@ -954,6 +992,28 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
             res.status(403).json({ message: 'Not authorized to edit this entry' }); return;
         }
 
+        // Payroll lock check
+        try {
+            await assertPeriodNotLocked(req.user!.organization_id, entry.start_time);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === 'PERIOD_LOCKED') {
+                res.status(423).json({ message: (e as Error).message });
+                return;
+            }
+            throw e;
+        }
+
+        // Compliance mode: DCAA blocks edits of approved entries
+        try {
+            await assertComplianceAllowsEdit(req.user!.organization_id, entry);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === 'COMPLIANCE_BLOCKED') {
+                res.status(403).json({ message: (e as Error).message });
+                return;
+            }
+            throw e;
+        }
+
         const data: Record<string, unknown> = {};
         const { task_description, project_id, start_time, end_time, notes, is_billable, tag_ids } = req.body ?? {};
 
@@ -1012,6 +1072,28 @@ export const deleteEntry = async (req: AuthRequest, res: Response): Promise<void
             res.status(403).json({ message: 'Not authorized to delete this entry' }); return;
         }
 
+        // Payroll lock check
+        try {
+            await assertPeriodNotLocked(req.user!.organization_id, entry.start_time);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === 'PERIOD_LOCKED') {
+                res.status(423).json({ message: (e as Error).message });
+                return;
+            }
+            throw e;
+        }
+
+        // Compliance mode: DCAA blocks deletes of approved entries
+        try {
+            await assertComplianceAllowsDelete(req.user!.organization_id, entry);
+        } catch (e) {
+            if ((e as NodeJS.ErrnoException).code === 'COMPLIANCE_BLOCKED') {
+                res.status(403).json({ message: (e as Error).message });
+                return;
+            }
+            throw e;
+        }
+
         // Scope DELETE to org_id to close the TOCTOU window between the findFirst above and this write.
         await prisma.timeEntry.delete({ where: { id: entryId, organization_id: req.user!.organization_id } });
         res.status(200).json({ message: 'Time entry deleted' });
@@ -1067,5 +1149,151 @@ export const duplicateEntry = async (req: AuthRequest, res: Response): Promise<v
     } catch (error) {
         console.error('Failed to duplicate entry:', error);
         res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+// ---------------------------------------------------------------------------
+// PATCH /api/v1/timers/bulk  — bulk operations on multiple entries
+// ---------------------------------------------------------------------------
+export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const orgId = req.user!.organization_id;
+        const role = req.user?.role;
+        const user_id = requireUserId(req);
+
+        const { entry_ids, action, project_id, is_billable, tag_ids } = req.body ?? {};
+
+        if (!Array.isArray(entry_ids) || entry_ids.length === 0) {
+            res.status(400).json({ message: 'entry_ids must be a non-empty array.' });
+            return;
+        }
+        if (entry_ids.length > 200) {
+            res.status(400).json({ message: 'Bulk operations are limited to 200 entries at once.' });
+            return;
+        }
+
+        const validActions = ['approve', 'reject', 'set_project', 'set_billable', 'set_tags', 'delete'];
+        if (!validActions.includes(action)) {
+            res.status(400).json({ message: `Invalid action. Must be one of: ${validActions.join(', ')}` });
+            return;
+        }
+
+        // Only managers/admins can approve/reject
+        if (['approve', 'reject'].includes(action) && role !== 'Admin' && role !== 'Manager') {
+            res.status(403).json({ message: 'Only Managers and Admins can bulk approve/reject entries.' });
+            return;
+        }
+
+        // Fetch all entries scoped to org
+        const entries = await prisma.timeEntry.findMany({
+            where: { id: { in: entry_ids }, organization_id: orgId },
+        });
+
+        if (entries.length === 0) {
+            res.status(404).json({ message: 'No matching entries found.' });
+            return;
+        }
+
+        // For non-admin/manager actions, only allow edits on own entries
+        const filtered = ['approve', 'reject'].includes(action)
+            ? entries
+            : entries.filter(e => e.user_id === user_id || role === 'Admin' || role === 'Manager');
+
+        if (filtered.length === 0) {
+            res.status(403).json({ message: 'Not authorized to modify the selected entries.' });
+            return;
+        }
+
+        const ids = filtered.map(e => e.id);
+
+        // Payroll lock: skip any entry that falls in a locked period and report them
+        const lockChecks = await Promise.all(
+            filtered.map(async (e) => {
+                try {
+                    await assertPeriodNotLocked(orgId, e.start_time);
+                    return { id: e.id, locked: false };
+                } catch {
+                    return { id: e.id, locked: true };
+                }
+            }),
+        );
+        const lockedIds = new Set(lockChecks.filter(c => c.locked).map(c => c.id));
+        const editableIds = ids.filter(id => !lockedIds.has(id));
+
+        if (editableIds.length === 0) {
+            res.status(423).json({ message: 'All selected entries fall within locked payroll periods.' });
+            return;
+        }
+
+        let updatedCount = 0;
+
+        await prisma.$transaction(async (tx) => {
+            if (action === 'approve' || action === 'reject') {
+                const result = await tx.timeEntry.updateMany({
+                    where: { id: { in: editableIds }, organization_id: orgId },
+                    data: { status: action === 'approve' ? 'approved' : 'rejected' },
+                });
+                updatedCount = result.count;
+            } else if (action === 'set_project') {
+                const result = await tx.timeEntry.updateMany({
+                    where: { id: { in: editableIds }, organization_id: orgId },
+                    data: { project_id: project_id || null },
+                });
+                updatedCount = result.count;
+            } else if (action === 'set_billable') {
+                if (typeof is_billable !== 'boolean') throw new Error('is_billable must be a boolean.');
+                const result = await tx.timeEntry.updateMany({
+                    where: { id: { in: editableIds }, organization_id: orgId },
+                    data: { is_billable },
+                });
+                updatedCount = result.count;
+            } else if (action === 'set_tags') {
+                if (!Array.isArray(tag_ids)) throw new Error('tag_ids must be an array.');
+                // Remove existing tags and set new ones for each entry
+                await tx.timeEntryTag.deleteMany({ where: { time_entry_id: { in: editableIds } } });
+                if (tag_ids.length > 0) {
+                    const links = editableIds.flatMap((eid) =>
+                        (tag_ids as string[]).map((tid) => ({ time_entry_id: eid, tag_id: tid })),
+                    );
+                    await tx.timeEntryTag.createMany({ data: links, skipDuplicates: true });
+                }
+                updatedCount = editableIds.length;
+            } else if (action === 'delete') {
+                const result = await tx.timeEntry.deleteMany({
+                    where: { id: { in: editableIds }, organization_id: orgId },
+                });
+                updatedCount = result.count;
+            }
+        });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id,
+                    organization_id: orgId,
+                    action: `bulk_${action}`,
+                    resource: 'time_entry',
+                    metadata: {
+                        entry_ids: editableIds,
+                        skipped_locked: [...lockedIds],
+                        updated_count: updatedCount,
+                    },
+                },
+            });
+        } catch (e) {
+            console.error('[bulkUpdateEntries] audit log failed:', e);
+        }
+
+        res.status(200).json({
+            updated: updatedCount,
+            skipped_locked: [...lockedIds],
+            message: lockedIds.size > 0
+                ? `${updatedCount} entries updated; ${lockedIds.size} skipped (locked payroll period).`
+                : `${updatedCount} entries updated.`,
+        });
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Internal server error';
+        console.error('Failed bulk update:', error);
+        res.status(500).json({ message: msg });
     }
 };

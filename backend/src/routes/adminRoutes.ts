@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createTeam, deleteSystemNotification, getAuditLogs, getSystemNotifications, getTeams, getTimerPolicy, updateTeam, updateTimerPolicy } from '../controllers/adminController';
+import { createTeam, deleteSystemNotification, getAuditLogs, getOrgSettings, getSystemNotifications, getTeams, getTimerPolicy, updateOrgSettings, updateTeam, updateTimerPolicy } from '../controllers/adminController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -14,5 +14,7 @@ router.post('/teams', requireRole(['Admin']), createTeam);
 router.put('/teams/:teamId', requireRole(['Admin']), updateTeam);
 router.get('/timer-policy', requireRole(['Admin']), getTimerPolicy);
 router.put('/timer-policy', requireRole(['Admin']), updateTimerPolicy);
+router.get('/org-settings', requireRole(['Admin']), getOrgSettings);
+router.put('/org-settings', requireRole(['Admin']), updateOrgSettings);
 
 export default router;

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest } from '../controllers/timeEntryController';
+import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries } from '../controllers/timeEntryController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -27,6 +27,7 @@ router.post('/corrections/:correctionId/review', requireRole(['Manager', 'Admin'
 router.get('/approvals', requireRole(['Manager', 'Admin']), getPendingTimesheets);
 router.post('/approvals/:entryId', requireRole(['Manager', 'Admin']), reviewTimesheet);
 
+router.patch('/bulk', bulkUpdateEntries);
 router.put('/:id', updateEntry);
 router.delete('/:id', deleteEntry);
 router.post('/:id/duplicate', duplicateEntry);

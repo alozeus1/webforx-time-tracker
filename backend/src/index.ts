@@ -25,6 +25,9 @@ import scheduledReportRoutes from './routes/scheduledReportRoutes';
 import organizationRoutes from './routes/organizationRoutes';
 import publicRoutes from './routes/publicRoutes';
 import contactRoutes from './routes/contactRoutes';
+import payrollRoutes from './routes/payrollRoutes';
+import botRoutes from './routes/botRoutes';
+import brandingRoutes from './routes/brandingRoutes';
 import { logAuthEvent } from './services/authEventService';
 import { notificationWorker } from './workers/notificationWorker';
 // startIdleTracker / startBurnoutTracker imports removed — these in-process cron jobs are
@@ -151,6 +154,9 @@ app.use('/api/v1/invoices', invoiceRoutes);
 app.use('/api/v1/templates', templateRoutes);
 app.use('/api/v1/scheduled-reports', scheduledReportRoutes);
 app.use('/api/v1/organizations', organizationRoutes);
+app.use('/api/v1/payroll', payrollRoutes);
+app.use('/api/v1/bots', botRoutes);
+app.use('/api/v1/branding', brandingRoutes);
 
 const swaggerSpec = swaggerJsdoc({
     definition: {

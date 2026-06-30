@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { CalendarX } from 'lucide-react';
+import { CalendarX, Lock, CheckSquare, Square, Trash2, Tag, FolderOpen } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
@@ -85,6 +85,12 @@ const Timeline: React.FC = () => {
         notes: '',
     });
 
+    // Bulk select + locked entries
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
+    const [bulkWorking, setBulkWorking] = useState(false);
+    const [bulkProjectId, setBulkProjectId] = useState('');
+
     const loadTimeline = useCallback(async () => {
         setLoading(true);
         try {
@@ -92,9 +98,36 @@ const Timeline: React.FC = () => {
                 api.get<TimerEntriesResponse>('/timers/me'),
                 api.get<ProjectSummary[]>('/projects'),
             ]);
-            setEntries(timerResponse.data.entries || []);
+            const loadedEntries = timerResponse.data.entries || [];
+            setEntries(loadedEntries);
             setActiveTimer(timerResponse.data.activeTimer || null);
             setProjects(projectResponse.data || []);
+
+            // Determine which entries fall within locked payroll periods
+            try {
+                const periodsRes = await api.get<{ periods: Array<{ id: string; start_date: string; end_date: string; is_locked: boolean }> }>('/payroll');
+                const locked = (periodsRes.data.periods || []).filter(p => p.is_locked);
+                if (locked.length > 0) {
+                    const lockedSet = new Set<string>();
+                    loadedEntries.forEach(entry => {
+                        const start = new Date(entry.start_time).getTime();
+                        for (const period of locked) {
+                            const pStart = new Date(period.start_date).getTime();
+                            const pEnd = new Date(period.end_date).getTime() + 86400000; // inclusive end
+                            if (start >= pStart && start < pEnd) {
+                                lockedSet.add(entry.id);
+                                break;
+                            }
+                        }
+                    });
+                    setLockedIds(lockedSet);
+                } else {
+                    setLockedIds(new Set());
+                }
+            } catch {
+                // Payroll endpoint may not exist for all users — silently ignore
+                setLockedIds(new Set());
+            }
         } catch (error) {
             console.error('Failed to load timeline:', error);
             setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to load timeline entries') });
@@ -278,9 +311,94 @@ const Timeline: React.FC = () => {
             await loadTimeline();
             emitTimeEntryChanged();
         } catch (error) {
-            setEditorError(getApiErrorMessage(error, 'Failed to save entry'));
+            const status = (error as { response?: { status?: number } })?.response?.status;
+            if (status === 423) {
+                setEditorError('This entry falls within a locked payroll period and cannot be modified.');
+                // Mark this entry as locked so the UI updates immediately
+                if (editingEntryId) {
+                    setLockedIds(prev => new Set(prev).add(editingEntryId));
+                }
+            } else {
+                setEditorError(getApiErrorMessage(error, 'Failed to save entry'));
+            }
         } finally {
             setEditorSaving(false);
+        }
+    };
+
+    // Toggle selection
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    };
+
+    const selectAll = () => setSelectedIds(new Set(displayedEntries.filter(e => !lockedIds.has(e.id)).map(e => e.id)));
+    const clearSelection = () => setSelectedIds(new Set());
+
+    // Bulk delete
+    const handleBulkDelete = async () => {
+        if (!selectedIds.size || !window.confirm(`Delete ${selectedIds.size} entr${selectedIds.size === 1 ? 'y' : 'ies'}?`)) return;
+        setBulkWorking(true);
+        try {
+            const res = await api.patch<{ updated: number; skipped_locked: number; message: string }>('/timers/bulk', {
+                entry_ids: Array.from(selectedIds),
+                action: 'delete',
+            });
+            const msg = res.data.skipped_locked > 0
+                ? `Deleted ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}. ${res.data.skipped_locked} skipped (locked period).`
+                : `Deleted ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}.`;
+            setFeedback({ tone: 'success', message: msg });
+            clearSelection();
+            await loadTimeline();
+            emitTimeEntryChanged();
+        } catch (error) {
+            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Bulk delete failed') });
+        } finally {
+            setBulkWorking(false);
+        }
+    };
+
+    // Bulk set project
+    const handleBulkSetProject = async () => {
+        if (!selectedIds.size) return;
+        setBulkWorking(true);
+        try {
+            const res = await api.patch<{ updated: number; skipped_locked: number }>('/timers/bulk', {
+                entry_ids: Array.from(selectedIds),
+                action: 'set_project',
+                project_id: bulkProjectId || null,
+            });
+            setFeedback({ tone: 'success', message: `Updated ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}.${res.data.skipped_locked > 0 ? ` ${res.data.skipped_locked} skipped (locked).` : ''}` });
+            setBulkProjectId('');
+            clearSelection();
+            await loadTimeline();
+            emitTimeEntryChanged();
+        } catch (error) {
+            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to update project') });
+        } finally {
+            setBulkWorking(false);
+        }
+    };
+
+    // Bulk approve (managers)
+    const handleBulkApprove = async () => {
+        if (!selectedIds.size) return;
+        setBulkWorking(true);
+        try {
+            const res = await api.patch<{ updated: number; skipped_locked: number }>('/timers/bulk', {
+                entry_ids: Array.from(selectedIds),
+                action: 'approve',
+            });
+            setFeedback({ tone: 'success', message: `Approved ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}.` });
+            clearSelection();
+            await loadTimeline();
+        } catch (error) {
+            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Bulk approve failed') });
+        } finally {
+            setBulkWorking(false);
         }
     };
 
@@ -386,13 +504,32 @@ const Timeline: React.FC = () => {
                         )}
 
                         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 px-5 py-4">
-                            <div>
-                                <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                                    {showOnlyCurrentDay ? 'Selected Day Entries' : 'Week Entries'}
-                                </p>
-                                <p className="text-xs text-slate-500 dark:text-slate-400">
-                                    {formatDuration(totalSeconds)} logged • {displayedEntries.length} entries
-                                </p>
+                            <div className="flex items-center gap-3">
+                                {/* Select All checkbox */}
+                                {displayedEntries.length > 0 && (
+                                    <button
+                                        type="button"
+                                        title={selectedIds.size > 0 ? 'Clear selection' : 'Select all'}
+                                        onClick={selectedIds.size > 0 ? clearSelection : selectAll}
+                                        className="text-slate-400 hover:text-primary transition-colors"
+                                    >
+                                        {selectedIds.size > 0
+                                            ? <CheckSquare size={16} className="text-primary" />
+                                            : <Square size={16} />
+                                        }
+                                    </button>
+                                )}
+                                <div>
+                                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                        {showOnlyCurrentDay ? 'Selected Day Entries' : 'Week Entries'}
+                                        {selectedIds.size > 0 && (
+                                            <span className="ml-2 text-primary">({selectedIds.size} selected)</span>
+                                        )}
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        {formatDuration(totalSeconds)} logged • {displayedEntries.length} entries
+                                    </p>
+                                </div>
                             </div>
                             <button
                                 type="button"
@@ -437,71 +574,109 @@ const Timeline: React.FC = () => {
 
                         {!loading && displayedEntries.length > 0 && (
                             <div className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {displayedEntries.map((entry) => (
-                                    <div key={entry.id} className="px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                                        <div>
-                                            <p className="font-bold text-slate-900 dark:text-slate-100">{entry.task_description}</p>
-                                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                                {entry.project?.name || 'No project'} • {new Date(entry.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(entry.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </p>
-                                            {(() => {
-                                                const tagList = (entry as unknown as Record<string, unknown>).tags as { tag: { name: string; color: string } }[] | undefined;
-                                                return tagList && tagList.length > 0 ? (
-                                                    <div className="flex gap-1 mt-1">
-                                                        {tagList.map((t, i) => (
-                                                            <span key={i} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: t.tag.color }}>
-                                                                {t.tag.name}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                ) : null;
-                                            })()}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-                                                {formatDuration(getEntryDurationSeconds(entry))}
-                                            </span>
-                                            {(entry.entry_type === 'manual' || entry.entry_type === 'ai_suggested') && entry.status === 'pending' && (
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" title="Manual entries require manager approval">
-                                                    <span className="material-symbols-outlined text-[12px]">pending_actions</span>
-                                                    Pending Approval
+                                {displayedEntries.map((entry) => {
+                                    const isLocked = lockedIds.has(entry.id);
+                                    const isSelected = selectedIds.has(entry.id);
+                                    return (
+                                        <div key={entry.id} className={`px-5 py-4 flex items-center justify-between gap-3 transition-colors ${isSelected ? 'bg-primary/5 dark:bg-primary/10' : 'hover:bg-slate-50 dark:hover:bg-slate-700/50'}`}>
+                                            {/* Checkbox / Lock indicator */}
+                                            <div className="shrink-0">
+                                                {isLocked ? (
+                                                    <span title="Locked — in a closed payroll period">
+                                                        <Lock size={14} className="text-rose-400" />
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleSelect(entry.id)}
+                                                        className="text-slate-300 hover:text-primary transition-colors"
+                                                        title={isSelected ? 'Deselect' : 'Select'}
+                                                    >
+                                                        {isSelected
+                                                            ? <CheckSquare size={15} className="text-primary" />
+                                                            : <Square size={15} />
+                                                        }
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`font-bold truncate ${isLocked ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>{entry.task_description}</p>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400">
+                                                    {entry.project?.name || 'No project'} • {new Date(entry.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(entry.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                                {(() => {
+                                                    const tagList = (entry as unknown as Record<string, unknown>).tags as { tag: { name: string; color: string } }[] | undefined;
+                                                    return tagList && tagList.length > 0 ? (
+                                                        <div className="flex gap-1 mt-1">
+                                                            {tagList.map((t, i) => (
+                                                                <span key={i} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{ backgroundColor: t.tag.color }}>
+                                                                    {t.tag.name}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : null;
+                                                })()}
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                                                    {formatDuration(getEntryDurationSeconds(entry))}
                                                 </span>
-                                            )}
-                                            {(entry as unknown as Record<string, unknown>).is_billable === false && (
-                                                <span className="text-[10px] font-semibold text-slate-400">Non-billable</span>
-                                            )}
-                                            <button
-                                                type="button"
-                                                className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-                                                title="Edit entry"
-                                                onClick={() => openEditEntry(entry)}
-                                            >
-                                                <span className="material-symbols-outlined text-[18px]">edit</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="rounded p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors text-emerald-600 dark:text-emerald-500"
-                                                title="Resume Task (Starts a new timer with these details)"
-                                                onClick={async () => {
-                                                    try {
-                                                        await api.post('/timers/start', {
-                                                            project_id: entry.project?.id || undefined,
-                                                            task_description: entry.task_description,
-                                                            is_billable: (entry as unknown as Record<string, unknown>).is_billable,
-                                                            tag_ids: (entry as unknown as Record<string, unknown>).tags ? ((entry as unknown as Record<string, unknown>).tags as {tag_id: string}[]).map(t => t.tag_id) : []
-                                                        });
-                                                        emitTimeEntryChanged();
-                                                        navigate('/timer');
-                                                    } catch (err) {
-                                                        setFeedback({ tone: 'error', message: getApiErrorMessage(err, 'Failed to resume task') });
-                                                    }
-                                                }}
-                                            >
-                                                <span className="material-symbols-outlined text-[18px]">play_arrow</span>
-                                            </button>
+                                                {isLocked && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-bold text-rose-700 dark:bg-rose-900/40 dark:text-rose-400">
+                                                        <Lock size={10} />
+                                                        Locked
+                                                    </span>
+                                                )}
+                                                {!isLocked && (entry.entry_type === 'manual' || entry.entry_type === 'ai_suggested') && entry.status === 'pending' && (
+                                                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" title="Manual entries require manager approval">
+                                                        <span className="material-symbols-outlined text-[12px]">pending_actions</span>
+                                                        Pending Approval
+                                                    </span>
+                                                )}
+                                                {(entry as unknown as Record<string, unknown>).is_billable === false && (
+                                                    <span className="text-[10px] font-semibold text-slate-400">Non-billable</span>
+                                                )}
+                                                {isLocked ? (
+                                                    <span className="rounded p-1 text-slate-300 dark:text-slate-600 cursor-not-allowed" title="Cannot edit — locked payroll period">
+                                                        <span className="material-symbols-outlined text-[18px]">lock</span>
+                                                    </span>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                                                        title="Edit entry"
+                                                        onClick={() => openEditEntry(entry)}
+                                                    >
+                                                        <span className="material-symbols-outlined text-[18px]">edit</span>
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="rounded p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors text-emerald-600 dark:text-emerald-500"
+                                                    title="Resume Task (Starts a new timer with these details)"
+                                                    onClick={async () => {
+                                                        try {
+                                                            await api.post('/timers/start', {
+                                                                project_id: entry.project?.id || undefined,
+                                                                task_description: entry.task_description,
+                                                                is_billable: (entry as unknown as Record<string, unknown>).is_billable,
+                                                                tag_ids: (entry as unknown as Record<string, unknown>).tags ? ((entry as unknown as Record<string, unknown>).tags as {tag_id: string}[]).map(t => t.tag_id) : []
+                                                            });
+                                                            emitTimeEntryChanged();
+                                                            navigate('/timer');
+                                                        } catch (err) {
+                                                            setFeedback({ tone: 'error', message: getApiErrorMessage(err, 'Failed to resume task') });
+                                                        }
+                                                    }}
+                                                >
+                                                    <span className="material-symbols-outlined text-[18px]">play_arrow</span>
+                                                </button>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
 
@@ -669,6 +844,70 @@ const Timeline: React.FC = () => {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Floating bulk action bar */}
+            {selectedIds.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-2xl bg-slate-900 dark:bg-slate-700 px-5 py-3 shadow-2xl border border-slate-700 dark:border-slate-500">
+                    <span className="text-sm font-bold text-white">{selectedIds.size} selected</span>
+                    <div className="w-px h-5 bg-slate-600" />
+
+                    {/* Assign project */}
+                    <div className="flex items-center gap-2">
+                        <FolderOpen size={14} className="text-slate-300" />
+                        <select
+                            className="rounded-lg bg-slate-800 dark:bg-slate-600 border border-slate-600 text-white text-xs px-2 py-1.5 focus:outline-none focus:border-primary"
+                            value={bulkProjectId}
+                            onChange={e => setBulkProjectId(e.target.value)}
+                        >
+                            <option value="">No project</option>
+                            {projects.map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                        </select>
+                        <button
+                            type="button"
+                            disabled={bulkWorking}
+                            onClick={() => void handleBulkSetProject()}
+                            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1"
+                        >
+                            <Tag size={12} />
+                            Assign
+                        </button>
+                    </div>
+
+                    <div className="w-px h-5 bg-slate-600" />
+
+                    {/* Delete */}
+                    <button
+                        type="button"
+                        disabled={bulkWorking}
+                        onClick={() => void handleBulkDelete()}
+                        className="rounded-lg bg-rose-600 hover:bg-rose-500 disabled:opacity-50 px-3 py-1.5 text-xs font-bold text-white transition-colors flex items-center gap-1"
+                    >
+                        <Trash2 size={12} />
+                        Delete
+                    </button>
+
+                    {/* Approve (managers see this too but backend guards it) */}
+                    <button
+                        type="button"
+                        disabled={bulkWorking}
+                        onClick={() => void handleBulkApprove()}
+                        className="rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 px-3 py-1.5 text-xs font-bold text-white transition-colors"
+                    >
+                        Approve
+                    </button>
+
+                    <div className="w-px h-5 bg-slate-600" />
+                    <button
+                        type="button"
+                        onClick={clearSelection}
+                        className="text-slate-400 hover:text-white transition-colors text-xs font-medium"
+                    >
+                        Clear
+                    </button>
                 </div>
             )}
         </div>

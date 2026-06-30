@@ -39,6 +39,8 @@ model Organization {
   timer_policies    TimerPolicyConfig[]
   report_caches     ReportCache[]
   access_requests   AccessRequest[]
+  payroll_periods   PayrollPeriod[]
+  branding_config   BrandingConfig?
 
   @@index([status, created_at])
 }
@@ -77,6 +79,7 @@ model User {
   invoices              Invoice[]
   project_templates     ProjectTemplate[]
   scheduled_reports     ScheduledReport[]
+  locked_payroll_periods PayrollPeriod[] @relation("PayrollPeriodLocker")
 
   @@unique([email, organization_id])
   @@index([organization_id, is_active])
@@ -458,6 +461,43 @@ model ScheduledReport {
   user User @relation(fields: [user_id], references: [id])
 
   @@index([organization_id, is_active])
+}
+
+model PayrollPeriod {
+  id              String    @id @default(uuid())
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  period_type     String    // "weekly" | "biweekly" | "semimonthly" | "custom"
+  start_date      DateTime
+  end_date        DateTime
+  status          String    @default("open") // "open" | "locked"
+  locked_at       DateTime?
+  locked_by       String?
+  locker          User?     @relation("PayrollPeriodLocker", fields: [locked_by], references: [id])
+  unlocked_at     DateTime?
+  unlocked_by     String?
+  notes           String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@unique([organization_id, start_date, end_date])
+  @@index([organization_id, status, start_date])
+}
+
+model BrandingConfig {
+  id                 String   @id @default(uuid())
+  organization_id    String   @unique
+  organization       Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  app_name           String?
+  logo_url           String?
+  favicon_url        String?
+  primary_color      String   @default("#4F46E5")
+  secondary_color    String   @default("#7C3AED")
+  custom_domain      String?
+  email_from_name    String?
+  email_from_address String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 }
 
 model AccessRequest {

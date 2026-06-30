@@ -3,6 +3,74 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { getGlobalTimerPolicy, normalizeTimerPolicy, validateTimerPolicy } from '../services/timerPolicyService';
 
+// ---------------------------------------------------------------------------
+// GET /admin/org-settings  — returns compliance_mode + time_rounding
+// PUT /admin/org-settings  — updates compliance_mode and/or time_rounding
+// ---------------------------------------------------------------------------
+export const getOrgSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const orgId = req.user!.organization_id;
+        const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+        const settings = (org?.settings as Record<string, unknown>) ?? {};
+        res.status(200).json({
+            compliance_mode: (settings.compliance_mode as string) ?? 'none',
+            time_rounding: (settings.time_rounding as { increment: number; direction: string } | null) ?? null,
+        });
+    } catch (error) {
+        console.error('[admin] getOrgSettings error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+export const updateOrgSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const orgId = req.user!.organization_id;
+        const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+        const current = (org?.settings as Record<string, unknown>) ?? {};
+
+        const { compliance_mode, time_rounding } = req.body ?? {};
+
+        const validModes = ['none', 'dcaa', 'flsa', 'wtd'];
+        if (compliance_mode !== undefined && !validModes.includes(compliance_mode)) {
+            res.status(400).json({ message: 'compliance_mode must be none, dcaa, flsa, or wtd.' });
+            return;
+        }
+
+        const next: Record<string, unknown> = { ...current };
+        if (compliance_mode !== undefined) next.compliance_mode = compliance_mode;
+        if (time_rounding !== undefined) {
+            if (time_rounding === null) {
+                delete next.time_rounding;
+            } else {
+                const validDirections = ['nearest', 'up', 'down'];
+                if (!validDirections.includes(time_rounding?.direction)) {
+                    res.status(400).json({ message: 'time_rounding.direction must be nearest, up, or down.' });
+                    return;
+                }
+                next.time_rounding = { increment: Number(time_rounding.increment) || 15, direction: time_rounding.direction };
+            }
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await prisma.organization.update({ where: { id: orgId }, data: { settings: next as any } });
+
+        await prisma.auditLog.create({
+            data: {
+                user_id: req.user!.userId,
+                organization_id: orgId,
+                action: 'org_settings_updated',
+                resource: 'organization',
+                metadata: { compliance_mode, time_rounding },
+            },
+        });
+
+        res.status(200).json({ compliance_mode: next.compliance_mode ?? 'none', time_rounding: next.time_rounding ?? null });
+    } catch (error) {
+        console.error('[admin] updateOrgSettings error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 type AdminAuditFeedEntry = {
     id: string;
     source: 'audit' | 'auth';

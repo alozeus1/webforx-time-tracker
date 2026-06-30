@@ -1,11 +1,21 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Lock, Unlock, Shield, Globe, Palette } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
 
-const availableTabs = ['projects', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit'] as const;
+const availableTabs = ['projects', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
+
+interface PayrollPeriod {
+    id: string;
+    period_type: string;
+    start_date: string;
+    end_date: string;
+    status: 'open' | 'locked';
+    locked_at: string | null;
+    locker: { first_name: string; last_name: string } | null;
+}
 const apiOrigin = resolveApiOrigin(import.meta.env.VITE_API_URL, typeof window !== 'undefined' ? window.location : undefined);
 const resolveProjectLogoSrc = (logoUrl?: string | null) => {
     if (!logoUrl) {
@@ -108,6 +118,39 @@ const Admin: React.FC = () => {
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
     const [teamSavingFor, setTeamSavingFor] = useState<Set<string>>(new Set());
+
+    // ── Feature 1: Payroll / Timesheet Locking ──────────────────────────────
+    const [payrollPeriods, setPayrollPeriods] = useState<PayrollPeriod[]>([]);
+    const [payrollLoading, setPayrollLoading] = useState(false);
+    const [payrollFeedback, setPayrollFeedback] = useState<string | null>(null);
+    const [payrollCadence, setPayrollCadence] = useState<'weekly' | 'biweekly' | 'semimonthly' | 'custom'>('weekly');
+    const [payrollAnchor, setPayrollAnchor] = useState(new Date().toISOString().slice(0, 10));
+    const [payrollCustomStart, setPayrollCustomStart] = useState('');
+    const [payrollCustomEnd, setPayrollCustomEnd] = useState('');
+
+    // ── Feature 2: Bots (Slack / Mattermost / Teams) ────────────────────────
+    const [slackSigningSecret, setSlackSigningSecret] = useState('');
+    const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
+    const [slackUserMap, setSlackUserMap] = useState('{}');
+    const [slackConfigLoaded, setSlackConfigLoaded] = useState(false);
+    const [mmToken, setMmToken] = useState('');
+    const [mmUserMap, setMmUserMap] = useState('{}');
+    const [mmConfigLoaded, setMmConfigLoaded] = useState(false);
+    const [botFeedback, setBotFeedback] = useState<string | null>(null);
+
+    // ── Feature 3+4: Compliance + Rounding ──────────────────────────────────
+    const [complianceMode, setComplianceMode] = useState<'none' | 'dcaa' | 'flsa' | 'wtd'>('none');
+    const [roundingIncrement, setRoundingIncrement] = useState(15);
+    const [roundingDirection, setRoundingDirection] = useState<'nearest' | 'up' | 'down'>('nearest');
+    const [complianceLoaded, setComplianceLoaded] = useState(false);
+    const [complianceSaving, setComplianceSaving] = useState(false);
+    const [complianceFeedback, setComplianceFeedback] = useState<string | null>(null);
+
+    // ── Feature 5: White-labeling / Branding ────────────────────────────────
+    const [branding, setBranding] = useState({ app_name: '', logo_url: '', favicon_url: '', primary_color: '#4F46E5', secondary_color: '#7C3AED', custom_domain: '', email_from_name: '', email_from_address: '' });
+    const [brandingLoaded, setBrandingLoaded] = useState(false);
+    const [brandingSaving, setBrandingSaving] = useState(false);
+    const [brandingFeedback, setBrandingFeedback] = useState<string | null>(null);
     
     const [newProjectName, setNewProjectName] = useState('');
     const [newProjectDesc, setNewProjectDesc] = useState('');
@@ -230,6 +273,176 @@ const Admin: React.FC = () => {
         }
     }
 
+    // ── Payroll functions ────────────────────────────────────────────────────
+    async function fetchPayrollPeriods() {
+        setPayrollLoading(true);
+        try {
+            const res = await api.get<{ periods: PayrollPeriod[] }>('/payroll');
+            setPayrollPeriods(res.data.periods || []);
+        } catch (error) {
+            console.error('Error fetching payroll periods:', error);
+        } finally {
+            setPayrollLoading(false);
+        }
+    }
+
+    async function handleGeneratePeriod() {
+        setPayrollFeedback(null);
+        try {
+            const body: Record<string, string> = { cadence: payrollCadence };
+            if (payrollCadence === 'custom') {
+                body.start_date = payrollCustomStart;
+                body.end_date = payrollCustomEnd;
+            } else {
+                body.anchor_date = payrollAnchor;
+            }
+            await api.post('/payroll/generate', body);
+            setPayrollFeedback('Period generated.');
+            void fetchPayrollPeriods();
+        } catch {
+            setPayrollFeedback('Failed to generate period.');
+        }
+    }
+
+    async function handleLockPeriod(id: string) {
+        try {
+            await api.post(`/payroll/${id}/lock`);
+            void fetchPayrollPeriods();
+        } catch { alert('Failed to lock period.'); }
+    }
+
+    async function handleUnlockPeriod(id: string) {
+        const notes = window.prompt('Unlock reason (optional)') ?? '';
+        try {
+            await api.post(`/payroll/${id}/unlock`, { notes });
+            void fetchPayrollPeriods();
+        } catch { alert('Failed to unlock period.'); }
+    }
+
+    // ── Bot config functions ─────────────────────────────────────────────────
+    async function fetchBotsConfig() {
+        const [slackRes, mmRes] = await Promise.allSettled([
+            api.get<{ webhook_url?: string; user_map?: Record<string, string> }>('/bots/slack/config'),
+            api.get<{ user_map?: Record<string, string> }>('/bots/mattermost/config'),
+        ]);
+        if (slackRes.status === 'fulfilled') {
+            const d = slackRes.value.data;
+            setSlackWebhookUrl(d.webhook_url || '');
+            setSlackUserMap(JSON.stringify(d.user_map || {}, null, 2));
+            setSlackConfigLoaded(true);
+        } else {
+            setSlackConfigLoaded(true);
+        }
+        if (mmRes.status === 'fulfilled') {
+            const d = mmRes.value.data;
+            setMmUserMap(JSON.stringify(d.user_map || {}, null, 2));
+            setMmConfigLoaded(true);
+        } else {
+            setMmConfigLoaded(true);
+        }
+    }
+
+    async function handleSaveSlack(e: React.FormEvent) {
+        e.preventDefault();
+        setBotFeedback(null);
+        let userMap: Record<string, string>;
+        try { userMap = JSON.parse(slackUserMap); } catch { setBotFeedback('Slack user map is not valid JSON.'); return; }
+        try {
+            await api.put('/bots/slack/config', { signing_secret: slackSigningSecret || undefined, webhook_url: slackWebhookUrl || undefined, user_map: userMap });
+            setBotFeedback('Slack bot saved.');
+            setSlackSigningSecret('');
+        } catch { setBotFeedback('Failed to save Slack config.'); }
+    }
+
+    async function handleSaveMattermost(e: React.FormEvent) {
+        e.preventDefault();
+        setBotFeedback(null);
+        let userMap: Record<string, string>;
+        try { userMap = JSON.parse(mmUserMap); } catch { setBotFeedback('Mattermost user map is not valid JSON.'); return; }
+        try {
+            await api.put('/bots/mattermost/config', { token: mmToken || undefined, user_map: userMap });
+            setBotFeedback('Mattermost bot saved.');
+            setMmToken('');
+        } catch { setBotFeedback('Failed to save Mattermost config.'); }
+    }
+
+    // ── Compliance + Rounding functions ──────────────────────────────────────
+    async function fetchComplianceSettings() {
+        try {
+            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null }>('/admin/org-settings');
+            setComplianceMode((res.data.compliance_mode || 'none') as 'none' | 'dcaa' | 'flsa' | 'wtd');
+            if (res.data.time_rounding) {
+                setRoundingIncrement(res.data.time_rounding.increment || 15);
+                setRoundingDirection((res.data.time_rounding.direction || 'nearest') as 'nearest' | 'up' | 'down');
+            }
+        } catch (error) {
+            console.error('Error fetching compliance settings:', error);
+        } finally {
+            setComplianceLoaded(true);
+        }
+    }
+
+    async function handleSaveCompliance() {
+        setComplianceSaving(true);
+        setComplianceFeedback(null);
+        try {
+            await api.put('/admin/org-settings', { compliance_mode: complianceMode, time_rounding: { increment: roundingIncrement, direction: roundingDirection } });
+            setComplianceFeedback('Settings saved.');
+        } catch {
+            setComplianceFeedback('Failed to save settings.');
+        } finally {
+            setComplianceSaving(false);
+        }
+    }
+
+    // ── Branding functions ────────────────────────────────────────────────────
+    async function fetchBrandingSettings() {
+        try {
+            const res = await api.get<{ app_name?: string; logo_url?: string; favicon_url?: string; primary_color?: string; secondary_color?: string; custom_domain?: string; email_from_name?: string; email_from_address?: string } | null>('/branding');
+            if (res.data) {
+                setBranding({
+                    app_name: res.data.app_name || '',
+                    logo_url: res.data.logo_url || '',
+                    favicon_url: res.data.favicon_url || '',
+                    primary_color: res.data.primary_color || '#4F46E5',
+                    secondary_color: res.data.secondary_color || '#7C3AED',
+                    custom_domain: res.data.custom_domain || '',
+                    email_from_name: res.data.email_from_name || '',
+                    email_from_address: res.data.email_from_address || '',
+                });
+            }
+        } catch (error) {
+            console.error('Error fetching branding:', error);
+        } finally {
+            setBrandingLoaded(true);
+        }
+    }
+
+    async function handleSaveBranding(e: React.FormEvent) {
+        e.preventDefault();
+        setBrandingSaving(true);
+        setBrandingFeedback(null);
+        try {
+            await api.put('/branding', branding);
+            setBrandingFeedback('Branding saved.');
+        } catch {
+            setBrandingFeedback('Failed to save branding.');
+        } finally {
+            setBrandingSaving(false);
+        }
+    }
+
+    async function handleResetBranding() {
+        if (!window.confirm('Reset branding to defaults?')) return;
+        try {
+            await api.delete('/branding');
+            setBranding({ app_name: '', logo_url: '', favicon_url: '', primary_color: '#4F46E5', secondary_color: '#7C3AED', custom_domain: '', email_from_name: '', email_from_address: '' });
+            setBrandingFeedback('Branding reset to defaults.');
+        } catch {
+            setBrandingFeedback('Failed to reset branding.');
+        }
+    }
+
     async function handleDeleteNotification(notificationId: string) {
         try {
             await api.delete(`/admin/notifications/${notificationId}`);
@@ -300,7 +513,7 @@ const Admin: React.FC = () => {
     useEffect(() => {
         const loadAdminData = async () => {
             await Promise.all([
-                fetchProjects(), 
+                fetchProjects(),
                 fetchTeams(),
                 fetchUsers(),
                 fetchIntegrations(),
@@ -310,9 +523,17 @@ const Admin: React.FC = () => {
                 fetchTimerPolicy(),
             ]);
         };
-
         void loadAdminData();
     }, []);
+
+    // Lazy-load new tab data on first visit
+    useEffect(() => {
+        if (activeTab === 'payroll') void fetchPayrollPeriods();
+        if (activeTab === 'bots' && !slackConfigLoaded) void fetchBotsConfig();
+        if (activeTab === 'compliance' && !complianceLoaded) void fetchComplianceSettings();
+        if (activeTab === 'branding' && !brandingLoaded) void fetchBrandingSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab]);
 
     const userCounts = useMemo(() => {
         const active = users.filter((user) => user.is_active).length;
@@ -481,7 +702,14 @@ const Admin: React.FC = () => {
                                 onClick={() => handleTabChange(tab)}
                                 className={`flex flex-col items-center justify-center border-b-2 pb-3 transition-all whitespace-nowrap ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                             >
-                                <p className="text-sm font-bold leading-normal capitalize">{tab === 'audit' ? 'Audit Logs' : tab}</p>
+                                <p className="text-sm font-bold leading-normal capitalize">{
+                                    tab === 'audit' ? 'Audit Logs' :
+                                    tab === 'payroll' ? 'Payroll Periods' :
+                                    tab === 'bots' ? 'Bot Integrations' :
+                                    tab === 'compliance' ? 'Compliance' :
+                                    tab === 'branding' ? 'Branding' :
+                                    tab
+                                }</p>
                             </button>
                         ))}
                     </div>
@@ -505,6 +733,355 @@ const Admin: React.FC = () => {
                     </div>
                 )}
 
+                {/* ═══════════ PAYROLL / TIMESHEET LOCKING TAB ═══════════ */}
+                {activeTab === 'payroll' && (
+                    <div className="space-y-6">
+                        {/* Generate form */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+                                <Lock size={16} className="text-primary" /> Generate Payroll Period
+                            </h3>
+                            <div className="flex flex-wrap gap-4 items-end">
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Cadence
+                                    <select value={payrollCadence} onChange={e => setPayrollCadence(e.target.value as typeof payrollCadence)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="weekly">Weekly</option>
+                                        <option value="biweekly">Bi-weekly</option>
+                                        <option value="semimonthly">Semi-monthly</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </label>
+                                {payrollCadence !== 'custom' ? (
+                                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        Anchor Date
+                                        <input type="date" value={payrollAnchor} onChange={e => setPayrollAnchor(e.target.value)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                    </label>
+                                ) : (
+                                    <>
+                                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                            Start Date
+                                            <input type="date" value={payrollCustomStart} onChange={e => setPayrollCustomStart(e.target.value)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                        </label>
+                                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                            End Date
+                                            <input type="date" value={payrollCustomEnd} onChange={e => setPayrollCustomEnd(e.target.value)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                        </label>
+                                    </>
+                                )}
+                                <button type="button" onClick={() => void handleGeneratePeriod()} className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90">
+                                    <Plus size={16} /> Generate
+                                </button>
+                            </div>
+                            {payrollFeedback && <p className="mt-3 text-sm font-medium text-primary">{payrollFeedback}</p>}
+                        </div>
+
+                        {/* Periods list */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50">
+                                <h3 className="font-bold text-slate-900 dark:text-white">Payroll Periods</h3>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-slate-50 dark:bg-slate-900/50">
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400">Type</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400">Period</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400">Locked by</th>
+                                            <th className="px-6 py-3 text-xs font-bold uppercase text-slate-400 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                        {payrollLoading && <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">Loading…</td></tr>}
+                                        {!payrollLoading && payrollPeriods.length === 0 && <tr><td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">No payroll periods yet. Generate one above.</td></tr>}
+                                        {!payrollLoading && payrollPeriods.map(p => (
+                                            <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
+                                                <td className="px-6 py-4 text-sm capitalize text-slate-700 dark:text-slate-300">{p.period_type}</td>
+                                                <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
+                                                    {new Date(p.start_date).toLocaleDateString()} – {new Date(p.end_date).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ${p.status === 'locked' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'}`}>
+                                                        {p.status === 'locked' ? <Lock size={11} /> : <Unlock size={11} />}
+                                                        {p.status === 'locked' ? 'Locked' : 'Open'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-slate-500">
+                                                    {p.status === 'locked' && p.locker ? `${p.locker.first_name} ${p.locker.last_name}` : '—'}
+                                                    {p.status === 'locked' && p.locked_at ? ` · ${new Date(p.locked_at).toLocaleDateString()}` : ''}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    {p.status === 'open' ? (
+                                                        <button type="button" onClick={() => void handleLockPeriod(p.id)} className="text-xs font-bold text-rose-600 hover:text-rose-800">Lock</button>
+                                                    ) : (
+                                                        <button type="button" onClick={() => void handleUnlockPeriod(p.id)} className="text-xs font-bold text-emerald-600 hover:text-emerald-800">Unlock</button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══════════ BOTS TAB ═══════════ */}
+                {activeTab === 'bots' && (
+                    <div className="space-y-6">
+                        {botFeedback && (
+                            <div className={`rounded-lg px-4 py-3 text-sm font-medium ${botFeedback.includes('Failed') || botFeedback.includes('not valid') ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {botFeedback}
+                            </div>
+                        )}
+
+                        {/* Slack */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-lg text-[#4A154B]">chat</span> Slack Bot
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-4">Slash command endpoint: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{`POST /api/v1/bots/slack/<org-slug>`}</code></p>
+                            <form onSubmit={(e) => void handleSaveSlack(e)} className="grid gap-4 md:grid-cols-2">
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Signing Secret (leave blank to keep existing)
+                                    <input type="password" value={slackSigningSecret} onChange={e => setSlackSigningSecret(e.target.value)} placeholder="xoxb-..." className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Incoming Webhook URL (optional)
+                                    <input type="url" value={slackWebhookUrl} onChange={e => setSlackWebhookUrl(e.target.value)} placeholder="https://hooks.slack.com/..." className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500 md:col-span-2">
+                                    User Map (JSON: Slack user ID → App user ID)
+                                    <textarea rows={4} value={slackUserMap} onChange={e => setSlackUserMap(e.target.value)} placeholder='{"U123456": "app-user-uuid"}' className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                </label>
+                                <div className="md:col-span-2">
+                                    <button type="submit" disabled={!slackConfigLoaded} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50">
+                                        Save Slack Config
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Mattermost */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-lg text-blue-600">forum</span> Mattermost Bot
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-4">Slash command endpoint: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{`POST /api/v1/bots/mattermost/<org-slug>`}</code></p>
+                            <form onSubmit={(e) => void handleSaveMattermost(e)} className="grid gap-4 md:grid-cols-2">
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Outgoing Webhook Token (leave blank to keep existing)
+                                    <input type="password" value={mmToken} onChange={e => setMmToken(e.target.value)} placeholder="token" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    User Map (JSON: Mattermost user ID → App user ID)
+                                    <textarea rows={3} value={mmUserMap} onChange={e => setMmUserMap(e.target.value)} placeholder='{"mm-user-id": "app-user-uuid"}' className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                </label>
+                                <div className="md:col-span-2">
+                                    <button type="submit" disabled={!mmConfigLoaded} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50">
+                                        Save Mattermost Config
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        {/* Teams (stub) */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 opacity-60">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-2">
+                                <span className="material-symbols-outlined text-lg text-indigo-600">groups</span> Microsoft Teams
+                                <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-500">Coming Soon</span>
+                            </h3>
+                            <p className="text-sm text-slate-500">Teams integration is wired and ready to activate. Contact support when you are ready to configure your Teams bot endpoint.</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══════════ COMPLIANCE TAB (incl. rounding) ═══════════ */}
+                {activeTab === 'compliance' && (
+                    <div className="space-y-6">
+                        {complianceFeedback && (
+                            <div className={`rounded-lg px-4 py-3 text-sm font-medium ${complianceFeedback.includes('Failed') ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {complianceFeedback}
+                            </div>
+                        )}
+
+                        {/* Compliance mode */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <Shield size={16} className="text-primary" /> Compliance Mode
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-5">Enforce regulatory requirements across all time entries for this organisation.</p>
+                            {!complianceLoaded ? (
+                                <p className="text-sm text-slate-500">Loading…</p>
+                            ) : (
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                    {([
+                                        { mode: 'none', label: 'None', icon: '⭕', desc: 'No compliance restrictions.' },
+                                        { mode: 'dcaa', label: 'DCAA', icon: '🏛️', desc: 'Locks approved entries. Required for US government contractors.' },
+                                        { mode: 'flsa', label: 'FLSA', icon: '⚖️', desc: 'Flags overtime after 40h/week for non-exempt employees.' },
+                                        { mode: 'wtd', label: 'WTD', icon: '🇬🇧', desc: 'Alerts when 17-week average exceeds 48h (UK Working Time Directive).' },
+                                    ] as const).map(({ mode, label, icon, desc }) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            onClick={() => setComplianceMode(mode)}
+                                            className={`rounded-xl border-2 p-4 text-left transition-all ${complianceMode === mode ? 'border-primary bg-primary/5 dark:bg-primary/10' : 'border-slate-200 dark:border-slate-700 hover:border-primary/40'}`}
+                                        >
+                                            <div className="text-2xl mb-2">{icon}</div>
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="font-black text-slate-900 dark:text-white text-sm">{label}</span>
+                                                {complianceMode === mode && <span className="material-symbols-outlined text-primary text-sm">check_circle</span>}
+                                            </div>
+                                            <p className="text-xs text-slate-500 leading-relaxed">{desc}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Time rounding */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-base text-primary">schedule</span> Time Rounding Rules
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-5">Applied automatically to start and end times on manual entries and timer stops.</p>
+                            <div className="flex flex-wrap gap-6 items-end">
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Round to nearest (minutes)
+                                    <select value={roundingIncrement} onChange={e => setRoundingIncrement(Number(e.target.value))} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        {[1, 5, 6, 10, 12, 15, 30, 60].map(n => <option key={n} value={n}>{n} min</option>)}
+                                    </select>
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Direction
+                                    <select value={roundingDirection} onChange={e => setRoundingDirection(e.target.value as typeof roundingDirection)} className="mt-1 block rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20">
+                                        <option value="nearest">Nearest</option>
+                                        <option value="up">Always round up</option>
+                                        <option value="down">Always round down</option>
+                                    </select>
+                                </label>
+                                <button
+                                    type="button"
+                                    disabled={complianceSaving}
+                                    onClick={() => void handleSaveCompliance()}
+                                    className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                    {complianceSaving ? 'Saving…' : 'Save Settings'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ═══════════ BRANDING TAB ═══════════ */}
+                {activeTab === 'branding' && (
+                    <div className="space-y-6">
+                        {brandingFeedback && (
+                            <div className={`rounded-lg px-4 py-3 text-sm font-medium ${brandingFeedback.includes('Failed') ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {brandingFeedback}
+                            </div>
+                        )}
+                        {!brandingLoaded ? (
+                            <p className="text-sm text-slate-500 py-8 text-center">Loading…</p>
+                        ) : (
+                            <div className="grid gap-6 lg:grid-cols-3">
+                                <div className="lg:col-span-2">
+                                    <form onSubmit={(e) => void handleSaveBranding(e)} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 space-y-5">
+                                        <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                            <Palette size={16} className="text-primary" /> White-label Branding
+                                        </h3>
+
+                                        <div className="grid gap-4 sm:grid-cols-2">
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                App / Product Name
+                                                <input type="text" value={branding.app_name} onChange={e => setBranding(b => ({ ...b, app_name: e.target.value }))} placeholder="Acme Time Tracker" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Custom Domain
+                                                <div className="mt-1 flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                                                    <Globe size={13} className="text-slate-400 shrink-0" />
+                                                    <input type="text" value={branding.custom_domain} onChange={e => setBranding(b => ({ ...b, custom_domain: e.target.value }))} placeholder="time.acme.com" className="w-full text-sm text-slate-900 outline-none bg-transparent" />
+                                                </div>
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Logo URL
+                                                <input type="url" value={branding.logo_url} onChange={e => setBranding(b => ({ ...b, logo_url: e.target.value }))} placeholder="https://cdn.acme.com/logo.png" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Favicon URL
+                                                <input type="url" value={branding.favicon_url} onChange={e => setBranding(b => ({ ...b, favicon_url: e.target.value }))} placeholder="https://cdn.acme.com/favicon.ico" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Primary Colour
+                                                <div className="mt-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                                                    <input type="color" value={branding.primary_color} onChange={e => setBranding(b => ({ ...b, primary_color: e.target.value }))} className="h-6 w-10 cursor-pointer rounded border-0 p-0" />
+                                                    <input type="text" value={branding.primary_color} onChange={e => setBranding(b => ({ ...b, primary_color: e.target.value }))} maxLength={7} className="w-24 text-sm font-mono text-slate-900 outline-none" />
+                                                </div>
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Secondary Colour
+                                                <div className="mt-1 flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20">
+                                                    <input type="color" value={branding.secondary_color} onChange={e => setBranding(b => ({ ...b, secondary_color: e.target.value }))} className="h-6 w-10 cursor-pointer rounded border-0 p-0" />
+                                                    <input type="text" value={branding.secondary_color} onChange={e => setBranding(b => ({ ...b, secondary_color: e.target.value }))} maxLength={7} className="w-24 text-sm font-mono text-slate-900 outline-none" />
+                                                </div>
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Email From Name
+                                                <input type="text" value={branding.email_from_name} onChange={e => setBranding(b => ({ ...b, email_from_name: e.target.value }))} placeholder="Acme Notifications" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                            </label>
+                                            <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                                Email From Address
+                                                <input type="email" value={branding.email_from_address} onChange={e => setBranding(b => ({ ...b, email_from_address: e.target.value }))} placeholder="no-reply@acme.com" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                            </label>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button type="submit" disabled={brandingSaving} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50">
+                                                {brandingSaving ? 'Saving…' : 'Save Branding'}
+                                            </button>
+                                            <button type="button" onClick={() => void handleResetBranding()} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50">
+                                                Reset to Defaults
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+
+                                {/* Preview card */}
+                                <div className="lg:col-span-1">
+                                    <div className="sticky top-6 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                                        <div className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700">Preview</div>
+                                        <div className="p-5 bg-white dark:bg-slate-800 space-y-4">
+                                            <div className="flex items-center gap-3">
+                                                {branding.logo_url ? (
+                                                    <img src={branding.logo_url} alt="Logo" className="h-10 w-10 rounded-lg object-contain border border-slate-200" onError={e => (e.currentTarget.style.display='none')} />
+                                                ) : (
+                                                    <div className="h-10 w-10 rounded-lg flex items-center justify-center font-black text-white text-xs" style={{ backgroundColor: branding.primary_color }}>
+                                                        {(branding.app_name || 'WFX').slice(0, 3).toUpperCase()}
+                                                    </div>
+                                                )}
+                                                <span className="font-black text-slate-900 dark:text-white">{branding.app_name || 'Web Forx Time'}</span>
+                                            </div>
+                                            <div className="rounded-lg p-3 text-white text-xs font-bold" style={{ backgroundColor: branding.primary_color }}>
+                                                Primary button
+                                            </div>
+                                            <div className="rounded-lg p-3 text-white text-xs font-bold" style={{ backgroundColor: branding.secondary_color }}>
+                                                Secondary button
+                                            </div>
+                                            {branding.custom_domain && (
+                                                <p className="text-xs text-slate-500 flex items-center gap-1">
+                                                    <Globe size={11} /> {branding.custom_domain}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* ═══════════ ORIGINAL TABLE (legacy tabs) ═══════════ */}
+                {!['payroll', 'bots', 'compliance', 'branding'].includes(activeTab) && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                     <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
                         <h3 className="font-bold text-slate-900 dark:text-white capitalize">
@@ -880,6 +1457,7 @@ const Admin: React.FC = () => {
                         </table>
                     </div>
                 </div>
+                )} {/* end legacy-tabs table */}
 
                 {/* New Project Modal Overlay */}
                 {isProjectModalOpen && (
