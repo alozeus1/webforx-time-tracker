@@ -78,6 +78,10 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "overrides": {
-    "@scure/base": "1.1.7"
+    "@scure/base": "1.1.7",
+    "@noble/hashes": "1.8.0",
+    "@otplib/plugin-crypto-noble": {
+      "@noble/hashes": "1.8.0"
+    }
   }
 }
