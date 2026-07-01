@@ -20,6 +20,7 @@ import { encryptConfig, decryptConfig } from '../utils/crypto';
 interface MattermostConfig {
     token: string;                            // outgoing webhook verification token
     user_map: Record<string, string>;         // mattermost_user_id → app_user_id
+    incoming_webhook_url?: string;            // incoming webhook URL for pushing notifications TO Mattermost
 }
 
 async function getMattermostConfig(organizationId: string): Promise<MattermostConfig | null> {
@@ -170,7 +171,12 @@ export const getMattermostBotConfig = async (req: Request & { user?: { organizat
     if (!integration) { res.status(404).json({ message: 'Mattermost integration not configured.' }); return; }
     try {
         const config = decryptConfig<MattermostConfig>(integration.config);
-        res.json({ is_active: integration.is_active, user_map: config.user_map ?? {}, token_set: !!config.token });
+        res.json({
+            is_active: integration.is_active,
+            user_map: config.user_map ?? {},
+            token_set: !!config.token,
+            incoming_webhook_url_set: !!config.incoming_webhook_url,
+        });
     } catch {
         res.status(500).json({ message: 'Failed to read config.' });
     }
@@ -180,14 +186,26 @@ export const upsertMattermostBotConfig = async (req: Request & { user?: { organi
     const orgId = req.user?.organization_id;
     if (!orgId) { res.status(401).json({ message: 'Unauthorized' }); return; }
 
-    const { token, user_map } = req.body ?? {};
+    const { token, user_map, incoming_webhook_url } = req.body ?? {};
     const existing = await prisma.integration.findFirst({ where: { organization_id: orgId, type: 'mattermost' } });
     let current: Partial<MattermostConfig> = {};
     if (existing) { try { current = decryptConfig<MattermostConfig>(existing.config); } catch { /* ignore */ } }
 
+    // Validate incoming_webhook_url if provided
+    if (incoming_webhook_url) {
+        try {
+            const u = new URL(String(incoming_webhook_url));
+            if (!['http:', 'https:'].includes(u.protocol)) throw new Error('bad protocol');
+        } catch {
+            res.status(400).json({ message: 'incoming_webhook_url must be a valid http/https URL' });
+            return;
+        }
+    }
+
     const next: MattermostConfig = {
         token: token ?? current.token ?? '',
         user_map: user_map ?? current.user_map ?? {},
+        incoming_webhook_url: incoming_webhook_url ?? current.incoming_webhook_url,
     };
     if (!next.token) { res.status(400).json({ message: 'token is required.' }); return; }
 

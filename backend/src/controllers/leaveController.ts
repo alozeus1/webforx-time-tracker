@@ -9,7 +9,8 @@ const VALID_STATUSES = ['pending', 'approved', 'rejected'];
 // ─── Mattermost helper ───────────────────────────────────────────────────────
 
 interface MattermostConfig {
-    webhookUrl?: string;
+    webhookUrl?: string;            // set via Admin > Integrations tab
+    incoming_webhook_url?: string;  // set via Admin > Bot Integrations tab
     token?: string;
     user_map?: Record<string, string>;
 }
@@ -26,7 +27,9 @@ async function sendMattermostLeaveNotification(
         if (!integration) return;
 
         const config = decryptConfig<MattermostConfig>(integration.config);
-        const webhookUrl = config.webhookUrl;
+        // Support both storage paths: Bot Integrations tab (incoming_webhook_url)
+        // and legacy Integrations tab (webhookUrl)
+        const webhookUrl = config.incoming_webhook_url ?? config.webhookUrl;
         if (!webhookUrl) return;
 
         await fetch(webhookUrl, {

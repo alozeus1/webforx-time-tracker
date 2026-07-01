@@ -148,6 +148,7 @@ const Admin: React.FC = () => {
     const [slackUserMap, setSlackUserMap] = useState('{}');
     const [slackConfigLoaded, setSlackConfigLoaded] = useState(false);
     const [mmToken, setMmToken] = useState('');
+    const [mmIncomingWebhookUrl, setMmIncomingWebhookUrl] = useState('');
     const [mmUserMap, setMmUserMap] = useState('{}');
     const [mmConfigLoaded, setMmConfigLoaded] = useState(false);
     const [botFeedback, setBotFeedback] = useState<string | null>(null);
@@ -341,7 +342,7 @@ const Admin: React.FC = () => {
     async function fetchBotsConfig() {
         const [slackRes, mmRes] = await Promise.allSettled([
             api.get<{ webhook_url?: string; user_map?: Record<string, string> }>('/bots/slack/config'),
-            api.get<{ user_map?: Record<string, string> }>('/bots/mattermost/config'),
+            api.get<{ user_map?: Record<string, string>; incoming_webhook_url_set?: boolean }>('/bots/mattermost/config'),
         ]);
         if (slackRes.status === 'fulfilled') {
             const d = slackRes.value.data;
@@ -354,6 +355,7 @@ const Admin: React.FC = () => {
         if (mmRes.status === 'fulfilled') {
             const d = mmRes.value.data;
             setMmUserMap(JSON.stringify(d.user_map || {}, null, 2));
+            if (d.incoming_webhook_url_set) setMmIncomingWebhookUrl('••••••••');
             setMmConfigLoaded(true);
         } else {
             setMmConfigLoaded(true);
@@ -378,7 +380,13 @@ const Admin: React.FC = () => {
         let userMap: Record<string, string>;
         try { userMap = JSON.parse(mmUserMap); } catch { setBotFeedback('Mattermost user map is not valid JSON.'); return; }
         try {
-            await api.put('/bots/mattermost/config', { token: mmToken || undefined, user_map: userMap });
+            const mmPayload: Record<string, unknown> = { user_map: userMap };
+            if (mmToken) mmPayload.token = mmToken;
+            // Only send incoming_webhook_url if it's a real URL (not the masked placeholder)
+            if (mmIncomingWebhookUrl && !mmIncomingWebhookUrl.startsWith('•')) {
+                mmPayload.incoming_webhook_url = mmIncomingWebhookUrl;
+            }
+            await api.put('/bots/mattermost/config', mmPayload);
             setBotFeedback('Mattermost bot saved.');
             setMmToken('');
         } catch { setBotFeedback('Failed to save Mattermost config.'); }
@@ -920,14 +928,31 @@ const Admin: React.FC = () => {
                                 <span className="material-symbols-outlined text-lg text-blue-600">forum</span> Mattermost Bot
                             </h3>
                             <p className="text-xs text-slate-500 mb-4">Slash command endpoint: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{`POST /api/v1/bots/mattermost/<org-slug>`}</code></p>
+                            <p className="text-xs text-slate-400 mb-3">
+                                Two separate webhook directions — configure both or either depending on your use case.
+                            </p>
                             <form onSubmit={(e) => void handleSaveMattermost(e)} className="grid gap-4 md:grid-cols-2">
                                 <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Outgoing Webhook Token (leave blank to keep existing)
                                     <input type="password" value={mmToken} onChange={e => setMmToken(e.target.value)} placeholder="token" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Used to verify slash commands FROM Mattermost (/timer start, /timer stop, etc.)</span>
                                 </label>
                                 <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Incoming Webhook URL (leave blank to keep existing)
+                                    <input
+                                        type="url"
+                                        value={mmIncomingWebhookUrl}
+                                        onChange={e => setMmIncomingWebhookUrl(e.target.value)}
+                                        onFocus={e => { if (e.target.value.startsWith('•')) setMmIncomingWebhookUrl(''); }}
+                                        placeholder="https://mattermost.yourcompany.com/hooks/xxxx"
+                                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    />
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Used to push notifications TO a Mattermost channel (e.g. leave requests, alerts)</span>
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500 md:col-span-2">
                                     User Map (JSON: Mattermost user ID → App user ID)
                                     <textarea rows={3} value={mmUserMap} onChange={e => setMmUserMap(e.target.value)} placeholder='{"mm-user-id": "app-user-uuid"}' className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Maps Mattermost user IDs to Timer app user IDs for slash command authentication</span>
                                 </label>
                                 <div className="md:col-span-2">
                                     <button type="submit" disabled={!mmConfigLoaded} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50">
