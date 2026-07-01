@@ -76,4 +76,11 @@ export const env = {
     executiveReportTemplateEnabled: process.env.EXECUTIVE_REPORT_TEMPLATE_ENABLED?.trim().toLowerCase() !== 'false',
     reportCompanyLogoPath: process.env.REPORT_COMPANY_LOGO_PATH?.trim() || '',
     reportTimerAppLogoPath: process.env.REPORT_TIMER_APP_LOGO_PATH?.trim() || '',
+    // Enhanced activity detection — treats "tab hidden but heartbeat arriving" as NOT idle.
+    // Set to true in production to fix false idle detection when users work outside the browser tab.
+    // When false (default), behavior is identical to the previous release.
+    timerEnhancedActivityDetection: process.env.TIMER_ENHANCED_ACTIVITY_DETECTION?.trim().toLowerCase() === 'true',
+    // Grace window (minutes) after which a hidden-connected session transitions to idle_candidate
+    // when no desktop agent or stronger signal confirms activity.  Default: 10 minutes.
+    hiddenConnectedGraceMinutes: parseMinutesEnv('HIDDEN_CONNECTED_GRACE_MINUTES', 10),
 };

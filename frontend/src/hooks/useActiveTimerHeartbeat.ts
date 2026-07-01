@@ -4,10 +4,24 @@ import type { TimerEntriesResponse } from '../types/api';
 import { getStoredToken } from '../utils/session';
 import { TIME_ENTRY_CHANGED_EVENT, TIME_ENTRY_CHANGED_STORAGE_KEY, emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
+// ---------------------------------------------------------------------------
+// Public event names consumed by Timer.tsx
+// ---------------------------------------------------------------------------
 export const TIMER_IDLE_WARNING_EVENT = 'wfx:timer-idle-warning';
 export const TIMER_IDLE_RESUMED_EVENT = 'wfx:timer-idle-resumed';
 export const TIMER_PAUSED_EVENT = 'wfx:timer-paused';
+/** Fired every 10 s while the idle warning is active so the UI can show a countdown. */
+export const TIMER_IDLE_COUNTDOWN_EVENT = 'wfx:timer-idle-countdown';
 
+// ---------------------------------------------------------------------------
+// Feature flag — mirrors TIMER_ENHANCED_ACTIVITY_DETECTION on the backend.
+// When false, behaviour is identical to the original implementation.
+// ---------------------------------------------------------------------------
+const ENHANCED = import.meta.env.VITE_TIMER_ENHANCED_ACTIVITY_DETECTION === 'true';
+
+// ---------------------------------------------------------------------------
+// Timing constants
+// ---------------------------------------------------------------------------
 const resolveMinutes = (value: string | undefined, fallback: number) => {
     const parsed = Number.parseInt(value || '', 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -15,13 +29,62 @@ const resolveMinutes = (value: string | undefined, fallback: number) => {
 
 export const HEARTBEAT_INTERVAL_MS = resolveMinutes(import.meta.env.VITE_HEARTBEAT_INTERVAL_MINUTES, 3) * 60_000;
 export const ACTIVE_TIMER_REFRESH_MS = 120_000;
+/** Sampling window for in-tab activity events (pointer, key, scroll). */
 export const ACTIVITY_SAMPLE_MS = 15_000;
+/** Threshold after which the user is considered idle *within the tab*. */
 export const IDLE_WARNING_MS = resolveMinutes(import.meta.env.VITE_IDLE_WARNING_MINUTES, 5) * 60_000;
 export const MAX_ACTIVE_TIMER_MS = resolveMinutes(import.meta.env.VITE_MAX_ACTIVE_TIMER_HOURS, 8) * 60 * 60_000;
 
+/**
+ * How long the heartbeat continues to fire when the tab is hidden before the
+ * client treats the session as an idle_candidate.
+ * Defaults to 10 minutes — matches HIDDEN_CONNECTED_GRACE_MINUTES on the backend.
+ */
+const HIDDEN_GRACE_MS = resolveMinutes(import.meta.env.VITE_HIDDEN_CONNECTED_GRACE_MINUTES, 10) * 60_000;
+
+/**
+ * When tab is hidden but enhanced mode is active, heartbeats are still sent
+ * but at a reduced rate to avoid unnecessary wake-ups on battery-powered devices.
+ * Default: once per heartbeat interval (same rate — small JSON payload, no issue).
+ */
+const HIDDEN_HEARTBEAT_INTERVAL_MS = HEARTBEAT_INTERVAL_MS;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 const isDocumentVisible = () =>
     typeof document === 'undefined' || document.visibilityState === 'visible';
 
+/**
+ * Compute the ActivityWatch-inspired browser activity state to include in the
+ * heartbeat payload.  Only used when ENHANCED=true.
+ *
+ *  active           — tab visible + recent user input (last ~60 s)
+ *  visible_inactive — tab visible but no recent user input
+ *  hidden_connected — tab hidden but heartbeat still sending (working elsewhere)
+ *  idle_candidate   — tab hidden + no in-tab activity for > IDLE_WARNING_MS
+ */
+const computeBrowserActivityState = (lastActivityAtMs: number): string => {
+    const visible = isDocumentVisible();
+    const hasFocus = typeof document !== 'undefined' && document.hasFocus?.();
+    const idleForMs = Date.now() - lastActivityAtMs;
+
+    if (visible && hasFocus && idleForMs < ACTIVITY_SAMPLE_MS * 4) {
+        return 'active';
+    }
+    if (visible) {
+        return 'visible_inactive';
+    }
+    // Tab is not visible — we're still alive and sending heartbeats (the key fix).
+    if (idleForMs < HIDDEN_GRACE_MS) {
+        return 'hidden_connected';
+    }
+    return 'idle_candidate';
+};
+
+// ---------------------------------------------------------------------------
+// Hook
+// ---------------------------------------------------------------------------
 export const useActiveTimerHeartbeat = () => {
     const hasActiveTimerRef = useRef(false);
     const activeTimerIdRef = useRef<string | null>(null);
@@ -32,6 +95,9 @@ export const useActiveTimerHeartbeat = () => {
     const lastActivityAtRef = useRef(Date.now());
     const idleWarningShownRef = useRef(false);
     const syncInFlightRef = useRef<Promise<void> | null>(null);
+    // Server-authoritative policy thresholds (updated on each successful ping).
+    const serverIdleWarningMsRef = useRef(IDLE_WARNING_MS);
+    const serverIdlePauseMsRef = useRef(IDLE_WARNING_MS * 2);
 
     const syncActiveTimer = useCallback(async () => {
         if (!getStoredToken()) {
@@ -105,14 +171,27 @@ export const useActiveTimerHeartbeat = () => {
                 idleWarningShownRef.current = false;
                 return true;
             }
-
             console.error('Failed to enforce max active timer cap:', error);
             return false;
         }
     }, []);
 
     const sendHeartbeat = useCallback(async (force = false) => {
-        if (!getStoredToken() || !hasActiveTimerRef.current || !isDocumentVisible()) {
+        if (!getStoredToken() || !hasActiveTimerRef.current) {
+            return;
+        }
+
+        // -----------------------------------------------------------------------
+        // ORIGINAL BEHAVIOUR (ENHANCED=false):
+        //   Only send heartbeats when the tab is visible.  A hidden tab causes
+        //   the server to count missed heartbeats and eventually pause the timer.
+        //
+        // ENHANCED BEHAVIOUR (ENHANCED=true):
+        //   Send heartbeats even when the tab is hidden.  The visibility state is
+        //   included in the payload so the server knows the tab is in background.
+        //   This is the primary fix for "working in VS Code / terminal" false idle.
+        // -----------------------------------------------------------------------
+        if (!ENHANCED && !isDocumentVisible()) {
             return;
         }
 
@@ -121,18 +200,42 @@ export const useActiveTimerHeartbeat = () => {
         }
 
         const now = Date.now();
-        if (!force && now - lastHeartbeatAtRef.current < HEARTBEAT_INTERVAL_MS) {
+        const intervalToUse = !isDocumentVisible() ? HIDDEN_HEARTBEAT_INTERVAL_MS : HEARTBEAT_INTERVAL_MS;
+        if (!force && now - lastHeartbeatAtRef.current < intervalToUse) {
             return;
         }
 
         try {
-            await api.post('/timers/ping', {
+            const payload: Record<string, unknown> = {
                 active_timer_id: activeTimerIdRef.current,
                 last_activity_at: new Date(lastActivityAtRef.current).toISOString(),
                 visibility_state: typeof document === 'undefined' ? 'visible' : document.visibilityState,
                 has_focus: typeof document === 'undefined' ? true : document.hasFocus(),
-            });
+            };
+
+            // Include browser_activity_state only when enhanced mode is active.
+            if (ENHANCED) {
+                payload.browser_activity_state = computeBrowserActivityState(lastActivityAtRef.current);
+            }
+
+            const response = await api.post<{
+                state: string;
+                policy?: { idleWarningAfterMinutes: number; idlePauseAfterMinutes: number; heartbeatIntervalSeconds: number };
+            }>('/timers/ping', payload);
+
             lastHeartbeatAtRef.current = now;
+
+            // Update server-authoritative policy thresholds so countdown is accurate.
+            if (response.data.policy) {
+                serverIdleWarningMsRef.current = response.data.policy.idleWarningAfterMinutes * 60_000;
+                serverIdlePauseMsRef.current = response.data.policy.idlePauseAfterMinutes * 60_000;
+            }
+
+            // If the server enforced a pause during the ping guardrail, update local state.
+            if (response.data.state === 'paused') {
+                isPausedRef.current = true;
+                window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT));
+            }
         } catch (error) {
             const status = (error as { response?: { status?: number } })?.response?.status;
             if (status === 404) {
@@ -140,7 +243,6 @@ export const useActiveTimerHeartbeat = () => {
                 lastHeartbeatAtRef.current = 0;
                 return;
             }
-
             console.error('Failed to send active timer heartbeat:', error);
         }
     }, [enforceActiveTimerCap]);
@@ -218,54 +320,84 @@ export const useActiveTimerHeartbeat = () => {
             window.addEventListener(eventName, onActivity, { passive: true });
         });
 
+        // Regular heartbeat interval.
+        // ENHANCED: fires even when tab is hidden (heartbeat payload includes visibility state).
+        // LEGACY: fires only when visible (guarded inside sendHeartbeat).
         const heartbeatInterval = window.setInterval(() => {
-            if (!hasActiveTimerRef.current) {
-                return;
-            }
-
+            if (!hasActiveTimerRef.current) return;
             void enforceActiveTimerCap();
             void sendHeartbeat(true);
         }, HEARTBEAT_INTERVAL_MS);
 
         const capInterval = window.setInterval(() => {
-            if (!hasActiveTimerRef.current) {
-                return;
-            }
-
+            if (!hasActiveTimerRef.current) return;
             void enforceActiveTimerCap();
         }, 60_000);
 
-        const idleWarningInterval = window.setInterval(() => {
-            if (!hasActiveTimerRef.current || !isDocumentVisible()) {
+        // Idle warning + countdown interval.
+        // Reduced to 10 s (from 30 s) for accurate countdown display.
+        const idleCheckInterval = window.setInterval(() => {
+            if (!hasActiveTimerRef.current) return;
+
+            // When tab is hidden in enhanced mode, we are NOT idle just because the tab is hidden.
+            // Only run the warning countdown when the tab is visible or the client computes idle_candidate.
+            const browserState = ENHANCED ? computeBrowserActivityState(lastActivityAtRef.current) : null;
+
+            // In enhanced mode, skip in-tab idle warning when user is working in another app.
+            if (ENHANCED && (browserState === 'hidden_connected')) {
+                return;
+            }
+
+            // Legacy path (or enhanced but idle_candidate / visible_inactive):
+            // Only check idle against in-tab activity when tab is visible.
+            if (!ENHANCED && !isDocumentVisible()) {
                 return;
             }
 
             const inactiveForMs = Date.now() - lastActivityAtRef.current;
-            if (inactiveForMs >= IDLE_WARNING_MS && !idleWarningShownRef.current) {
-                idleWarningShownRef.current = true;
+            const warnThreshold = serverIdleWarningMsRef.current;
+            const pauseThreshold = serverIdlePauseMsRef.current;
 
-                window.dispatchEvent(new CustomEvent(TIMER_IDLE_WARNING_EVENT, {
+            if (inactiveForMs >= warnThreshold) {
+                if (!idleWarningShownRef.current) {
+                    idleWarningShownRef.current = true;
+                    window.dispatchEvent(new CustomEvent(TIMER_IDLE_WARNING_EVENT, {
+                        detail: { inactiveForMs },
+                    }));
+                }
+
+                // Dispatch countdown so the UI can update the "pauses in X" display.
+                const timeUntilPauseMs = Math.max(0, pauseThreshold - inactiveForMs);
+                window.dispatchEvent(new CustomEvent(TIMER_IDLE_COUNTDOWN_EVENT, {
                     detail: {
-                        inactiveForMinutes: Math.floor(inactiveForMs / 60_000),
+                        inactiveForMs,
+                        timeUntilPauseMs,
+                        browserActivityState: browserState,
                     },
                 }));
             }
-        }, 30_000);
+        }, 10_000);
+
+        // "I'm still here" button in the idle warning banner triggers this event.
+        const onForceHeartbeat = () => {
+            lastActivityAtRef.current = Date.now();
+            lastActivitySampleAtRef.current = Date.now();
+            idleWarningShownRef.current = false;
+            void sendHeartbeat(true);
+        };
 
         window.addEventListener('focus', onVisibility);
-        // Fix: blur signals inactivity (tab lost focus), not activity.
-        // Previously mapped to onActivity which incorrectly reset the idle counter.
         window.addEventListener('blur', onVisibility);
         window.addEventListener(TIME_ENTRY_CHANGED_EVENT, onEntryChanged as EventListener);
         window.addEventListener('storage', onStorage);
         window.addEventListener('pagehide', onPageHide);
+        window.addEventListener('wfx:timer-force-heartbeat', onForceHeartbeat);
         document.addEventListener('visibilitychange', onVisibility);
 
         const refreshInterval = window.setInterval(() => {
-            if (!isDocumentVisible()) {
-                return;
-            }
-
+            // In enhanced mode, always sync timer state regardless of visibility.
+            // In legacy mode, skip refresh when tab is hidden.
+            if (!ENHANCED && !isDocumentVisible()) return;
             void syncActiveTimer();
         }, ACTIVE_TIMER_REFRESH_MS);
 
@@ -275,12 +407,13 @@ export const useActiveTimerHeartbeat = () => {
             });
             window.clearInterval(heartbeatInterval);
             window.clearInterval(capInterval);
-            window.clearInterval(idleWarningInterval);
+            window.clearInterval(idleCheckInterval);
             window.removeEventListener('focus', onVisibility);
             window.removeEventListener('blur', onVisibility);
             window.removeEventListener(TIME_ENTRY_CHANGED_EVENT, onEntryChanged as EventListener);
             window.removeEventListener('storage', onStorage);
             window.removeEventListener('pagehide', onPageHide);
+            window.removeEventListener('wfx:timer-force-heartbeat', onForceHeartbeat);
             document.removeEventListener('visibilitychange', onVisibility);
             window.clearInterval(refreshInterval);
         };

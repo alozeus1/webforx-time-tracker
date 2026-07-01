@@ -12,7 +12,7 @@ import type {
     TimerEntriesResponse,
 } from '../types/api';
 import { emitTimeEntryChanged, TIME_ENTRY_CHANGED_EVENT } from '../utils/timeEntryEvents';
-import { TIMER_IDLE_WARNING_EVENT, TIMER_IDLE_RESUMED_EVENT, TIMER_PAUSED_EVENT } from '../hooks/useActiveTimerHeartbeat';
+import { TIMER_IDLE_WARNING_EVENT, TIMER_IDLE_RESUMED_EVENT, TIMER_PAUSED_EVENT, TIMER_IDLE_COUNTDOWN_EVENT } from '../hooks/useActiveTimerHeartbeat';
 
 const getElapsedSeconds = (
     startTime: string,
@@ -92,6 +92,16 @@ const Timer: React.FC = () => {
     const [correctionReason, setCorrectionReason] = useState('');
     const [correctionWorkNote, setCorrectionWorkNote] = useState('');
     const [correctionFeedback, setCorrectionFeedback] = useState<string | null>(null);
+    /**
+     * Idle warning state — set by TIMER_IDLE_WARNING_EVENT / TIMER_IDLE_COUNTDOWN_EVENT.
+     * null means no warning is active.
+     * This is separate from timerPaused — the warning fires BEFORE the server pauses.
+     */
+    const [idleWarning, setIdleWarning] = useState<{
+        inactiveForMs: number;
+        timeUntilPauseMs: number | null;
+        browserActivityState: string | null;
+    } | null>(null);
 
     const isRunning = timerStartedAt !== null;
     const isActivelyRecording = isRunning && !timerPaused;
@@ -219,24 +229,58 @@ const Timer: React.FC = () => {
             void loadTimerPageData();
         };
 
-        const handleIdleWarning = () => {
-            setTimerPaused(true);
+        /**
+         * TIMER_IDLE_WARNING_EVENT — client has detected in-tab inactivity beyond the warning
+         * threshold.  In enhanced mode this only fires for visible/idle states, NOT when the
+         * user has just switched tabs.  Show a warning banner; do NOT set timerPaused because
+         * the timer is still running on the server until it decides to pause.
+         */
+        const handleIdleWarning = (e: Event) => {
+            const detail = (e as CustomEvent<{ inactiveForMs: number }>).detail;
+            setIdleWarning({
+                inactiveForMs: detail?.inactiveForMs ?? 0,
+                timeUntilPauseMs: null,
+                browserActivityState: null,
+            });
         };
 
+        /**
+         * TIMER_IDLE_COUNTDOWN_EVENT — fired every 10 s while idle warning is active.
+         * Updates the countdown display without changing timer running state.
+         */
+        const handleIdleCountdown = (e: Event) => {
+            const detail = (e as CustomEvent<{
+                inactiveForMs: number;
+                timeUntilPauseMs: number;
+                browserActivityState: string | null;
+            }>).detail;
+            setIdleWarning({
+                inactiveForMs: detail?.inactiveForMs ?? 0,
+                timeUntilPauseMs: detail?.timeUntilPauseMs ?? null,
+                browserActivityState: detail?.browserActivityState ?? null,
+            });
+        };
+
+        /**
+         * TIMER_IDLE_RESUMED_EVENT — user moved/typed inside the tab after being idle.
+         * Dismiss the warning banner.  Do NOT call setTimerPaused — if the server
+         * actually paused the timer the TIMER_PAUSED_EVENT / page reload will handle it.
+         */
         const handleIdleResumed = () => {
-            setTimerPaused(false);
-            void loadTimerPageData();
+            setIdleWarning(null);
         };
 
         window.addEventListener(TIME_ENTRY_CHANGED_EVENT, handleTimeEntryChange as EventListener);
         window.addEventListener(TIMER_PAUSED_EVENT, handleTimeEntryChange as EventListener);
         window.addEventListener(TIMER_IDLE_WARNING_EVENT, handleIdleWarning as EventListener);
+        window.addEventListener(TIMER_IDLE_COUNTDOWN_EVENT, handleIdleCountdown as EventListener);
         window.addEventListener(TIMER_IDLE_RESUMED_EVENT, handleIdleResumed as EventListener);
-        
+
         return () => {
             window.removeEventListener(TIME_ENTRY_CHANGED_EVENT, handleTimeEntryChange as EventListener);
             window.removeEventListener(TIMER_PAUSED_EVENT, handleTimeEntryChange as EventListener);
             window.removeEventListener(TIMER_IDLE_WARNING_EVENT, handleIdleWarning as EventListener);
+            window.removeEventListener(TIMER_IDLE_COUNTDOWN_EVENT, handleIdleCountdown as EventListener);
             window.removeEventListener(TIMER_IDLE_RESUMED_EVENT, handleIdleResumed as EventListener);
         };
     }, [loadTimerPageData]);
@@ -474,9 +518,74 @@ const Timer: React.FC = () => {
 
     const progressPercentage = Math.min((todaysProgress / (8 * 3600)) * 100, 100);
 
+    // ---------------------------------------------------------------------------
+    // Helpers for idle warning banner display
+    // ---------------------------------------------------------------------------
+    const formatCountdown = (ms: number | null) => {
+        if (ms === null || ms <= 0) return null;
+        const totalSeconds = Math.ceil(ms / 1000);
+        const m = Math.floor(totalSeconds / 60);
+        const s = totalSeconds % 60;
+        if (m > 0) return `${m}m ${s}s`;
+        return `${s}s`;
+    };
+
+    const idleWarningMinutes = idleWarning
+        ? Math.floor(idleWarning.inactiveForMs / 60_000)
+        : 0;
+
+    const idleCountdown = idleWarning ? formatCountdown(idleWarning.timeUntilPauseMs) : null;
+
+    const isHiddenConnected = idleWarning?.browserActivityState === 'hidden_connected';
+
     return (
         <div className="flex-1 w-full overflow-y-auto pb-12">
             <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 lg:px-6">
+
+                {/* ------------------------------------------------------------------ */}
+                {/* Idle warning banner — shown when client detects in-tab inactivity.  */}
+                {/* Appears BEFORE the server pauses; gives user a chance to act.       */}
+                {/* ------------------------------------------------------------------ */}
+                {isRunning && !timerPaused && idleWarning && (
+                    <div
+                        role="alert"
+                        className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 shadow-sm"
+                    >
+                        <div className="flex items-start gap-3">
+                            <span className="mt-0.5 h-5 w-5 shrink-0 text-amber-500">
+                                <svg viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                </svg>
+                            </span>
+                            <div>
+                                <p className="text-sm font-bold text-amber-800">
+                                    {isHiddenConnected
+                                        ? 'Timer running in background — activity unconfirmed in this tab'
+                                        : `No activity detected for ${idleWarningMinutes > 0 ? `${idleWarningMinutes} min` : 'a moment'}`}
+                                </p>
+                                <p className="mt-0.5 text-xs text-amber-700">
+                                    {isHiddenConnected
+                                        ? 'Your timer is still running. If you\'ve stepped away, it will pause automatically once activity stops.'
+                                        : idleCountdown
+                                            ? `Timer will pause in ${idleCountdown} unless activity is detected.`
+                                            : 'Timer will pause soon if no activity is detected.'}
+                                </p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                // Dismiss the warning and force a heartbeat to reset server idle clock.
+                                setIdleWarning(null);
+                                window.dispatchEvent(new CustomEvent('wfx:timer-force-heartbeat'));
+                            }}
+                            className="shrink-0 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-200 transition-colors"
+                        >
+                            I'm still here
+                        </button>
+                    </div>
+                )}
+
                 <section className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="space-y-1">
@@ -686,6 +795,32 @@ const Timer: React.FC = () => {
                                     )
                                     : 'Add task context and start logging time.'}
                             </p>
+
+                            {/* Activity signal indicator — visible when timer is running */}
+                            {isRunning && !timerPaused && (
+                                <div className="mt-3 border-t border-slate-100 pt-3">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Activity Signal</p>
+                                    <div className="mt-1.5 flex items-center gap-2">
+                                        {idleWarning ? (
+                                            <>
+                                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                                <span className="text-xs font-medium text-amber-700">
+                                                    {isHiddenConnected ? 'Tab in background' : 'Activity unconfirmed'}
+                                                </span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                                                <span className="text-xs font-medium text-emerald-700">
+                                                    {typeof document !== 'undefined' && document.visibilityState === 'hidden'
+                                                        ? 'Timer running in background'
+                                                        : 'Browser active'}
+                                                </span>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Progress Breakdown</p>
