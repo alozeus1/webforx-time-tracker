@@ -143,6 +143,7 @@ const Admin: React.FC = () => {
     const [payrollCustomEnd, setPayrollCustomEnd] = useState('');
 
     // ── Feature 2: Bots (Slack / Mattermost / Teams) ────────────────────────
+    const [orgSlug, setOrgSlug] = useState('');
     const [slackSigningSecret, setSlackSigningSecret] = useState('');
     const [slackWebhookUrl, setSlackWebhookUrl] = useState('');
     const [slackUserMap, setSlackUserMap] = useState('{}');
@@ -342,6 +343,10 @@ const Admin: React.FC = () => {
 
     // ── Bot config functions ─────────────────────────────────────────────────
     async function fetchBotsConfig() {
+        // Fetch org slug alongside bot configs so we can show the real callback URL
+        const orgRes = await api.get<{ slug?: string }>('/organization').catch(() => null);
+        if (orgRes?.data?.slug) setOrgSlug(orgRes.data.slug);
+
         const [slackRes, mmRes] = await Promise.allSettled([
             api.get<{ webhook_url?: string; user_map?: Record<string, string> }>('/bots/slack/config'),
             api.get<{ user_map?: Record<string, string>; incoming_webhook_url_set?: boolean; bot_token_set?: boolean; mattermost_base_url?: string }>('/bots/mattermost/config'),
@@ -936,7 +941,15 @@ const Admin: React.FC = () => {
                             <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
                                 <span className="material-symbols-outlined text-lg text-blue-600">forum</span> Mattermost Bot
                             </h3>
-                            <p className="text-xs text-slate-500 mb-4">Slash command endpoint: <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">{`POST /api/v1/bots/mattermost/<org-slug>`}</code></p>
+                            {orgSlug && (
+                                <div className="mb-4 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs text-slate-600 space-y-1">
+                                    <p className="font-semibold text-slate-700">Your callback URL (paste this into Mattermost)</p>
+                                    <code className="block rounded bg-white border border-slate-200 px-2 py-1 text-[11px] select-all break-all">
+                                        {`${window.location.origin.replace('timer.dev', 'vercel-backend-xi-three')}/api/v1/bots/mattermost/${orgSlug}`}
+                                    </code>
+                                    <p className="text-[10px] text-slate-400">Your org slug is <strong>{orgSlug}</strong> — use this for both Slash Commands and Outgoing Webhooks in Mattermost</p>
+                                </div>
+                            )}
                             <p className="text-xs text-slate-400 mb-3">
                                 Two separate webhook directions — configure both or either depending on your use case.
                             </p>

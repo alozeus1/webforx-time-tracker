@@ -115,7 +115,14 @@ export const handleMattermostCommand = async (req: Request, res: Response): Prom
     });
     if (!user) { res.json(mmResponse('Linked user not found or inactive.')); return; }
 
-    const text: string = (req.body?.text ?? '').trim();
+    // Support both Slash Commands (/timer start) and Outgoing Webhooks (trigger word "timer").
+    // Outgoing webhooks include the trigger word at the start of `text`, slash commands do not.
+    const isOutgoingWebhook = !!req.body?.trigger_word;
+    const rawText: string = (req.body?.text ?? '').trim();
+    const text = isOutgoingWebhook
+        ? rawText.replace(/^timer\s*/i, '').trim()
+        : rawText;
+
     const parts = text.split(/\s+/);
     const subCommand = parts[0]?.toLowerCase() ?? 'status';
 
