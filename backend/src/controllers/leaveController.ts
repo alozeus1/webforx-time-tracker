@@ -1,13 +1,88 @@
 import { Response } from 'express';
 import prisma from '../config/db';
+import { decryptConfig } from '../utils/crypto';
 import type { AuthRequest } from '../types/auth';
 
 const VALID_TYPES = ['annual', 'sick', 'unpaid', 'public_holiday', 'other'];
 const VALID_STATUSES = ['pending', 'approved', 'rejected'];
 
+// ─── Mattermost helper ───────────────────────────────────────────────────────
+
+interface MattermostConfig {
+    webhookUrl?: string;
+    token?: string;
+    user_map?: Record<string, string>;
+}
+
+async function sendMattermostLeaveNotification(
+    organizationId: string,
+    text: string,
+): Promise<void> {
+    try {
+        const integration = await prisma.integration.findFirst({
+            where: { organization_id: organizationId, type: 'mattermost', is_active: true },
+            select: { config: true },
+        });
+        if (!integration) return;
+
+        const config = decryptConfig<MattermostConfig>(integration.config);
+        const webhookUrl = config.webhookUrl;
+        if (!webhookUrl) return;
+
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text }),
+        });
+    } catch (err) {
+        // Fire-and-forget — never let Mattermost failure corrupt leave state
+        console.error('Mattermost leave notification failed:', err);
+    }
+}
+
+// ─── In-app notification helper ──────────────────────────────────────────────
+
+async function notifyUsers(
+    userIds: string[],
+    organizationId: string,
+    message: string,
+): Promise<void> {
+    if (userIds.length === 0) return;
+    try {
+        await prisma.notification.createMany({
+            data: userIds.map(uid => ({
+                user_id: uid,
+                organization_id: organizationId,
+                message,
+                type: 'LEAVE',
+            })),
+            skipDuplicates: true,
+        });
+    } catch (err) {
+        console.error('Leave notification write failed:', err);
+    }
+}
+
+// ─── History helper ──────────────────────────────────────────────────────────
+
+async function writeHistory(
+    leaveRequestId: string,
+    status: string,
+    actorId: string,
+    comment?: string | null,
+): Promise<void> {
+    try {
+        await (prisma as any).leaveRequestHistory.create({
+            data: { leave_request_id: leaveRequestId, status, actor_id: actorId, comment: comment ?? null },
+        });
+    } catch (err) {
+        console.error('Leave history write failed:', err);
+    }
+}
+
 // ─── Employee endpoints ─────────────────────────────────────────────────────
 
-/** GET /leave — list my leave requests */
+/** GET /leave — list my leave requests with history */
 export const listMyLeave = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const requests = await (prisma as any).leaveRequest.findMany({
@@ -15,6 +90,10 @@ export const listMyLeave = async (req: AuthRequest, res: Response): Promise<void
             orderBy: { start_date: 'desc' },
             include: {
                 reviewer: { select: { first_name: true, last_name: true } },
+                history: {
+                    orderBy: { created_at: 'asc' },
+                    include: { actor: { select: { first_name: true, last_name: true } } },
+                },
             },
         });
         res.json(requests);
@@ -55,6 +134,15 @@ export const createLeave = async (req: AuthRequest, res: Response): Promise<void
             return;
         }
 
+        // Fetch the submitting employee's name for notifications
+        const employee = await prisma.user.findFirst({
+            where: { id: req.user!.userId },
+            select: { first_name: true, last_name: true, email: true },
+        });
+        const employeeName = employee
+            ? `${employee.first_name} ${employee.last_name}`
+            : 'An employee';
+
         const created = await (prisma as any).leaveRequest.create({
             data: {
                 user_id: req.user!.userId,
@@ -67,6 +155,40 @@ export const createLeave = async (req: AuthRequest, res: Response): Promise<void
                 status: 'pending',
             },
         });
+
+        // Write audit history — submitted
+        await writeHistory(created.id, 'submitted', req.user!.userId);
+
+        // Find all admins and managers in the org to notify
+        const managers = await prisma.user.findMany({
+            where: {
+                organization_id: req.user!.organization_id,
+                is_active: true,
+                role: { name: { in: ['Admin', 'Manager'] } },
+            },
+            select: { id: true },
+        });
+        const managerIds = managers.map(m => m.id);
+
+        const leaveLabel = leave_type.replace('_', ' ');
+        const dateRange = `${start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} – ${end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+        const inAppMessage = `📋 ${employeeName} submitted a ${parsedDays}-day ${leaveLabel} request (${dateRange}). Review it in Leave & PTO.`;
+
+        // In-app notifications to all admins/managers
+        await notifyUsers(managerIds, req.user!.organization_id, inAppMessage);
+
+        // Mattermost notification (fire-and-forget)
+        const mmText = [
+            `### 📋 New Leave Request`,
+            `**Employee:** ${employeeName}${employee ? ` (${employee.email})` : ''}`,
+            `**Type:** ${leaveLabel.charAt(0).toUpperCase() + leaveLabel.slice(1)}`,
+            `**Dates:** ${dateRange} · **${parsedDays} day${parsedDays !== 1 ? 's' : ''}**`,
+            reason ? `**Reason:** ${reason}` : null,
+            `**Status:** Pending Review`,
+            `[Review request →](${process.env.FRONTEND_URL ?? 'https://timer.dev.webforxtech.com'}/leave)`,
+        ].filter(Boolean).join('\n');
+        void sendMattermostLeaveNotification(req.user!.organization_id, mmText);
+
         res.status(201).json(created);
     } catch (err) {
         console.error('createLeave error:', err);
@@ -85,7 +207,11 @@ export const cancelLeave = async (req: AuthRequest, res: Response): Promise<void
             res.status(400).json({ message: 'Only pending requests can be cancelled' });
             return;
         }
-        await (prisma as any).leaveRequest.delete({ where: { id: req.params.id } });
+
+        const cancelId = String(req.params['id']);
+        // Write history before deleting
+        await writeHistory(cancelId, 'cancelled', req.user!.userId);
+        await (prisma as any).leaveRequest.delete({ where: { id: cancelId } });
         res.status(204).end();
     } catch (err) {
         console.error('cancelLeave error:', err);
@@ -95,7 +221,7 @@ export const cancelLeave = async (req: AuthRequest, res: Response): Promise<void
 
 // ─── Manager / Admin endpoints ──────────────────────────────────────────────
 
-/** GET /leave/all — list all leave requests in the org (Manager+) */
+/** GET /leave/all — list all leave requests in the org (Manager+) with history */
 export const listAllLeave = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const { status, user_id } = req.query as { status?: string; user_id?: string };
@@ -110,6 +236,10 @@ export const listAllLeave = async (req: AuthRequest, res: Response): Promise<voi
             include: {
                 user: { select: { first_name: true, last_name: true, email: true } },
                 reviewer: { select: { first_name: true, last_name: true } },
+                history: {
+                    orderBy: { created_at: 'asc' },
+                    include: { actor: { select: { first_name: true, last_name: true } } },
+                },
             },
         });
         res.json(requests);
@@ -131,12 +261,29 @@ export const reviewLeave = async (req: AuthRequest, res: Response): Promise<void
 
         const existing = await (prisma as any).leaveRequest.findFirst({
             where: { id: req.params.id, organization_id: req.user!.organization_id },
+            include: {
+                user: { select: { id: true, first_name: true, last_name: true, email: true } },
+            },
         });
         if (!existing) { res.status(404).json({ message: 'Leave request not found' }); return; }
         if (existing.status !== 'pending') {
             res.status(400).json({ message: 'This request has already been reviewed' });
             return;
         }
+
+        // Prevent self-approval
+        if (existing.user_id === req.user!.userId) {
+            res.status(403).json({ message: 'You cannot approve or reject your own leave request' });
+            return;
+        }
+
+        const reviewerUser = await prisma.user.findFirst({
+            where: { id: req.user!.userId },
+            select: { first_name: true, last_name: true },
+        });
+        const reviewerName = reviewerUser
+            ? `${reviewerUser.first_name} ${reviewerUser.last_name}`
+            : 'Your manager';
 
         const updated = await (prisma as any).leaveRequest.update({
             where: { id: req.params.id },
@@ -151,6 +298,33 @@ export const reviewLeave = async (req: AuthRequest, res: Response): Promise<void
                 reviewer: { select: { first_name: true, last_name: true } },
             },
         });
+
+        const reviewId = String(req.params['id']);
+        // Write audit history
+        await writeHistory(reviewId, status, req.user!.userId, reviewer_note?.trim() || null);
+
+        // Notify the employee
+        const leaveLabel = existing.leave_type.replace('_', ' ');
+        const startDate = new Date(existing.start_date);
+        const endDate = new Date(existing.end_date);
+        const dateRange = `${startDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} – ${endDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+        const emoji = status === 'approved' ? '✅' : '❌';
+        const verb = status === 'approved' ? 'approved' : 'rejected';
+
+        const employeeMessage = `${emoji} Your ${leaveLabel} request (${dateRange}) was ${verb} by ${reviewerName}.${reviewer_note?.trim() ? ` Note: "${reviewer_note.trim()}"` : ''}`;
+        await notifyUsers([existing.user_id], req.user!.organization_id, employeeMessage);
+
+        // Mattermost notification to channel (fire-and-forget)
+        const mmText = [
+            `### ${emoji} Leave Request ${verb.charAt(0).toUpperCase() + verb.slice(1)}`,
+            `**Employee:** ${existing.user?.first_name} ${existing.user?.last_name}`,
+            `**Type:** ${leaveLabel.charAt(0).toUpperCase() + leaveLabel.slice(1)}`,
+            `**Dates:** ${dateRange}`,
+            `**${verb.charAt(0).toUpperCase() + verb.slice(1)} by:** ${reviewerName}`,
+            reviewer_note?.trim() ? `**Note:** ${reviewer_note.trim()}` : null,
+        ].filter(Boolean).join('\n');
+        void sendMattermostLeaveNotification(req.user!.organization_id, mmText);
+
         res.json(updated);
     } catch (err) {
         console.error('reviewLeave error:', err);

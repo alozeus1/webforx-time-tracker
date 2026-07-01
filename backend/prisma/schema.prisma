@@ -83,8 +83,9 @@ model User {
   project_templates     ProjectTemplate[]
   scheduled_reports     ScheduledReport[]
   locked_payroll_periods PayrollPeriod[] @relation("PayrollPeriodLocker")
-  leave_requests         LeaveRequest[]
-  reviewed_leave_requests LeaveRequest[] @relation("LeaveReviewer")
+  leave_requests            LeaveRequest[]
+  reviewed_leave_requests   LeaveRequest[] @relation("LeaveReviewer")
+  leave_history_actions     LeaveRequestHistory[] @relation("LeaveHistoryActor")
 
   @@unique([email, organization_id])
   @@index([organization_id, is_active])
@@ -540,7 +541,21 @@ model LeaveRequest {
 
   user     User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
   reviewer User? @relation("LeaveReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  history  LeaveRequestHistory[]
 
   @@index([organization_id, user_id, start_date])
   @@index([organization_id, status, start_date])
+}
+
+model LeaveRequestHistory {
+  id               String   @id @default(uuid())
+  leave_request_id String
+  leave_request    LeaveRequest @relation(fields: [leave_request_id], references: [id], onDelete: Cascade)
+  status           String   // "submitted" | "approved" | "rejected" | "cancelled"
+  actor_id         String
+  actor            User     @relation("LeaveHistoryActor", fields: [actor_id], references: [id], onDelete: Cascade)
+  comment          String?
+  created_at       DateTime @default(now())
+
+  @@index([leave_request_id, created_at])
 }

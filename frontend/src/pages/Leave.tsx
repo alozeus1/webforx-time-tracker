@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarDays, Plus, X, CheckCircle2, XCircle, Clock3, ChevronDown } from 'lucide-react';
+import { CalendarDays, Plus, X, CheckCircle2, XCircle, Clock3, ChevronDown, ChevronUp, History } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import { hasAnyRole } from '../utils/session';
 import { usePageMetadata } from '../hooks/usePageMetadata';
@@ -23,6 +23,22 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
     rejected: <XCircle size={13} />,
 };
 
+// History status display config
+const HISTORY_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
+    submitted:  { label: 'Submitted',      color: 'text-indigo-600',  dot: 'bg-indigo-500' },
+    approved:   { label: 'Approved',       color: 'text-emerald-600', dot: 'bg-emerald-500' },
+    rejected:   { label: 'Rejected',       color: 'text-rose-600',    dot: 'bg-rose-500' },
+    cancelled:  { label: 'Cancelled',      color: 'text-slate-400',   dot: 'bg-slate-400' },
+};
+
+interface HistoryEntry {
+    id: string;
+    status: string;
+    comment?: string | null;
+    created_at: string;
+    actor: { first_name: string; last_name: string };
+}
+
 interface LeaveRequest {
     id: string;
     leave_type: string;
@@ -35,9 +51,79 @@ interface LeaveRequest {
     created_at: string;
     user?: { first_name: string; last_name: string; email: string };
     reviewer?: { first_name: string; last_name: string } | null;
+    history?: HistoryEntry[];
 }
 
-const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+const fmt = (d: string) =>
+    new Date(d).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' });
+
+const fmtDateTime = (d: string) =>
+    new Date(d).toLocaleString(undefined, {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+
+// ─── Status Timeline ─────────────────────────────────────────────────────────
+
+const StatusTimeline: React.FC<{ request: LeaveRequest }> = ({ request }) => {
+    const history = request.history ?? [];
+
+    // Build timeline entries: history events + a "pending review" placeholder if still pending
+    const entries: Array<{ status: string; actor?: string; ts?: string; comment?: string | null; isCurrent?: boolean }> = [
+        ...history.map(h => ({
+            status: h.status,
+            actor: `${h.actor.first_name} ${h.actor.last_name}`,
+            ts: h.created_at,
+            comment: h.comment,
+        })),
+    ];
+
+    // If still pending and no non-submitted history, add "Under Review" current step
+    if (request.status === 'pending') {
+        entries.push({ status: 'under_review', isCurrent: true });
+    }
+
+    if (entries.length === 0) return null;
+
+    return (
+        <div className="mt-3 space-y-0">
+            {entries.map((e, i) => {
+                const cfg = e.status === 'under_review'
+                    ? { label: 'Under Review', color: 'text-amber-600', dot: 'bg-amber-400' }
+                    : (HISTORY_CONFIG[e.status] ?? { label: e.status, color: 'text-slate-500', dot: 'bg-slate-400' });
+
+                const isLast = i === entries.length - 1;
+
+                return (
+                    <div key={i} className="flex gap-3">
+                        {/* Dot + line */}
+                        <div className="flex flex-col items-center">
+                            <span className={`mt-1 w-2.5 h-2.5 rounded-full shrink-0 ${cfg.dot} ${e.isCurrent ? 'animate-pulse' : ''}`} />
+                            {!isLast && <span className="w-px flex-1 bg-slate-200 dark:bg-slate-700 my-1" />}
+                        </div>
+                        {/* Content */}
+                        <div className={`pb-3 ${isLast ? '' : ''}`}>
+                            <p className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</p>
+                            {e.actor && e.ts && (
+                                <p className="text-[11px] text-slate-400">
+                                    {e.actor} · {fmtDateTime(e.ts)}
+                                </p>
+                            )}
+                            {!e.actor && e.isCurrent && (
+                                <p className="text-[11px] text-slate-400">Awaiting admin or manager review</p>
+                            )}
+                            {e.comment && (
+                                <p className="text-[11px] text-slate-500 mt-0.5 italic">"{e.comment}"</p>
+                            )}
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 const Leave: React.FC = () => {
     usePageMetadata({
@@ -55,6 +141,7 @@ const Leave: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [reviewingId, setReviewingId] = useState<string | null>(null);
     const [reviewNote, setReviewNote] = useState('');
+    const [expandedId, setExpandedId] = useState<string | null>(null);
 
     // Form state
     const [leaveType, setLeaveType] = useState('annual');
@@ -145,6 +232,8 @@ const Leave: React.FC = () => {
     const myPending = myRequests.filter(r => r.status === 'pending').length;
     const teamPending = allRequests.filter(r => r.status === 'pending').length;
 
+    const toggleExpand = (id: string) => setExpandedId(prev => (prev === id ? null : id));
+
     return (
         <div className="flex-1 flex w-full flex-col overflow-y-auto bg-slate-50 dark:bg-slate-950">
             <div className="max-w-5xl mx-auto w-full px-4 py-8 space-y-6">
@@ -221,7 +310,7 @@ const Leave: React.FC = () => {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Reason <span className="font-normal">(optional)</span></label>
-                                    <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} placeholder="Brief description of your leave..." className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
+                                    <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} placeholder="Brief description of your leave…" className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
                                 </div>
                                 <div className="flex gap-3 pt-1">
                                     <button type="button" onClick={() => setShowForm(false)} className="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
@@ -250,30 +339,59 @@ const Leave: React.FC = () => {
                             </div>
                         ) : (
                             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {myRequests.map(r => (
-                                    <div key={r.id} className="px-6 py-4 flex items-start gap-4">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-sm font-bold text-slate-800 dark:text-white capitalize">{r.leave_type.replace('_', ' ')}</span>
-                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[r.status] ?? ''}`}>
-                                                    {STATUS_ICONS[r.status]} {r.status}
-                                                </span>
+                                {myRequests.map(r => {
+                                    const isExpanded = expandedId === r.id;
+                                    const hasHistory = (r.history?.length ?? 0) > 0;
+                                    return (
+                                        <div key={r.id} className="px-6 py-4">
+                                            <div className="flex items-start gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-sm font-bold text-slate-800 dark:text-white capitalize">{r.leave_type.replace('_', ' ')}</span>
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[r.status] ?? ''}`}>
+                                                            {STATUS_ICONS[r.status]} {r.status === 'pending' ? 'Under Review' : r.status}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mt-0.5">{fmt(r.start_date)} – {fmt(r.end_date)} · <strong>{Number(r.days)} day{Number(r.days) !== 1 ? 's' : ''}</strong></p>
+                                                    {r.reason && <p className="text-xs text-slate-400 mt-0.5 italic">"{r.reason}"</p>}
+                                                    {r.reviewer_note && r.status !== 'pending' && (
+                                                        <p className="text-xs text-slate-500 mt-1 bg-slate-50 dark:bg-slate-900 rounded px-2 py-1">
+                                                            <span className="font-bold">Reviewer note:</span> {r.reviewer_note}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {/* Timeline toggle */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleExpand(r.id)}
+                                                        title={isExpanded ? 'Hide timeline' : 'View timeline'}
+                                                        className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-bold px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                                    >
+                                                        <History size={13} />
+                                                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                                    </button>
+                                                    {r.status === 'pending' && (
+                                                        <button type="button" onClick={() => void handleCancel(r.id)} className="text-xs text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
+                                                            Cancel
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <p className="text-xs text-slate-500 mt-0.5">{fmt(r.start_date)} – {fmt(r.end_date)} · <strong>{Number(r.days)} day{Number(r.days) !== 1 ? 's' : ''}</strong></p>
-                                            {r.reason && <p className="text-xs text-slate-400 mt-0.5 italic">"{r.reason}"</p>}
-                                            {r.reviewer_note && (
-                                                <p className="text-xs text-slate-500 mt-1 bg-slate-50 dark:bg-slate-900 rounded px-2 py-1">
-                                                    <span className="font-bold">Reviewer note:</span> {r.reviewer_note}
-                                                </p>
+
+                                            {/* Expandable timeline */}
+                                            {isExpanded && (
+                                                <div className="mt-3 pl-1 border-l-2 border-slate-100 dark:border-slate-700 ml-1">
+                                                    {hasHistory || r.status === 'pending' ? (
+                                                        <StatusTimeline request={r} />
+                                                    ) : (
+                                                        <p className="text-[11px] text-slate-400 py-2 px-3">No timeline history available.</p>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
-                                        {r.status === 'pending' && (
-                                            <button type="button" onClick={() => void handleCancel(r.id)} className="shrink-0 text-xs text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors">
-                                                Cancel
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -289,40 +407,63 @@ const Leave: React.FC = () => {
                             <p className="px-6 py-10 text-center text-slate-400 text-sm">No requests in the organisation yet.</p>
                         ) : (
                             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {allRequests.map(r => (
-                                    <div key={r.id} className="px-6 py-4">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="text-sm font-bold text-slate-800 dark:text-white">{r.user?.first_name} {r.user?.last_name}</span>
-                                                    <span className="text-xs text-slate-400">{r.user?.email}</span>
-                                                    <span className="text-xs font-semibold capitalize text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full">{r.leave_type.replace('_', ' ')}</span>
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[r.status] ?? ''}`}>
-                                                        {STATUS_ICONS[r.status]} {r.status}
-                                                    </span>
+                                {allRequests.map(r => {
+                                    const isExpanded = expandedId === r.id;
+                                    return (
+                                        <div key={r.id} className="px-6 py-4">
+                                            <div className="flex items-start gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-sm font-bold text-slate-800 dark:text-white">{r.user?.first_name} {r.user?.last_name}</span>
+                                                        <span className="text-xs text-slate-400">{r.user?.email}</span>
+                                                        <span className="text-xs font-semibold capitalize text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full">{r.leave_type.replace('_', ' ')}</span>
+                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${STATUS_COLORS[r.status] ?? ''}`}>
+                                                            {STATUS_ICONS[r.status]} {r.status}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mt-0.5">{fmt(r.start_date)} – {fmt(r.end_date)} · <strong>{Number(r.days)} day{Number(r.days) !== 1 ? 's' : ''}</strong></p>
+                                                    {r.reason && <p className="text-xs text-slate-400 mt-0.5 italic">"{r.reason}"</p>}
                                                 </div>
-                                                <p className="text-xs text-slate-500 mt-0.5">{fmt(r.start_date)} – {fmt(r.end_date)} · <strong>{Number(r.days)} day{Number(r.days) !== 1 ? 's' : ''}</strong></p>
-                                                {r.reason && <p className="text-xs text-slate-400 mt-0.5 italic">"{r.reason}"</p>}
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {/* Timeline toggle */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => toggleExpand(r.id)}
+                                                        title={isExpanded ? 'Hide timeline' : 'View timeline'}
+                                                        className="flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 font-bold px-2 py-1 rounded hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
+                                                    >
+                                                        <History size={13} />
+                                                        {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                                                    </button>
+                                                    {r.status === 'pending' && reviewingId !== r.id && (
+                                                        <button type="button" onClick={() => { setReviewingId(r.id); setReviewNote(''); }} className="text-xs font-bold text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
+                                                            Review
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                            {r.status === 'pending' && reviewingId !== r.id && (
-                                                <button type="button" onClick={() => { setReviewingId(r.id); setReviewNote(''); }} className="shrink-0 text-xs font-bold text-primary hover:bg-primary/10 px-3 py-1.5 rounded-lg transition-colors">
-                                                    Review
-                                                </button>
+
+                                            {/* Expandable timeline */}
+                                            {isExpanded && (r.history?.length ?? 0) > 0 && (
+                                                <div className="mt-3 pl-1 border-l-2 border-slate-100 dark:border-slate-700 ml-1">
+                                                    <StatusTimeline request={r} />
+                                                </div>
+                                            )}
+
+                                            {/* Inline review panel */}
+                                            {r.status === 'pending' && reviewingId === r.id && (
+                                                <div className="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3">
+                                                    <textarea value={reviewNote} onChange={e => setReviewNote(e.target.value)} rows={2} placeholder="Optional note to the employee…" className="w-full rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                                                    <div className="flex gap-2">
+                                                        <button type="button" onClick={() => void handleReview(r.id, 'approved')} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">Approve</button>
+                                                        <button type="button" onClick={() => void handleReview(r.id, 'rejected')} className="px-4 py-2 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors">Reject</button>
+                                                        <button type="button" onClick={() => setReviewingId(null)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+                                                    </div>
+                                                </div>
                                             )}
                                         </div>
-                                        {/* Inline review panel */}
-                                        {r.status === 'pending' && reviewingId === r.id && (
-                                            <div className="mt-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-3">
-                                                <textarea value={reviewNote} onChange={e => setReviewNote(e.target.value)} rows={2} placeholder="Optional note to the employee…" className="w-full rounded border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/30" />
-                                                <div className="flex gap-2">
-                                                    <button type="button" onClick={() => void handleReview(r.id, 'approved')} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors">Approve</button>
-                                                    <button type="button" onClick={() => void handleReview(r.id, 'rejected')} className="px-4 py-2 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors">Reject</button>
-                                                    <button type="button" onClick={() => setReviewingId(null)} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">Cancel</button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

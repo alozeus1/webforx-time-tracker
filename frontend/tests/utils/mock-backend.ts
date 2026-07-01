@@ -679,12 +679,13 @@ export const loginWithMockedBackend = async (
     dismissTour = true,
   }: { email?: string; password?: string; role?: AppRole; dismissTour?: boolean } = {},
 ) => {
-  const submitButtonName = /Continue with Email\/Password|Sign In/i;
   await installStableApiMocks(page, { role });
   await page.goto('/login');
   await page.getByLabel('Work Email').fill(email);
   await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: submitButtonName }).click();
+  // Press Enter instead of clicking a button — avoids ambiguity with social-login buttons
+  // (Google "Sign In", GitHub, etc.) that share button text with the email submit button.
+  await page.getByLabel('Password').press('Enter');
   await expect(page).toHaveURL(/.*dashboard/);
 
   if (dismissTour) {
