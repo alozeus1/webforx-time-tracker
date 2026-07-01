@@ -19,8 +19,46 @@ import { encryptConfig, decryptConfig } from '../utils/crypto';
 
 interface MattermostConfig {
     token: string;                            // outgoing webhook verification token
-    user_map: Record<string, string>;         // mattermost_user_id → app_user_id
-    incoming_webhook_url?: string;            // incoming webhook URL for pushing notifications TO Mattermost
+    user_map: Record<string, string>;         // mattermost_user_id → app_user_id (optional manual override)
+    incoming_webhook_url?: string;            // incoming webhook URL for pushing notifications TO Mattermost channel
+    bot_token?: string;                       // Mattermost bot API token — for DMs + email-based user lookup
+    mattermost_base_url?: string;             // e.g. https://mattermost.yourcompany.com (no trailing slash)
+}
+
+/**
+ * Resolve a Mattermost user_id to a Timer app user by:
+ *   1. Checking the manual user_map (explicit override)
+ *   2. Calling Mattermost API to get the user's email, then querying the Timer DB
+ * Returns the Timer app user_id, or null if unresolvable.
+ */
+async function resolveTimerUser(
+    mmUserId: string,
+    orgId: string,
+    config: MattermostConfig,
+): Promise<string | null> {
+    // Fast path: manual mapping
+    const mapped = config.user_map?.[mmUserId];
+    if (mapped) return mapped;
+
+    // Auto-resolve via Mattermost API if bot credentials are configured
+    if (!config.bot_token || !config.mattermost_base_url) return null;
+
+    try {
+        const base = config.mattermost_base_url.replace(/\/$/, '');
+        const headers = { Authorization: `Bearer ${config.bot_token}` };
+        const mmUserRes = await fetch(`${base}/api/v4/users/${mmUserId}`, { headers });
+        if (!mmUserRes.ok) return null;
+        const mmUser = await mmUserRes.json() as { email?: string };
+        if (!mmUser?.email) return null;
+
+        const timerUser = await prisma.user.findFirst({
+            where: { email: mmUser.email, organization_id: orgId, is_active: true },
+            select: { id: true },
+        });
+        return timerUser?.id ?? null;
+    } catch {
+        return null;
+    }
 }
 
 async function getMattermostConfig(organizationId: string): Promise<MattermostConfig | null> {
@@ -62,9 +100,12 @@ export const handleMattermostCommand = async (req: Request, res: Response): Prom
     }
 
     const mmUserId: string = req.body?.user_id ?? '';
-    const appUserId = config.user_map?.[mmUserId];
+    const appUserId = await resolveTimerUser(mmUserId, org.id, config);
     if (!appUserId) {
-        res.json(mmResponse(`Your Mattermost account is not linked. Ask your admin to map your user ID (\`${mmUserId}\`).`));
+        const hint = config.bot_token
+            ? `Your Mattermost email is not registered in the Timer app. Contact your admin.`
+            : `Your Mattermost account is not linked. Ask your admin to add your user ID (\`${mmUserId}\`) in Bot Integrations, or configure the Bot Token for auto-linking.`;
+        res.json(mmResponse(hint));
         return;
     }
 
@@ -176,6 +217,8 @@ export const getMattermostBotConfig = async (req: Request & { user?: { organizat
             user_map: config.user_map ?? {},
             token_set: !!config.token,
             incoming_webhook_url_set: !!config.incoming_webhook_url,
+            bot_token_set: !!config.bot_token,
+            mattermost_base_url: config.mattermost_base_url ?? '',
         });
     } catch {
         res.status(500).json({ message: 'Failed to read config.' });
@@ -186,19 +229,21 @@ export const upsertMattermostBotConfig = async (req: Request & { user?: { organi
     const orgId = req.user?.organization_id;
     if (!orgId) { res.status(401).json({ message: 'Unauthorized' }); return; }
 
-    const { token, user_map, incoming_webhook_url } = req.body ?? {};
+    const { token, user_map, incoming_webhook_url, bot_token, mattermost_base_url } = req.body ?? {};
     const existing = await prisma.integration.findFirst({ where: { organization_id: orgId, type: 'mattermost' } });
     let current: Partial<MattermostConfig> = {};
     if (existing) { try { current = decryptConfig<MattermostConfig>(existing.config); } catch { /* ignore */ } }
 
-    // Validate incoming_webhook_url if provided
-    if (incoming_webhook_url) {
-        try {
-            const u = new URL(String(incoming_webhook_url));
-            if (!['http:', 'https:'].includes(u.protocol)) throw new Error('bad protocol');
-        } catch {
-            res.status(400).json({ message: 'incoming_webhook_url must be a valid http/https URL' });
-            return;
+    // Validate URLs if provided
+    for (const [field, val] of [['incoming_webhook_url', incoming_webhook_url], ['mattermost_base_url', mattermost_base_url]]) {
+        if (val) {
+            try {
+                const u = new URL(String(val));
+                if (!['http:', 'https:'].includes(u.protocol)) throw new Error('bad protocol');
+            } catch {
+                res.status(400).json({ message: `${field} must be a valid http/https URL` });
+                return;
+            }
         }
     }
 
@@ -206,6 +251,10 @@ export const upsertMattermostBotConfig = async (req: Request & { user?: { organi
         token: token ?? current.token ?? '',
         user_map: user_map ?? current.user_map ?? {},
         incoming_webhook_url: incoming_webhook_url ?? current.incoming_webhook_url,
+        bot_token: bot_token ?? current.bot_token,
+        mattermost_base_url: mattermost_base_url
+            ? String(mattermost_base_url).replace(/\/$/, '')
+            : current.mattermost_base_url,
     };
     if (!next.token) { res.status(400).json({ message: 'token is required.' }); return; }
 

@@ -149,6 +149,8 @@ const Admin: React.FC = () => {
     const [slackConfigLoaded, setSlackConfigLoaded] = useState(false);
     const [mmToken, setMmToken] = useState('');
     const [mmIncomingWebhookUrl, setMmIncomingWebhookUrl] = useState('');
+    const [mmBotToken, setMmBotToken] = useState('');
+    const [mmBaseUrl, setMmBaseUrl] = useState('');
     const [mmUserMap, setMmUserMap] = useState('{}');
     const [mmConfigLoaded, setMmConfigLoaded] = useState(false);
     const [botFeedback, setBotFeedback] = useState<string | null>(null);
@@ -342,7 +344,7 @@ const Admin: React.FC = () => {
     async function fetchBotsConfig() {
         const [slackRes, mmRes] = await Promise.allSettled([
             api.get<{ webhook_url?: string; user_map?: Record<string, string> }>('/bots/slack/config'),
-            api.get<{ user_map?: Record<string, string>; incoming_webhook_url_set?: boolean }>('/bots/mattermost/config'),
+            api.get<{ user_map?: Record<string, string>; incoming_webhook_url_set?: boolean; bot_token_set?: boolean; mattermost_base_url?: string }>('/bots/mattermost/config'),
         ]);
         if (slackRes.status === 'fulfilled') {
             const d = slackRes.value.data;
@@ -356,6 +358,8 @@ const Admin: React.FC = () => {
             const d = mmRes.value.data;
             setMmUserMap(JSON.stringify(d.user_map || {}, null, 2));
             if (d.incoming_webhook_url_set) setMmIncomingWebhookUrl('••••••••');
+            if (d.bot_token_set) setMmBotToken('••••••••');
+            if (d.mattermost_base_url) setMmBaseUrl(d.mattermost_base_url);
             setMmConfigLoaded(true);
         } else {
             setMmConfigLoaded(true);
@@ -382,13 +386,18 @@ const Admin: React.FC = () => {
         try {
             const mmPayload: Record<string, unknown> = { user_map: userMap };
             if (mmToken) mmPayload.token = mmToken;
-            // Only send incoming_webhook_url if it's a real URL (not the masked placeholder)
+            // Only send secrets if they're a real value (not the masked placeholder)
             if (mmIncomingWebhookUrl && !mmIncomingWebhookUrl.startsWith('•')) {
                 mmPayload.incoming_webhook_url = mmIncomingWebhookUrl;
             }
+            if (mmBotToken && !mmBotToken.startsWith('•')) {
+                mmPayload.bot_token = mmBotToken;
+            }
+            if (mmBaseUrl) mmPayload.mattermost_base_url = mmBaseUrl;
             await api.put('/bots/mattermost/config', mmPayload);
             setBotFeedback('Mattermost bot saved.');
             setMmToken('');
+            setMmBotToken('');
         } catch { setBotFeedback('Failed to save Mattermost config.'); }
     }
 
@@ -935,7 +944,7 @@ const Admin: React.FC = () => {
                                 <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Outgoing Webhook Token (leave blank to keep existing)
                                     <input type="password" value={mmToken} onChange={e => setMmToken(e.target.value)} placeholder="token" className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Used to verify slash commands FROM Mattermost (/timer start, /timer stop, etc.)</span>
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Token from Mattermost Slash Command config — verifies /timer commands are from your server</span>
                                 </label>
                                 <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Incoming Webhook URL (leave blank to keep existing)
@@ -947,12 +956,35 @@ const Admin: React.FC = () => {
                                         placeholder="https://mattermost.yourcompany.com/hooks/xxxx"
                                         className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                                     />
-                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Used to push notifications TO a Mattermost channel (e.g. leave requests, alerts)</span>
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Posts leave request alerts to a Mattermost channel — created under Integrations → Incoming Webhooks</span>
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Mattermost Server URL
+                                    <input
+                                        type="url"
+                                        value={mmBaseUrl}
+                                        onChange={e => setMmBaseUrl(e.target.value)}
+                                        placeholder="https://mattermost.yourcompany.com"
+                                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    />
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Your Mattermost server base URL — required for Bot Token features (DMs, user auto-link)</span>
+                                </label>
+                                <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Bot Token (leave blank to keep existing)
+                                    <input
+                                        type="password"
+                                        value={mmBotToken}
+                                        onChange={e => setMmBotToken(e.target.value)}
+                                        onFocus={e => { if (e.target.value.startsWith('•')) setMmBotToken(''); }}
+                                        placeholder="bot-token-from-mattermost"
+                                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                    />
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Bot Account token from Mattermost — enables email-based user auto-linking and DMs on leave decisions</span>
                                 </label>
                                 <label className="text-xs font-bold uppercase tracking-wide text-slate-500 md:col-span-2">
-                                    User Map (JSON: Mattermost user ID → App user ID)
-                                    <textarea rows={3} value={mmUserMap} onChange={e => setMmUserMap(e.target.value)} placeholder='{"mm-user-id": "app-user-uuid"}' className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Maps Mattermost user IDs to Timer app user IDs for slash command authentication</span>
+                                    User Map JSON <span className="text-[10px] font-normal text-slate-400 normal-case">(optional — only needed if emails differ between systems)</span>
+                                    <textarea rows={3} value={mmUserMap} onChange={e => setMmUserMap(e.target.value)} placeholder='{}' className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                                    <span className="block mt-1 text-[10px] font-normal normal-case text-slate-400">Manual override: <code>{"{"}"mattermost-user-id": "timer-app-user-uuid"{"}"}</code>. Leave as <code>{"{}"}</code> if Mattermost and Timer emails match — the Bot Token will auto-resolve users.</span>
                                 </label>
                                 <div className="md:col-span-2">
                                     <button type="submit" disabled={!mmConfigLoaded} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50">

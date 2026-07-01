@@ -9,37 +9,90 @@ const VALID_STATUSES = ['pending', 'approved', 'rejected'];
 // ─── Mattermost helper ───────────────────────────────────────────────────────
 
 interface MattermostConfig {
-    webhookUrl?: string;            // set via Admin > Integrations tab
-    incoming_webhook_url?: string;  // set via Admin > Bot Integrations tab
+    webhookUrl?: string;            // set via Admin > Integrations tab (legacy)
+    incoming_webhook_url?: string;  // set via Admin > Bot Integrations tab — channel webhook
     token?: string;
     user_map?: Record<string, string>;
+    bot_token?: string;             // Mattermost bot API token — for DMs
+    mattermost_base_url?: string;   // e.g. https://mattermost.yourcompany.com
 }
 
-async function sendMattermostLeaveNotification(
-    organizationId: string,
-    text: string,
-): Promise<void> {
+async function getMattermostConfig(organizationId: string): Promise<MattermostConfig | null> {
     try {
         const integration = await prisma.integration.findFirst({
             where: { organization_id: organizationId, type: 'mattermost', is_active: true },
             select: { config: true },
         });
-        if (!integration) return;
+        if (!integration) return null;
+        return decryptConfig<MattermostConfig>(integration.config);
+    } catch {
+        return null;
+    }
+}
 
-        const config = decryptConfig<MattermostConfig>(integration.config);
-        // Support both storage paths: Bot Integrations tab (incoming_webhook_url)
-        // and legacy Integrations tab (webhookUrl)
+/** Post a message to a Mattermost channel via incoming webhook. Fire-and-forget. */
+async function sendMattermostLeaveNotification(
+    organizationId: string,
+    text: string,
+): Promise<void> {
+    try {
+        const config = await getMattermostConfig(organizationId);
+        if (!config) return;
         const webhookUrl = config.incoming_webhook_url ?? config.webhookUrl;
         if (!webhookUrl) return;
-
         await fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text }),
         });
     } catch (err) {
-        // Fire-and-forget — never let Mattermost failure corrupt leave state
-        console.error('Mattermost leave notification failed:', err);
+        console.error('Mattermost channel notification failed:', err);
+    }
+}
+
+/**
+ * Send a Mattermost DM to a user identified by email.
+ * Requires bot_token + mattermost_base_url in the Integration config.
+ * Fire-and-forget — never throws.
+ */
+async function sendMattermostDM(
+    organizationId: string,
+    recipientEmail: string,
+    text: string,
+): Promise<void> {
+    try {
+        const config = await getMattermostConfig(organizationId);
+        if (!config?.bot_token || !config?.mattermost_base_url) return;
+        const base = config.mattermost_base_url.replace(/\/$/, '');
+        const headers = {
+            Authorization: `Bearer ${config.bot_token}`,
+            'Content-Type': 'application/json',
+        };
+        // Get bot's own user ID
+        const botRes = await fetch(`${base}/api/v4/users/me`, { headers });
+        if (!botRes.ok) return;
+        const bot = await botRes.json() as { id?: string };
+        if (!bot?.id) return;
+        // Resolve recipient by email
+        const recipRes = await fetch(`${base}/api/v4/users/email/${encodeURIComponent(recipientEmail)}`, { headers });
+        if (!recipRes.ok) return;
+        const recipient = await recipRes.json() as { id?: string };
+        if (!recipient?.id) return;
+        // Open/get DM channel
+        const chanRes = await fetch(`${base}/api/v4/channels/direct`, {
+            method: 'POST', headers,
+            body: JSON.stringify([bot.id, recipient.id]),
+        });
+        if (!chanRes.ok) return;
+        const channel = await chanRes.json() as { id?: string };
+        if (!channel?.id) return;
+        // Post message
+        await fetch(`${base}/api/v4/posts`, {
+            method: 'POST', headers,
+            body: JSON.stringify({ channel_id: channel.id, message: text }),
+        });
+    } catch (err) {
+        console.error('Mattermost DM failed:', err);
     }
 }
 
@@ -317,7 +370,19 @@ export const reviewLeave = async (req: AuthRequest, res: Response): Promise<void
         const employeeMessage = `${emoji} Your ${leaveLabel} request (${dateRange}) was ${verb} by ${reviewerName}.${reviewer_note?.trim() ? ` Note: "${reviewer_note.trim()}"` : ''}`;
         await notifyUsers([existing.user_id], req.user!.organization_id, employeeMessage);
 
-        // Mattermost notification to channel (fire-and-forget)
+        // Mattermost DM to employee (fire-and-forget — requires bot_token + mattermost_base_url configured)
+        if (existing.user?.email) {
+            const dmText = [
+                `${emoji} **Your leave request was ${verb}**`,
+                `**Type:** ${leaveLabel.charAt(0).toUpperCase() + leaveLabel.slice(1)} · **Dates:** ${dateRange}`,
+                `**${verb.charAt(0).toUpperCase() + verb.slice(1)} by:** ${reviewerName}`,
+                reviewer_note?.trim() ? `**Note:** ${reviewer_note.trim()}` : null,
+                `[View in Timer app →](${process.env.FRONTEND_URL ?? 'https://timer.dev.webforxtech.com'}/leave)`,
+            ].filter(Boolean).join('\n');
+            void sendMattermostDM(req.user!.organization_id, existing.user.email, dmText);
+        }
+
+        // Mattermost channel notification (fire-and-forget)
         const mmText = [
             `### ${emoji} Leave Request ${verb.charAt(0).toUpperCase() + verb.slice(1)}`,
             `**Employee:** ${existing.user?.first_name} ${existing.user?.last_name}`,
