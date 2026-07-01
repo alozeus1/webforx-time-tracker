@@ -2,7 +2,7 @@ jest.mock('../src/config/db', () => ({
     __esModule: true,
     default: {
         activeTimer: {
-            findUnique: jest.fn(),
+            findFirst: jest.fn(),
             update: jest.fn(),
         },
         notification: { create: jest.fn() },
@@ -25,7 +25,7 @@ describe('pauseActiveTimer', () => {
             paused_at: null,
             paused_duration_seconds: 0,
         };
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(fakeTimer);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(fakeTimer);
         (prisma.activeTimer.update as jest.Mock).mockResolvedValue({ ...fakeTimer, is_paused: true });
         (prisma.notification.create as jest.Mock).mockResolvedValue({});
         (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
@@ -34,7 +34,7 @@ describe('pauseActiveTimer', () => {
 
         expect(prisma.activeTimer.update).toHaveBeenCalledWith(
             expect.objectContaining({
-                where: { user_id: 'user-1' },
+                where: { id: 'timer-1' },
                 data: expect.objectContaining({ is_paused: true }),
             }),
         );
@@ -46,7 +46,7 @@ describe('pauseActiveTimer', () => {
     });
 
     it('is a no-op if the timer is already paused', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue({
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue({
             id: 'timer-1', user_id: 'user-1', is_paused: true,
         });
 
@@ -56,7 +56,7 @@ describe('pauseActiveTimer', () => {
     });
 
     it('is a no-op if no active timer exists', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
 
         await pauseActiveTimer('user-1', 'org-1', 'browser_inactive');
 
@@ -76,7 +76,7 @@ describe('resumeActiveTimer', () => {
             paused_at: pausedAt,
             paused_duration_seconds: 60, // already had 60s from a prior pause cycle
         };
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue(fakeTimer);
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(fakeTimer);
         (prisma.activeTimer.update as jest.Mock).mockResolvedValue({});
         (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
 
@@ -95,7 +95,7 @@ describe('resumeActiveTimer', () => {
     });
 
     it('returns 0 and is a no-op if timer is not paused', async () => {
-        (prisma.activeTimer.findUnique as jest.Mock).mockResolvedValue({
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue({
             id: 'timer-1', user_id: 'user-1', is_paused: false, paused_at: null, paused_duration_seconds: 0,
         });
 

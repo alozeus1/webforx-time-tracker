@@ -21,6 +21,13 @@ HEARTBEAT_STALE_MINUTES=8
 AUTO_STOP_GRACE_MINUTES=2
 MAX_PAUSE_HOURS=4
 MAX_ACTIVE_TIMER_HOURS=8
+# Enhanced activity-aware idle detection (ActivityWatch-inspired). When true, background tabs
+# that send fresh heartbeats (hidden_connected) are NOT paused — idleTracker owns their state.
+# Set to true in production once verified. Must match VITE_TIMER_ENHANCED_ACTIVITY_DETECTION.
+TIMER_ENHANCED_ACTIVITY_DETECTION=false
+# Grace window (minutes) before a hidden_connected session triggers a soft idle warning.
+# No timer pause — notification nudge only. Must match VITE_HIDDEN_CONNECTED_GRACE_MINUTES.
+HIDDEN_CONNECTED_GRACE_MINUTES=10
 RESEND_API_KEY="<RESEND_API_KEY>"
 EMAIL_FROM="Web Forx Time Tracker <noreply@webforxtech.com>"
 EXECUTIVE_REPORT_TEMPLATE_ENABLED=true
@@ -36,6 +43,10 @@ VITE_API_URL="http://localhost:5005/api/v1"
 VITE_HEARTBEAT_INTERVAL_MINUTES=3
 VITE_IDLE_WARNING_MINUTES=5
 VITE_MAX_ACTIVE_TIMER_HOURS=8
+# Enhanced activity detection — must mirror backend TIMER_ENHANCED_ACTIVITY_DETECTION
+VITE_TIMER_ENHANCED_ACTIVITY_DETECTION=false
+# Grace window (minutes) for hidden_connected tabs — must mirror backend HIDDEN_CONNECTED_GRACE_MINUTES
+VITE_HIDDEN_CONNECTED_GRACE_MINUTES=10
 ```
 If `INTEGRATION_SECRET` is omitted, the backend temporarily reuses `JWT_SECRET` only in non-production.
 In production, `INTEGRATION_SECRET` is required.

@@ -45,6 +45,7 @@ function ago(ms: number) {
 const baseTimer = {
     id: 'timer-1',
     user_id: 'user-1',
+    organization_id: 'org-1',
     start_time: ago(2 * HOUR),
     last_active_ping: ago(5.5 * MIN),
     last_heartbeat_at: ago(5.5 * MIN),
@@ -115,7 +116,7 @@ describe('checkIdleTimers', () => {
 
         await checkIdleTimers();
 
-        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'idle_timeout');
+        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'org-1', 'idle_timeout');
         expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
     });
 
@@ -132,7 +133,7 @@ describe('checkIdleTimers', () => {
 
         await checkIdleTimers();
 
-        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'browser_inactive');
+        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'org-1', 'browser_inactive');
         expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
     });
 
@@ -150,7 +151,7 @@ describe('checkIdleTimers', () => {
 
         await checkIdleTimers();
 
-        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'missed_heartbeat_threshold');
+        expect(pauseActiveTimer).toHaveBeenCalledWith('user-1', 'org-1', 'missed_heartbeat_threshold');
         expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
     });
 

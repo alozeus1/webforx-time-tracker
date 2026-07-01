@@ -28,7 +28,7 @@ const Layout: React.FC = () => {
         return localStorage.getItem('wfx-sidebar-collapsed') === 'true';
     });
     const [tourKey, setTourKey] = useState(0);
-    const [idleWarning, setIdleWarning] = useState<{ inactiveForMinutes: number } | null>(null);
+    const [idleWarning, setIdleWarning] = useState<{ inactiveForMs: number } | null>(null);
     const [showResumeDialog, setShowResumeDialog] = useState(false);
     const [pausedTimer, setPausedTimer] = useState<PausedTimerState | null>(null);
     const isDemoSession = localStorage.getItem('wfx-email') === 'demo@webforxtech.com';
@@ -77,9 +77,12 @@ const Layout: React.FC = () => {
 
     useEffect(() => {
         const onIdleWarning = (event: Event) => {
-            const detail = (event as CustomEvent<{ inactiveForMinutes?: number }>).detail;
+            // On the /timer route, Timer.tsx renders its own inline warning banner —
+            // suppress this modal to avoid duplicate warnings and blocked UI.
+            if (location.pathname === '/timer') return;
+            const detail = (event as CustomEvent<{ inactiveForMs?: number }>).detail;
             setIdleWarning({
-                inactiveForMinutes: detail?.inactiveForMinutes ?? 0,
+                inactiveForMs: detail?.inactiveForMs ?? 0,
             });
         };
 
@@ -257,7 +260,7 @@ const Layout: React.FC = () => {
                     <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Idle Warning</p>
                     <h2 className="text-xl font-bold text-slate-900">Still working?</h2>
                     <p className="text-sm text-slate-600">
-                        No activity detected for {idleWarning?.inactiveForMinutes ?? 0} minute(s).
+                        No activity detected for {Math.round((idleWarning?.inactiveForMs ?? 0) / 60_000)} minute(s).
                         Your timer may pause soon if activity does not resume.
                     </p>
                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">

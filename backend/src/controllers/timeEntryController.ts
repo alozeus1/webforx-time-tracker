@@ -114,7 +114,12 @@ const enforceTimerGuardrails = async ({
     const clientActivityAgeMs = checkTime.getTime() - lastClientActivity.getTime();
     const missedHeartbeats = Math.max(Math.floor(heartbeatAgeMs / thresholds.heartbeatIntervalMs) - 1, 0);
     const { effectiveVisibility, effectiveHasFocus } = resolveInactivitySource({ timer, visibilityState, hasFocus });
-    const browserExplicitlyInactive = effectiveVisibility === 'hidden' || effectiveHasFocus === false;
+    // In enhanced mode, hidden tabs with fresh heartbeats are 'hidden_connected' — idleTracker.ts
+    // has exclusive ownership of their session lifecycle. Setting this false here prevents the
+    // inline guardrail from racing against the idleTracker and wrongly pausing active WFH sessions.
+    const browserExplicitlyInactive = env.timerEnhancedActivityDetection
+        ? false
+        : effectiveVisibility === 'hidden' || effectiveHasFocus === false;
 
     if (
         clientActivityAgeMs >= thresholds.idlePauseThresholdMs ||
@@ -738,6 +743,14 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
     }
 };
 
+// Valid browser_activity_state values emitted by the enhanced frontend heartbeat hook.
+const VALID_BROWSER_ACTIVITY_STATES = new Set([
+    'active',            // Tab visible + recent user input in this session
+    'visible_inactive',  // Tab visible + no recent user input (looking but not typing)
+    'hidden_connected',  // Tab hidden but heartbeat still arriving (working in another app)
+    'idle_candidate',    // Tab hidden + no activity for a while, approaching idle threshold
+]);
+
 export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
@@ -745,6 +758,14 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         const activeTimerId = typeof req.body?.active_timer_id === 'string' ? req.body.active_timer_id : null;
         const visibilityState = typeof req.body?.visibility_state === 'string' ? req.body.visibility_state : null;
         const hasFocus = typeof req.body?.has_focus === 'boolean' ? req.body.has_focus : null;
+        // Enhanced activity detection: client-computed activity state (feature-flagged on frontend).
+        // Accepted values: active | visible_inactive | hidden_connected | idle_candidate
+        const rawBrowserActivityState = typeof req.body?.browser_activity_state === 'string'
+            ? req.body.browser_activity_state
+            : null;
+        const browserActivityState = rawBrowserActivityState && VALID_BROWSER_ACTIVITY_STATES.has(rawBrowserActivityState)
+            ? rawBrowserActivityState
+            : null;
 
         const activeTimer = await prisma.activeTimer.findFirst({
             where: { user_id, organization_id: req.user!.organization_id },
@@ -808,6 +829,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
                     last_activity_at: validLastClientActivityAt?.toISOString() ?? null,
                     visibility_state: visibilityState,
                     has_focus: hasFocus,
+                    browser_activity_state: browserActivityState,
                     active_timer_id: activeTimer.id,
                     received_at: requestReceivedAt.toISOString(),
                 },
@@ -827,6 +849,7 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
                     last_activity_at: validLastClientActivityAt?.toISOString() ?? null,
                     visibility_state: visibilityState,
                     has_focus: hasFocus,
+                    browser_activity_state: browserActivityState,
                 },
             },
         });
@@ -834,6 +857,13 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
         res.status(200).json({
             message: guardrailOutcome === 'paused' ? 'Ping successful, timer paused for inactivity' : 'Ping successful',
             state: guardrailOutcome === 'paused' ? 'paused' : 'running',
+            // Return server-authoritative policy thresholds so the client can display accurate
+            // countdowns without relying solely on env-var-baked values.
+            policy: {
+                idleWarningAfterMinutes: policy.idleWarningAfterMinutes,
+                idlePauseAfterMinutes: policy.idlePauseAfterMinutes,
+                heartbeatIntervalSeconds: policy.heartbeatIntervalSeconds,
+            },
         });
     } catch (error) {
         console.error('Failed to ping timer:', error);
