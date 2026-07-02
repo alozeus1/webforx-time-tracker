@@ -344,8 +344,10 @@ const Admin: React.FC = () => {
     // ── Bot config functions ─────────────────────────────────────────────────
     async function fetchBotsConfig() {
         // Fetch org slug alongside bot configs so we can show the real callback URL
-        const orgRes = await api.get<{ slug?: string }>('/organization').catch(() => null);
-        if (orgRes?.data?.slug) setOrgSlug(orgRes.data.slug);
+        // GET /organizations returns array scoped to current org for Admins
+        const orgRes = await api.get<Array<{ slug?: string }>>('/organizations').catch(() => null);
+        const slug = Array.isArray(orgRes?.data) ? orgRes.data[0]?.slug : (orgRes?.data as { slug?: string } | undefined)?.slug;
+        if (slug) setOrgSlug(slug);
 
         const [slackRes, mmRes] = await Promise.allSettled([
             api.get<{ webhook_url?: string; user_map?: Record<string, string> }>('/bots/slack/config'),
@@ -945,7 +947,7 @@ const Admin: React.FC = () => {
                                 <div className="mb-4 rounded-lg bg-slate-50 border border-slate-200 px-3 py-2.5 text-xs text-slate-600 space-y-1">
                                     <p className="font-semibold text-slate-700">Your callback URL (paste this into Mattermost)</p>
                                     <code className="block rounded bg-white border border-slate-200 px-2 py-1 text-[11px] select-all break-all">
-                                        {`${window.location.origin.replace('timer.dev', 'vercel-backend-xi-three')}/api/v1/bots/mattermost/${orgSlug}`}
+                                        {`${(api.defaults.baseURL ?? '').replace(/\/api\/v1\/?$/, '')}/api/v1/bots/mattermost/${orgSlug}`}
                                     </code>
                                     <p className="text-[10px] text-slate-400">Your org slug is <strong>{orgSlug}</strong> — use this for both Slash Commands and Outgoing Webhooks in Mattermost</p>
                                 </div>
