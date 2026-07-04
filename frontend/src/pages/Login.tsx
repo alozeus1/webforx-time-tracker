@@ -58,7 +58,9 @@ const Login: React.FC = () => {
         setErrorMessage(null);
 
         try {
-            const response = await api.post('/auth/login', { email, password });
+            // withCredentials is required here specifically because this response sets the
+            // httpOnly access/refresh cookies used later by the silent-refresh flow.
+            const response = await api.post('/auth/login', { email, password }, { withCredentials: true });
             if (response.data.mfa_required) {
                 // Step 1 done — show TOTP input
                 setMfaChallengeToken(response.data.mfa_challenge_token as string);
@@ -81,10 +83,12 @@ const Login: React.FC = () => {
         setLoading(true);
         setErrorMessage(null);
         try {
+            // withCredentials is required here for the same reason as /auth/login above —
+            // this response also sets the httpOnly access/refresh cookies.
             const response = await api.post('/auth/mfa/validate', {
                 mfa_challenge_token: mfaChallengeToken,
                 totp_code: totpCode,
-            });
+            }, { withCredentials: true });
             setStoredSession(response.data.token, response.data.user.role, response.data.user);
             resetAuthFailureState();
             navigate('/dashboard');

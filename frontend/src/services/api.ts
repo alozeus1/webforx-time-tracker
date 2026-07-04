@@ -9,7 +9,17 @@ const configuredBaseUrl = resolveApiBaseUrl(
 
 const api = axios.create({
     baseURL: configuredBaseUrl.replace(/\/+$/, ''),
-    withCredentials: true,
+    // NOTE: withCredentials is intentionally NOT set globally. Every authenticated
+    // call is authorized via the Bearer token (see request interceptor below), so
+    // cookies are unnecessary for the vast majority of requests. Sending credentials
+    // on every cross-origin request needlessly exposes those requests to third-party
+    // cookie blocking (browser privacy modes, ad/popup blockers that patch
+    // fetch/XHR, Safari ITP, etc.) — a blocked/intercepted credentialed request
+    // fails outright with a generic network error, even though the Bearer token
+    // alone would have been enough to authenticate it.
+    // Only the calls that must receive the httpOnly access/refresh cookies
+    // (login, MFA validation, refresh) opt in via `{ withCredentials: true }`
+    // on that specific request.
 });
 
 const STATUS_MESSAGES: Record<number, string> = {
