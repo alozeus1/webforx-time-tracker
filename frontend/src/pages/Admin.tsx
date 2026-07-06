@@ -1,11 +1,19 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Plus, X, Lock, Unlock, Shield, Globe, Palette, TrendingUp, AlertTriangle, CheckCircle2, CircleDashed, Pencil } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Plus, X, Lock, Unlock, Shield, Globe, Palette, TrendingUp, AlertTriangle, CheckCircle2, CircleDashed, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
-import api from '../services/api';
+import api, { getApiErrorMessage } from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
 
 const availableTabs = ['projects', 'budgets', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
+
+/** Formats a duration in seconds as "H:MM" (e.g. 5400 → "1:30"). */
+const formatDurationHM = (seconds: number) => {
+    const totalMinutes = Math.round(seconds / 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}:${String(minutes).padStart(2, '0')}`;
+};
 
 interface PayrollPeriod {
     id: string;
@@ -127,6 +135,7 @@ const Admin: React.FC = () => {
     const [auditLogs, setAuditLogs] = useState<AuditLogSummary[]>([]);
     const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
     const [corrections, setCorrections] = useState<TimerCorrectionRequestSummary[]>([]);
+    const tabStripRef = useRef<HTMLDivElement | null>(null);
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
     const [teamSavingFor, setTeamSavingFor] = useState<Set<string>>(new Set());
@@ -289,7 +298,7 @@ const Admin: React.FC = () => {
             void fetchAuditLogs();
         } catch (error) {
             console.error('Error reviewing correction request:', error);
-            alert('Failed to review correction request.');
+            alert(getApiErrorMessage(error, 'Failed to review correction request.'));
         }
     }
 
@@ -793,9 +802,17 @@ const Admin: React.FC = () => {
                 </div>
 
                 <div className="mb-6">
-                    <div className="relative">
-                    <div className="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto scrollbar-hide" style={{scrollbarWidth:'none', msOverflowStyle:'none'}}>
-                    <style>{`.scrollbar-hide::-webkit-scrollbar{display:none}`}</style>
+                    <div className="relative flex items-center">
+                    <button
+                        type="button"
+                        aria-label="Scroll tabs left"
+                        onClick={() => tabStripRef.current?.scrollBy({ left: -260, behavior: 'smooth' })}
+                        className="mr-1 shrink-0 rounded-full border border-slate-200 bg-white p-1 text-slate-500 shadow-sm hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                    >
+                        <ChevronLeft size={16} />
+                    </button>
+                    <div ref={tabStripRef} className="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto admin-tab-strip" style={{scrollbarWidth:'thin'}}>
+                    <style>{`.admin-tab-strip::-webkit-scrollbar{height:6px}.admin-tab-strip::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}`}</style>
                         {availableTabs.map(tab => (
                             <button
                                 key={tab}
@@ -815,8 +832,14 @@ const Admin: React.FC = () => {
                             </button>
                         ))}
                     </div>
-                    {/* Right-edge fade to signal more tabs are scrollable */}
-                    <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white dark:from-slate-900 to-transparent" />
+                    <button
+                        type="button"
+                        aria-label="Scroll tabs right"
+                        onClick={() => tabStripRef.current?.scrollBy({ left: 260, behavior: 'smooth' })}
+                        className="ml-1 shrink-0 rounded-full border border-slate-200 bg-white p-1 text-slate-500 shadow-sm hover:text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                    >
+                        <ChevronRight size={16} />
+                    </button>
                     </div>
                 </div>
 
@@ -1505,6 +1528,7 @@ const Admin: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Submitted</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">User</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Requested Window</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Duration (h:mm)</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Reason</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Status</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Review</th>
@@ -1764,7 +1788,7 @@ const Admin: React.FC = () => {
                                     </tr>
                                 )))}
                                 {activeTab === 'corrections' && (corrections.length === 0 ? (
-                                    <tr><td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests found.</td></tr>
+                                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests found.</td></tr>
                                 ) : corrections.map((correction) => (
                                     <tr key={correction.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                         <td className="px-6 py-4 text-sm text-slate-500">{new Date(correction.created_at).toLocaleString()}</td>
@@ -1774,6 +1798,7 @@ const Admin: React.FC = () => {
                                         <td className="px-6 py-4 text-sm text-slate-600">
                                             {new Date(correction.requested_start_time).toLocaleString()} – {new Date(correction.requested_end_time).toLocaleString()}
                                         </td>
+                                        <td className="px-6 py-4 text-sm font-semibold text-slate-700 dark:text-slate-300">{formatDurationHM(correction.requested_duration_seconds)}</td>
                                         <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{correction.reason}</td>
                                         <td className="px-6 py-4 text-xs font-bold uppercase text-slate-500">{correction.status}</td>
                                         <td className="px-6 py-4 text-right">
