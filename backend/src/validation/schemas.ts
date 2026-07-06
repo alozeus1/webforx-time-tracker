@@ -59,8 +59,9 @@ export const passwordResetSchema = z.object({
 
 export const passwordResetConfirmSchema = z.object({
   token: z.string().trim().min(1, 'Reset code is required'),
-  // Raised to 12 chars to match the strengthened OTP — keeps the bar consistent.
-  password: z.string().min(12, 'Password must be at least 12 characters'),
+  // Hard floor only — the org password policy (default min 12) provides the
+  // effective minimum, enforced in the controller via passwordPolicyService.
+  password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
 // Used by the Admin "Create User" endpoint — enforces the same floor as self-registration.

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { login, logout, forgotPassword, resetPassword, refreshAccessToken } from '../controllers/authController';
+import { login, logout, forgotPassword, resetPassword, refreshAccessToken, getPasswordPolicy } from '../controllers/authController';
 import { setupMfa, verifyMfa, disableMfa, validateMfaLogin, getMfaStatus } from '../controllers/mfaController';
 import { googleSignIn } from '../controllers/googleAuthController';
 import { authenticateToken } from '../middlewares/auth';
@@ -12,6 +12,7 @@ router.post('/google', googleSignIn);
 router.post('/logout', logout);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+router.get('/password-policy', getPasswordPolicy);
 router.post('/refresh', refreshAccessToken);
 
 // MFA — second login step (no session required, uses challenge token)

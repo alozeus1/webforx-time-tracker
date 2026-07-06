@@ -7,6 +7,34 @@ import { usePageMetadata } from '../hooks/usePageMetadata';
 
 type Step = 'email' | 'code' | 'done';
 
+type PasswordPolicyInfo = {
+    requirements: string[];
+    min_length: number;
+    require_uppercase: boolean;
+    require_lowercase: boolean;
+    require_number: boolean;
+    require_symbol: boolean;
+};
+
+// Fallback mirrors the server default policy (min 12, no class rules).
+const DEFAULT_POLICY: PasswordPolicyInfo = {
+    requirements: ['At least 12 characters'],
+    min_length: 12,
+    require_uppercase: false,
+    require_lowercase: false,
+    require_number: false,
+    require_symbol: false,
+};
+
+const findUnmetRequirement = (password: string, policy: PasswordPolicyInfo): string | null => {
+    if (password.length < policy.min_length) return `Password must be at least ${policy.min_length} characters.`;
+    if (policy.require_uppercase && !/[A-Z]/.test(password)) return 'Password must include at least one uppercase letter.';
+    if (policy.require_lowercase && !/[a-z]/.test(password)) return 'Password must include at least one lowercase letter.';
+    if (policy.require_number && !/[0-9]/.test(password)) return 'Password must include at least one number.';
+    if (policy.require_symbol && !/[^A-Za-z0-9]/.test(password)) return 'Password must include at least one symbol.';
+    return null;
+};
+
 const ForgotPassword: React.FC = () => {
     const [step, setStep] = useState<Step>('email');
     const [email, setEmail] = useState('');
@@ -14,6 +42,7 @@ const ForgotPassword: React.FC = () => {
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [resetCode, setResetCode] = useState<string | null>(null);
+    const [policy, setPolicy] = useState<PasswordPolicyInfo>(DEFAULT_POLICY);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
@@ -38,6 +67,16 @@ const ForgotPassword: React.FC = () => {
                 setResetCode(res.data.reset_code);
             }
             setStep('code');
+            // Load the org's password requirements for display + client validation.
+            // Falls back to the default policy silently if the request fails.
+            try {
+                const policyRes = await api.get<PasswordPolicyInfo>('/auth/password-policy', { params: { email } });
+                if (policyRes.data?.min_length) {
+                    setPolicy({ ...DEFAULT_POLICY, ...policyRes.data });
+                }
+            } catch {
+                setPolicy(DEFAULT_POLICY);
+            }
         } catch {
             setError('Failed to process request. Please try again.');
         } finally {
@@ -54,8 +93,9 @@ const ForgotPassword: React.FC = () => {
             return;
         }
 
-        if (newPassword.length < 12) {
-            setError('Password must be at least 12 characters.');
+        const unmetRequirement = findUnmetRequirement(newPassword, policy);
+        if (unmetRequirement) {
+            setError(unmetRequirement);
             return;
         }
 
@@ -63,8 +103,13 @@ const ForgotPassword: React.FC = () => {
         try {
             await api.post('/auth/reset-password', { code, password: newPassword });
             setStep('done');
-        } catch {
-            setError('Invalid or expired reset code. Please try again.');
+        } catch (err) {
+            const data = (err as { response?: { data?: { message?: string; requirements?: string[] } } }).response?.data;
+            if (data?.requirements?.length) {
+                setError(`${data.message ?? 'Password does not meet the requirements.'} Missing: ${data.requirements.join(', ')}.`);
+            } else {
+                setError('Invalid or expired reset code. Please try again.');
+            }
         } finally {
             setLoading(false);
         }
@@ -181,13 +226,18 @@ const ForgotPassword: React.FC = () => {
                                         name="newPassword"
                                         type="password"
                                         className="form-control"
-                                        placeholder="Min 12 characters"
+                                        placeholder={`Min ${policy.min_length} characters`}
                                         autoComplete="new-password"
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
                                         required
                                     />
                                 </div>
+                                <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.1rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                                    {policy.requirements.map((req) => (
+                                        <li key={req}>{req}</li>
+                                    ))}
+                                </ul>
                             </div>
                             <div className="form-group icon-input">
                                 <label className="form-label" htmlFor="confirm-password">Confirm Password</label>

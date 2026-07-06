@@ -2,10 +2,11 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { getGlobalTimerPolicy, normalizeTimerPolicy, validateTimerPolicy } from '../services/timerPolicyService';
+import { resolvePasswordPolicy } from '../services/passwordPolicyService';
 
 // ---------------------------------------------------------------------------
-// GET /admin/org-settings  — returns compliance_mode + time_rounding
-// PUT /admin/org-settings  — updates compliance_mode and/or time_rounding
+// GET /admin/org-settings  — returns compliance_mode + time_rounding + password_policy
+// PUT /admin/org-settings  — updates compliance_mode, time_rounding and/or password_policy
 // ---------------------------------------------------------------------------
 export const getOrgSettings = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -15,6 +16,7 @@ export const getOrgSettings = async (req: AuthRequest, res: Response): Promise<v
         res.status(200).json({
             compliance_mode: (settings.compliance_mode as string) ?? 'none',
             time_rounding: (settings.time_rounding as { increment: number; direction: string } | null) ?? null,
+            password_policy: resolvePasswordPolicy(settings),
         });
     } catch (error) {
         console.error('[admin] getOrgSettings error:', error);
@@ -28,7 +30,7 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
         const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
         const current = (org?.settings as Record<string, unknown>) ?? {};
 
-        const { compliance_mode, time_rounding } = req.body ?? {};
+        const { compliance_mode, time_rounding, password_policy } = req.body ?? {};
 
         const validModes = ['none', 'dcaa', 'flsa', 'wtd'];
         if (compliance_mode !== undefined && !validModes.includes(compliance_mode)) {
@@ -50,6 +52,18 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
                 next.time_rounding = { increment: Number(time_rounding.increment) || 15, direction: time_rounding.direction };
             }
         }
+        if (password_policy !== undefined) {
+            if (password_policy === null) {
+                delete next.password_policy;
+            } else if (typeof password_policy !== 'object' || Array.isArray(password_policy)) {
+                res.status(400).json({ message: 'password_policy must be an object.' });
+                return;
+            } else {
+                // resolvePasswordPolicy clamps every field to safe ranges and
+                // drops anything unknown/malformed.
+                next.password_policy = { ...resolvePasswordPolicy({ password_policy }) };
+            }
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await prisma.organization.update({ where: { id: orgId }, data: { settings: next as any } });
@@ -60,11 +74,15 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
                 organization_id: orgId,
                 action: 'org_settings_updated',
                 resource: 'organization',
-                metadata: { compliance_mode, time_rounding },
+                metadata: { compliance_mode, time_rounding, password_policy: next.password_policy ?? null },
             },
         });
 
-        res.status(200).json({ compliance_mode: next.compliance_mode ?? 'none', time_rounding: next.time_rounding ?? null });
+        res.status(200).json({
+            compliance_mode: next.compliance_mode ?? 'none',
+            time_rounding: next.time_rounding ?? null,
+            password_policy: resolvePasswordPolicy(next),
+        });
     } catch (error) {
         console.error('[admin] updateOrgSettings error:', error);
         res.status(500).json({ message: 'Internal server error' });

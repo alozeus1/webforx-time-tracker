@@ -7,6 +7,7 @@ import { getUserWellbeingSummary } from '../services/wellbeingService';
 import { sendWelcomeEmail } from '../services/emailService';
 import { env } from '../config/env';
 import { createUserSchema, formatZodIssues } from '../validation/schemas';
+import { getOrgPasswordPolicy, validatePasswordAgainstPolicy } from '../services/passwordPolicyService';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -467,6 +468,17 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
+        // Enforce the organization's password policy on admin-set passwords.
+        const passwordPolicy = await getOrgPasswordPolicy(req.user!.organization_id);
+        const unmetRequirements = validatePasswordAgainstPolicy(password, passwordPolicy);
+        if (unmetRequirements.length > 0) {
+            res.status(400).json({
+                message: 'Password does not meet the organization password requirements.',
+                requirements: unmetRequirements,
+            });
+            return;
+        }
+
         const salt = await bcrypt.genSalt(10);
         const password_hash = await bcrypt.hash(password, salt);
 
@@ -479,6 +491,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 team_name: teamName,
                 role_id: resolvedRoleId,
                 organization_id: req.user!.organization_id,
+                password_changed_at: new Date(),
             },
             select: {
                 id: true,
@@ -806,8 +819,18 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
         }
 
         if (typeof password === 'string' && password.trim()) {
+            const passwordPolicy = await getOrgPasswordPolicy(req.user!.organization_id);
+            const unmetRequirements = validatePasswordAgainstPolicy(password.trim(), passwordPolicy);
+            if (unmetRequirements.length > 0) {
+                res.status(400).json({
+                    message: 'Password does not meet the organization password requirements.',
+                    requirements: unmetRequirements,
+                });
+                return;
+            }
             const salt = await bcrypt.genSalt(10);
             updateData.password_hash = await bcrypt.hash(password.trim(), salt);
+            updateData.password_changed_at = new Date();
         }
 
         if ((typeof role_id === 'string' && role_id.trim()) || (typeof role === 'string' && role.trim())) {
@@ -1050,8 +1073,18 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
         }
 
         if (typeof password === 'string' && password.trim()) {
+            const passwordPolicy = await getOrgPasswordPolicy(req.user!.organization_id);
+            const unmetRequirements = validatePasswordAgainstPolicy(password.trim(), passwordPolicy);
+            if (unmetRequirements.length > 0) {
+                res.status(400).json({
+                    message: 'Password does not meet the organization password requirements.',
+                    requirements: unmetRequirements,
+                });
+                return;
+            }
             const salt = await bcrypt.genSalt(10);
             updateData.password_hash = await bcrypt.hash(password.trim(), salt);
+            updateData.password_changed_at = new Date();
         }
 
         if (weekly_hour_limit !== undefined) {
