@@ -54,8 +54,8 @@ const ForgotPassword: React.FC = () => {
             return;
         }
 
-        if (newPassword.length < 6) {
-            setError('Password must be at least 6 characters.');
+        if (newPassword.length < 12) {
+            setError('Password must be at least 12 characters.');
             return;
         }
 
@@ -162,11 +162,11 @@ const ForgotPassword: React.FC = () => {
                                         name="code"
                                         type="text"
                                         className="form-control"
-                                        placeholder="Enter 8-character code"
+                                        placeholder="Enter 12-character code"
                                         autoComplete="one-time-code"
                                         value={code}
-                                        onChange={(e) => setCode(e.target.value.toUpperCase())}
-                                        maxLength={8}
+                                        onChange={(e) => setCode(e.target.value.replace(/\s+/g, '').toUpperCase())}
+                                        maxLength={12}
                                         required
                                         style={{ letterSpacing: '0.15em', fontFamily: 'monospace' }}
                                     />
@@ -181,7 +181,7 @@ const ForgotPassword: React.FC = () => {
                                         name="newPassword"
                                         type="password"
                                         className="form-control"
-                                        placeholder="Min 6 characters"
+                                        placeholder="Min 12 characters"
                                         autoComplete="new-password"
                                         value={newPassword}
                                         onChange={(e) => setNewPassword(e.target.value)}
