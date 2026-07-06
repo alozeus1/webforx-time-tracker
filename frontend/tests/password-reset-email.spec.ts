@@ -39,7 +39,7 @@ const mockForgotPasswordWithCode = async (page: import('@playwright/test').Page)
             contentType: 'application/json',
             body: JSON.stringify({
                 message: 'If that email exists, a reset code has been sent.',
-                reset_code: 'ABCD1234',
+                reset_code: '59A3EB94A11C',
             }),
         });
     });
@@ -175,12 +175,12 @@ test.describe('Password Reset Email — regression suite', () => {
         await expect(page.getByRole('heading', { name: 'Enter Reset Code' })).toBeVisible();
 
         // The dev reset code should be displayed inline
-        await expect(page.getByText('ABCD1234')).toBeVisible();
+        await expect(page.getByText('59A3EB94A11C')).toBeVisible();
 
         // Step 2: fill in code and new password
-        await page.getByLabel('Reset Code').fill('ABCD1234');
-        await page.getByLabel('New Password').fill('NewPass123!');
-        await page.getByLabel('Confirm Password').fill('NewPass123!');
+        await page.getByLabel('Reset Code').fill('59A3EB94A11C');
+        await page.getByLabel('New Password').fill('SuperSecure123!');
+        await page.getByLabel('Confirm Password').fill('SuperSecure123!');
         await page.getByRole('button', { name: 'Reset Password' }).click();
 
         // Step 3: done screen
@@ -198,7 +198,7 @@ test.describe('Password Reset Email — regression suite', () => {
         await page.getByRole('button', { name: 'Get Reset Code' }).click();
         await expect(page.getByRole('heading', { name: 'Enter Reset Code' })).toBeVisible();
 
-        await page.getByLabel('Reset Code').fill('ABCD1234');
+        await page.getByLabel('Reset Code').fill('59A3EB94A11C');
         await page.getByLabel('New Password').fill('Password1!');
         await page.getByLabel('Confirm Password').fill('Different1!');
         await page.getByRole('button', { name: 'Reset Password' }).click();

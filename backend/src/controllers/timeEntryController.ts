@@ -548,6 +548,31 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
             },
         });
 
+        try {
+            const windowStartLabel = requestedStartTime.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+            const windowEndLabel = requestedEndTime.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            });
+            await prisma.notification.create({
+                data: {
+                    user_id,
+                    organization_id: req.user!.organization_id,
+                    message: `Your time correction request for ${windowStartLabel}–${windowEndLabel} was submitted and is pending approval.`,
+                    type: 'correction_request_submitted',
+                },
+            });
+        } catch (notificationError) {
+            console.error('Failed to create correction request notification:', notificationError);
+        }
+
         res.status(201).json({ correction });
     } catch (error) {
         console.error('Failed to create correction request:', error);

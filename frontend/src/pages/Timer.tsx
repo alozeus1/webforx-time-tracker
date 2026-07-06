@@ -56,6 +56,19 @@ const isApiRouteNotFoundError = (error: unknown) => {
     return message.includes('api route not found');
 };
 
+const correctionStatusClasses: Record<TimerCorrectionRequestSummary['status'], string> = {
+    PENDING: 'bg-amber-100 text-amber-700',
+    APPROVED: 'bg-emerald-100 text-emerald-700',
+    REJECTED: 'bg-rose-100 text-rose-700',
+    CANCELLED: 'bg-slate-100 text-slate-500',
+};
+
+const formatCorrectionWindow = (start: string, end: string) => {
+    const startLabel = new Date(start).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const endLabel = new Date(end).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return `${startLabel} – ${endLabel}`;
+};
+
 const buildTaskSuggestions = (entries: TimeEntrySummary[]) => (
     Array.from(
         new Set(
@@ -452,7 +465,7 @@ const Timer: React.FC = () => {
             setCorrectionEnd('');
             setCorrectionReason('');
             setCorrectionWorkNote('');
-            setCorrectionFeedback('Correction request submitted for admin review.');
+            setCorrectionFeedback('Correction request submitted and pending approval. You\'ll be notified once it is reviewed.');
             await loadTimerPageData(false);
         } catch (error) {
             if (isApiRouteNotFoundError(error)) {
@@ -462,7 +475,7 @@ const Timer: React.FC = () => {
                     setCorrectionEnd('');
                     setCorrectionReason('');
                     setCorrectionWorkNote('');
-                    setCorrectionFeedback('Correction request submitted for admin review.');
+                    setCorrectionFeedback('Correction request submitted and pending approval. You\'ll be notified once it is reviewed.');
                     await loadTimerPageData(false);
                     return;
                 } catch (retryError) {
@@ -854,11 +867,6 @@ const Timer: React.FC = () => {
                                 Request review for time that was missed while you were working. Approved requests are reviewed before they affect official time.
                             </p>
                         </div>
-                        {correctionRequests.length > 0 && (
-                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold uppercase text-slate-500">
-                                {correctionRequests[0].status}
-                            </span>
-                        )}
                     </div>
                     <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event) => void handleSubmitCorrectionRequest(event)}>
                         <label className="text-left text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -914,6 +922,31 @@ const Timer: React.FC = () => {
                             )}
                         </div>
                     </form>
+                    {correctionRequests.length > 0 && (
+                        <div className="mt-5 border-t border-slate-100 pt-4">
+                            <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">My Correction Requests</h3>
+                            <ul className="mt-3 space-y-2">
+                                {correctionRequests.slice(0, 5).map((request) => (
+                                    <li key={request.id} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <p className="text-sm font-semibold text-slate-800">
+                                                {formatCorrectionWindow(request.requested_start_time, request.requested_end_time)}
+                                            </p>
+                                            <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase ${correctionStatusClasses[request.status]}`}>
+                                                {request.status}
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-slate-500">
+                                            Submitted {new Date(request.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </p>
+                                        {request.reviewer_note && (
+                                            <p className="mt-1 text-xs text-slate-600">Reviewer note: {request.reviewer_note}</p>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                 </section>
 
                 {calendarStatus?.configured && !calendarStatus.connected && (

@@ -146,7 +146,8 @@ const Timesheet: React.FC = () => {
                 return;
             }
 
-            const projectName = entry.project?.name || 'Unassigned';
+            const projectName = entry.project?.name
+                || (entry.task_description === 'Approved timer correction' ? 'Time Corrections' : 'Unassigned');
             const existing = projectMap.get(projectName) || {
                 project: projectName,
                 totals: Array.from({ length: 7 }, () => 0),
