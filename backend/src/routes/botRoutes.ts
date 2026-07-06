@@ -11,7 +11,14 @@ import { Router } from 'express';
 import express from 'express';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 import { handleSlackCommand, getSlackBotConfig, upsertSlackBotConfig } from '../controllers/slackBotController';
-import { handleMattermostCommand, getMattermostBotConfig, upsertMattermostBotConfig } from '../controllers/mattermostBotController';
+import {
+    handleMattermostCommand,
+    handleMattermostDialogSubmit,
+    getMattermostBotConfig,
+    upsertMattermostBotConfig,
+    getMattermostLinkStatus,
+    linkMattermostAccount,
+} from '../controllers/mattermostBotController';
 import { handleTeamsCommand, getTeamsBotConfig, upsertTeamsBotConfig } from '../controllers/teamsBotController';
 
 const router = Router();
@@ -36,8 +43,17 @@ router.post('/slack/:orgSlug', captureRawBody, (req, res, next) => {
     next();
 }, handleSlackCommand);
 
+// Mattermost — account linking (any authenticated user; NO Admin role).
+// Registered before the public :orgSlug route so 'link' is not captured as an org slug.
+router.get('/mattermost/link', authenticateToken, getMattermostLinkStatus as express.RequestHandler);
+router.post('/mattermost/link', authenticateToken, linkMattermostAccount as express.RequestHandler);
+
 // Mattermost — public slash command endpoint
 router.post('/mattermost/:orgSlug', express.urlencoded({ extended: false }), handleMattermostCommand);
+
+// Mattermost — interactive dialog submission (Mattermost posts JSON; parsed by
+// the global express.json() middleware). Verified via the `state` token.
+router.post('/mattermost/:orgSlug/dialog', handleMattermostDialogSubmit);
 
 // Teams — stub
 router.post('/teams/:orgSlug', handleTeamsCommand);

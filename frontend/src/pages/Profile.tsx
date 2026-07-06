@@ -12,6 +12,88 @@ interface CurrentUser {
     weekly_hour_limit?: number | null;
 }
 
+const MattermostLinkCard: React.FC = () => {
+    const [linked, setLinked] = useState<boolean | null>(null);
+    const [mmUserId, setMmUserId] = useState<string | null>(null);
+    const [code, setCode] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+    useEffect(() => {
+        api.get<{ linked: boolean; mm_user_id?: string }>('/bots/mattermost/link')
+            .then((response) => {
+                setLinked(response.data.linked);
+                setMmUserId(response.data.mm_user_id ?? null);
+            })
+            .catch(() => setLinked(false));
+    }, []);
+
+    const handleLink = async (event: React.FormEvent) => {
+        event.preventDefault();
+        const trimmed = code.trim().toUpperCase();
+        if (!trimmed) return;
+
+        setBusy(true);
+        setMessage(null);
+        try {
+            const response = await api.post<{ linked: boolean; mm_username?: string }>('/bots/mattermost/link', { code: trimmed });
+            setLinked(true);
+            setCode('');
+            setMessage({
+                text: response.data.mm_username
+                    ? `Linked to Mattermost account @${response.data.mm_username}.`
+                    : 'Mattermost account linked successfully.',
+                ok: true,
+            });
+        } catch (error) {
+            const apiMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+            setMessage({ text: apiMessage ?? 'Failed to link account. Check the code and try again.', ok: false });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Linked Accounts — Mattermost</p>
+            <div className="mt-3 flex items-center gap-2">
+                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${linked ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {linked === null ? 'Checking…' : linked ? 'Linked' : 'Not linked'}
+                </span>
+                {linked && mmUserId && (
+                    <span className="text-xs text-slate-500">Mattermost user ID: <code className="rounded bg-slate-100 px-1 py-0.5">{mmUserId}</code></span>
+                )}
+            </div>
+            <p className="mt-3 text-sm text-slate-500">
+                Run <code className="rounded bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-700">/timer link</code> in Mattermost to get an 8-character code, then enter it below within 15 minutes.
+            </p>
+            <form onSubmit={handleLink} className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <input
+                    id="mattermost-link-code"
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm uppercase tracking-widest text-slate-900 sm:max-w-xs"
+                    placeholder="e.g. A1B2C3D4"
+                    maxLength={8}
+                    value={code}
+                    onChange={(event) => setCode(event.target.value.toUpperCase())}
+                    autoComplete="off"
+                />
+                <button
+                    type="submit"
+                    className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={busy || code.trim().length !== 8}
+                >
+                    {busy ? 'Linking…' : 'Link'}
+                </button>
+            </form>
+            {message && (
+                <p className={`mt-3 text-sm font-semibold ${message.ok ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {message.text}
+                </p>
+            )}
+        </div>
+    );
+};
+
 const Profile: React.FC = () => {
     const [user, setUser] = useState<CurrentUser | null>(null);
     const [firstName, setFirstName] = useState('');
@@ -206,6 +288,8 @@ const Profile: React.FC = () => {
                         </div>
                     </aside>
                 </div>
+
+                <MattermostLinkCard />
             </div>
         </div>
     );
