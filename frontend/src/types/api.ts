@@ -207,8 +207,40 @@ export interface AnalyticsUserBreakdown {
     initials: string;
     primaryProject: string;
     totalHours: string;
+    approved_hours?: number;
+    pending_hours?: number;
+    rejected_hours?: number;
     efficiency: number;
     status: string;
+}
+
+export interface AnalyticsHoursByStatus {
+    approved_hours: number;
+    pending_hours: number;
+    rejected_hours: number;
+}
+
+export interface AnalyticsMonthlySummary {
+    month_label: string;
+    total_hours: number;
+    approved_hours: number;
+}
+
+export interface AnalyticsPtoStatusSummary {
+    count: number;
+    days: number;
+}
+
+export interface AnalyticsPtoSummary {
+    pending: AnalyticsPtoStatusSummary;
+    approved: AnalyticsPtoStatusSummary;
+    rejected: AnalyticsPtoStatusSummary;
+}
+
+export interface AnalyticsCorrectionsSummary {
+    pending: number;
+    approved: number;
+    rejected: number;
 }
 
 export interface AnalyticsDashboardResponse {
@@ -216,6 +248,10 @@ export interface AnalyticsDashboardResponse {
     hoursTrend: AnalyticsTrend[];
     projectDistribution: AnalyticsProjectDistribution[];
     userBreakdown: AnalyticsUserBreakdown[];
+    hoursByStatus?: AnalyticsHoursByStatus;
+    monthly?: AnalyticsMonthlySummary;
+    pto?: AnalyticsPtoSummary;
+    corrections?: AnalyticsCorrectionsSummary;
 }
 
 export interface AuditLogSummary {

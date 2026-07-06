@@ -14,6 +14,8 @@ const formatHoursMetric = (hours: number) => {
     return hours.toFixed(1);
 };
 
+const secondsToHours = (seconds: number) => Number((seconds / 3600).toFixed(2));
+
 const normalizeReportRangeStart = (range: unknown) => {
     const now = new Date();
     const startDate = new Date();
@@ -67,7 +69,7 @@ const buildReportWhereClause = ({
         whereClause.start_time = { gte: startDate };
     }
 
-    return { whereClause, now, startDate, selectedProjectId };
+    return { whereClause, now, startDate, selectedProjectId, canViewAll, userId, selectedUserId, selectedTeamName };
 };
 
 export const exportTimeEntries = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -129,7 +131,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             return;
         }
 
-        const { whereClause, now, startDate, selectedProjectId } = buildReportWhereClause({ req, includeDateRange: true });
+        const { whereClause, now, startDate, selectedProjectId, canViewAll, selectedUserId, selectedTeamName } = buildReportWhereClause({ req, includeDateRange: true });
 
         // Fetch entries
         const entries = await prisma.timeEntry.findMany({
@@ -265,11 +267,17 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                     role: entry.user.role?.name || 'Employee',
                     initials: `${entry.user.first_name[0]}${entry.user.last_name[0]}`,
                     totalHours: 0,
+                    approvedSec: 0,
+                    pendingSec: 0,
+                    rejectedSec: 0,
                     projectMap: new Map<string, number>()
                 });
             }
             const uData = userMap.get(uId);
             uData.totalHours += (entry.duration / 3600);
+            if (entry.status === 'approved') uData.approvedSec += entry.duration;
+            else if (entry.status === 'rejected') uData.rejectedSec += entry.duration;
+            else uData.pendingSec += entry.duration;
             if (entry.project) {
                 uData.projectMap.set(entry.project.name, (uData.projectMap.get(entry.project.name) || 0) + entry.duration);
             }
@@ -296,10 +304,98 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 initials: u.initials,
                 primaryProject,
                 totalHours: formatHoursMetric(u.totalHours),
+                approved_hours: secondsToHours(u.approvedSec),
+                pending_hours: secondsToHours(u.pendingSec),
+                rejected_hours: secondsToHours(u.rejectedSec),
                 efficiency,
                 status: efficiency >= 85 ? 'On Track' : 'Needs Attention'
             };
         }).sort((a, b) => parseFloat(b.totalHours) - parseFloat(a.totalHours));
+
+        // Approval-status hours for the selected range (from already-scoped entries)
+        let approvedSec = 0;
+        let pendingSec = 0;
+        let rejectedSec = 0;
+        entries.forEach(entry => {
+            if (entry.status === 'approved') approvedSec += entry.duration;
+            else if (entry.status === 'rejected') rejectedSec += entry.duration;
+            else pendingSec += entry.duration;
+        });
+
+        const hoursByStatus = {
+            approved_hours: secondsToHours(approvedSec),
+            pending_hours: secondsToHours(pendingSec),
+            rejected_hours: secondsToHours(rejectedSec),
+        };
+
+        // Current calendar month + calendar year windows (independent of selected range)
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const yearStart = new Date(now.getFullYear(), 0, 1);
+
+        // User/team scope for leave + correction requests (no project dimension on those models)
+        const requestScope: { user_id?: string; user?: { team_name: string } } = {};
+        if (!canViewAll) requestScope.user_id = userId;
+        else if (selectedUserId) requestScope.user_id = selectedUserId;
+        else if (selectedTeamName) requestScope.user = { team_name: selectedTeamName };
+
+        const [monthGroups, leaveGroups, correctionGroups] = await Promise.all([
+            prisma.timeEntry.groupBy({
+                by: ['status'],
+                where: { ...whereClause, start_time: { gte: monthStart } },
+                _sum: { duration: true },
+            }),
+            prisma.leaveRequest.groupBy({
+                by: ['status'],
+                where: {
+                    organization_id: req.user!.organization_id,
+                    ...requestScope,
+                    start_date: { gte: yearStart },
+                },
+                _count: { _all: true },
+                _sum: { days: true },
+            }),
+            prisma.timerCorrectionRequest.groupBy({
+                by: ['status'],
+                where: {
+                    organization_id: req.user!.organization_id,
+                    ...requestScope,
+                    created_at: { gte: yearStart },
+                },
+                _count: { _all: true },
+            }),
+        ]);
+
+        let monthTotalSec = 0;
+        let monthApprovedSec = 0;
+        monthGroups.forEach(group => {
+            const seconds = group._sum.duration || 0;
+            monthTotalSec += seconds;
+            if (group.status === 'approved') monthApprovedSec += seconds;
+        });
+
+        const monthly = {
+            month_label: monthStart.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+            total_hours: secondsToHours(monthTotalSec),
+            approved_hours: secondsToHours(monthApprovedSec),
+        };
+
+        const pto = {
+            pending: { count: 0, days: 0 },
+            approved: { count: 0, days: 0 },
+            rejected: { count: 0, days: 0 },
+        };
+        leaveGroups.forEach(group => {
+            const bucket = pto[group.status as keyof typeof pto];
+            if (!bucket) return;
+            bucket.count = group._count._all;
+            bucket.days = Number(group._sum.days || 0);
+        });
+
+        const corrections = { pending: 0, approved: 0, rejected: 0 };
+        correctionGroups.forEach(group => {
+            const key = group.status.toLowerCase() as keyof typeof corrections;
+            if (key in corrections) corrections[key] = group._count._all;
+        });
 
         res.status(200).json({
             metrics: {
@@ -316,7 +412,11 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             },
             hoursTrend,
             projectDistribution,
-            userBreakdown
+            userBreakdown,
+            hoursByStatus,
+            monthly,
+            pto,
+            corrections
         });
 
     } catch (error) {

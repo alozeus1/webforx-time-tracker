@@ -65,6 +65,7 @@ model User {
   last_login_provider String?
   mfa_secret    String?
   mfa_enabled   Boolean  @default(false)
+  password_changed_at DateTime?
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 

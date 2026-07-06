@@ -164,6 +164,19 @@ const Admin: React.FC = () => {
     const [complianceSaving, setComplianceSaving] = useState(false);
     const [complianceFeedback, setComplianceFeedback] = useState<string | null>(null);
 
+    // ── Password policy (stored in org settings alongside compliance) ───────
+    const [passwordPolicy, setPasswordPolicy] = useState({
+        min_length: 12,
+        require_uppercase: false,
+        require_lowercase: false,
+        require_number: false,
+        require_symbol: false,
+        expiration_days: 0,
+        expiry_warning_days: 7,
+    });
+    const [passwordPolicySaving, setPasswordPolicySaving] = useState(false);
+    const [passwordPolicyFeedback, setPasswordPolicyFeedback] = useState<string | null>(null);
+
     // ── Feature 5: White-labeling / Branding ────────────────────────────────
     const [branding, setBranding] = useState({ app_name: '', logo_url: '', favicon_url: '', primary_color: '#4F46E5', secondary_color: '#7C3AED', custom_domain: '', email_from_name: '', email_from_address: '' });
     const [brandingLoaded, setBrandingLoaded] = useState(false);
@@ -411,11 +424,14 @@ const Admin: React.FC = () => {
     // ── Compliance + Rounding functions ──────────────────────────────────────
     async function fetchComplianceSettings() {
         try {
-            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null }>('/admin/org-settings');
+            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null; password_policy?: typeof passwordPolicy }>('/admin/org-settings');
             setComplianceMode((res.data.compliance_mode || 'none') as 'none' | 'dcaa' | 'flsa' | 'wtd');
             if (res.data.time_rounding) {
                 setRoundingIncrement(res.data.time_rounding.increment || 15);
                 setRoundingDirection((res.data.time_rounding.direction || 'nearest') as 'nearest' | 'up' | 'down');
+            }
+            if (res.data.password_policy) {
+                setPasswordPolicy(prev => ({ ...prev, ...res.data.password_policy }));
             }
         } catch (error) {
             console.error('Error fetching compliance settings:', error);
@@ -434,6 +450,19 @@ const Admin: React.FC = () => {
             setComplianceFeedback('Failed to save settings.');
         } finally {
             setComplianceSaving(false);
+        }
+    }
+
+    async function handleSavePasswordPolicy() {
+        setPasswordPolicySaving(true);
+        setPasswordPolicyFeedback(null);
+        try {
+            await api.put('/admin/org-settings', { password_policy: passwordPolicy });
+            setPasswordPolicyFeedback('Password policy saved.');
+        } catch {
+            setPasswordPolicyFeedback('Failed to save password policy.');
+        } finally {
+            setPasswordPolicySaving(false);
         }
     }
 
@@ -1093,6 +1122,89 @@ const Admin: React.FC = () => {
                                     {complianceSaving ? 'Saving…' : 'Save Settings'}
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Password policy */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-base text-primary">password</span> Password Policy
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-5">Requirements enforced when users set or reset their password. Expiration of 0 days means passwords never expire.</p>
+                            {!complianceLoaded ? (
+                                <p className="text-sm text-slate-500">Loading…</p>
+                            ) : (
+                                <div className="space-y-5">
+                                    <div className="flex flex-wrap gap-6 items-end">
+                                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                            Minimum length (8–128)
+                                            <input
+                                                type="number"
+                                                min={8}
+                                                max={128}
+                                                value={passwordPolicy.min_length}
+                                                onChange={e => setPasswordPolicy(p => ({ ...p, min_length: Number(e.target.value) }))}
+                                                className="mt-1 block w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                            />
+                                        </label>
+                                        <label className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                            Password expiration (days, 0 = never)
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={3650}
+                                                value={passwordPolicy.expiration_days}
+                                                onChange={e => setPasswordPolicy(p => ({ ...p, expiration_days: Number(e.target.value) }))}
+                                                className="mt-1 block w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                            />
+                                        </label>
+                                        <label className={`text-xs font-bold uppercase tracking-wide text-slate-500 ${passwordPolicy.expiration_days <= 0 ? 'opacity-50' : ''}`}>
+                                            Warn users N days before expiry (1–90)
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={90}
+                                                disabled={passwordPolicy.expiration_days <= 0}
+                                                value={passwordPolicy.expiry_warning_days}
+                                                onChange={e => setPasswordPolicy(p => ({ ...p, expiry_warning_days: Number(e.target.value) }))}
+                                                className="mt-1 block w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:cursor-not-allowed"
+                                            />
+                                        </label>
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                        {([
+                                            { key: 'require_uppercase', label: 'Require uppercase letter' },
+                                            { key: 'require_lowercase', label: 'Require lowercase letter' },
+                                            { key: 'require_number', label: 'Require number' },
+                                            { key: 'require_symbol', label: 'Require symbol' },
+                                        ] as const).map(({ key, label }) => (
+                                            <label key={key} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={passwordPolicy[key]}
+                                                    onChange={e => setPasswordPolicy(p => ({ ...p, [key]: e.target.checked }))}
+                                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/20"
+                                                />
+                                                {label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            disabled={passwordPolicySaving}
+                                            onClick={() => void handleSavePasswordPolicy()}
+                                            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                                        >
+                                            {passwordPolicySaving ? 'Saving…' : 'Save Password Policy'}
+                                        </button>
+                                        {passwordPolicyFeedback && (
+                                            <span className={`text-sm font-medium ${passwordPolicyFeedback.includes('Failed') ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                {passwordPolicyFeedback}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
