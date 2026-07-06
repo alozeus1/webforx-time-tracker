@@ -90,7 +90,11 @@ const Layout: React.FC = () => {
             setIdleWarning(null);
         };
 
-        const onTimerPaused = () => {
+        const onTimerPaused = (event: Event) => {
+            // A deliberate pause (the user pressed Pause) needs no confirmation
+            // dialog — only auto-pauses (idle, tab closed, server enforced) do.
+            const reason = (event as CustomEvent<{ reason?: string | null }>).detail?.reason;
+            if (reason === 'user_requested') return;
             setIdleWarning(null);
             // Fetch the active timer to show task/project name in the confirmation dialog
             void api.get<TimerEntriesResponse>('/timers/me').then(({ data }) => {
