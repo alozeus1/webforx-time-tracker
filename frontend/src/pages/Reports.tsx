@@ -336,6 +336,89 @@ const Reports: React.FC = () => {
                             )}
                         </div>
 
+                        {/* Approval, Monthly, PTO & Correction Insights */}
+                        {(analytics?.hoursByStatus || analytics?.monthly || analytics?.pto || analytics?.corrections) && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                                {analytics?.hoursByStatus && (
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Hours by Approval Status</p>
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Approved</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{formatHoursText(analytics.hoursByStatus.approved_hours)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Pending</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{formatHoursText(analytics.hoursByStatus.pending_hours)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-rose-600 dark:text-rose-400">Rejected</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{formatHoursText(analytics.hoursByStatus.rejected_hours)}</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-2">Within selected timeframe</p>
+                                    </div>
+                                )}
+
+                                {analytics?.monthly && (
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <div className="flex justify-between items-start">
+                                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">This Month</p>
+                                            <span className="px-2 py-1 rounded text-xs font-bold bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                                                {analytics.monthly.month_label}
+                                            </span>
+                                        </div>
+                                        <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{formatHoursText(analytics.monthly.total_hours)}</h3>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatHoursText(analytics.monthly.approved_hours)}</span> approved this month
+                                        </p>
+                                    </div>
+                                )}
+
+                                {analytics?.pto && (
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">PTO Requests (this year)</p>
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Approved</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{analytics.pto.approved.count} <span className="text-xs font-medium text-slate-400">({analytics.pto.approved.days}d)</span></span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Pending</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{analytics.pto.pending.count} <span className="text-xs font-medium text-slate-400">({analytics.pto.pending.days}d)</span></span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-rose-600 dark:text-rose-400">Rejected</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{analytics.pto.rejected.count} <span className="text-xs font-medium text-slate-400">({analytics.pto.rejected.days}d)</span></span>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-2">Leave requests by status</p>
+                                    </div>
+                                )}
+
+                                {analytics?.corrections && (
+                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                                        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Correction Requests (this year)</p>
+                                        <div className="mt-3 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-amber-600 dark:text-amber-400">Pending</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{analytics.corrections.pending}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Approved</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{analytics.corrections.approved}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-medium text-rose-600 dark:text-rose-400">Rejected</span>
+                                                <span className="text-sm font-bold text-slate-900 dark:text-white">{analytics.corrections.rejected}</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-slate-400 mt-2">Timer correction requests by status</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Charts Section */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* Hours Trend — Recharts Bar */}
@@ -517,6 +600,9 @@ const Reports: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Team</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Primary Project</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total Hours</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Approved h</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Pending h</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Rejected h</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efficiency</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                         </tr>
@@ -524,7 +610,7 @@ const Reports: React.FC = () => {
                                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                         {filteredBreakdown.length === 0 ? (
                                             <tr>
-                                                <td colSpan={6} className="px-6 py-8 text-center text-slate-500 text-sm">
+                                                <td colSpan={9} className="px-6 py-8 text-center text-slate-500 text-sm">
                                                     No users match the selected productivity filter.
                                                 </td>
                                             </tr>
@@ -544,6 +630,9 @@ const Reports: React.FC = () => {
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.teamName || 'Unassigned'}</td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.primaryProject}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{formatHoursText(Number(u.totalHours))}</td>
+                                                <td className="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400">{u.approved_hours !== undefined ? formatHoursText(u.approved_hours) : '—'}</td>
+                                                <td className="px-6 py-4 text-sm font-semibold text-amber-600 dark:text-amber-400">{u.pending_hours !== undefined ? formatHoursText(u.pending_hours) : '—'}</td>
+                                                <td className="px-6 py-4 text-sm font-semibold text-rose-600 dark:text-rose-400">{u.rejected_hours !== undefined ? formatHoursText(u.rejected_hours) : '—'}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="h-1.5 w-16 rounded-full bg-slate-100 dark:bg-slate-700">
