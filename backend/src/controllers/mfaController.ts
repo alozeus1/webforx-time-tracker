@@ -1,6 +1,14 @@
 import { Response } from 'express';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { TOTP } = require('otplib') as { TOTP: new () => { generate(s: string): string; verify(o: { token: string; secret: string }): boolean; generateSecret(l?: number): string; keyuri(u: string, s: string, secret: string): string } };
+// otplib v13: the top-level functional API ships pre-wired with the noble
+// crypto + scure base32 plugins. The bare TOTP class does NOT (constructing
+// it without plugins throws CryptoPluginMissingError on first use — this is
+// what broke "Enable MFA" in production with a 500).
+const { generateSecret, verifySync, generateURI } = require('otplib') as {
+    generateSecret: (bytes?: number) => string;
+    verifySync: (opts: { token: string; secret: string }) => { valid: boolean };
+    generateURI: (opts: { issuer: string; label: string; secret: string }) => string;
+};
 import QRCode from 'qrcode';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -8,7 +16,6 @@ import prisma from '../config/db';
 import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
 
-const totp = new TOTP();
 const APP_NAME = 'Web Forx Time Tracker';
 
 // Helper — Prisma user cast for new MFA fields (until prisma generate runs on deploy)
@@ -32,7 +39,7 @@ export const setupMfa = async (req: AuthRequest, res: Response): Promise<void> =
             return;
         }
 
-        const secret = totp.generateSecret(20);
+        const secret = generateSecret(20);
 
         // Store pending secret (enabled only after /mfa/verify)
         await (prisma.user as any).update({
@@ -40,7 +47,7 @@ export const setupMfa = async (req: AuthRequest, res: Response): Promise<void> =
             data: { mfa_secret: secret },
         });
 
-        const otpAuthUrl = totp.keyuri(user.email, APP_NAME, secret);
+        const otpAuthUrl = generateURI({ issuer: APP_NAME, label: user.email, secret });
         const qrCodeDataUrl = await QRCode.toDataURL(otpAuthUrl);
 
         res.status(200).json({
@@ -76,7 +83,7 @@ export const verifyMfa = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
-        const isValid = totp.verify({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret });
+        const isValid = verifySync({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret }).valid;
         if (!isValid) {
             res.status(400).json({ message: 'Invalid code. Try again.' });
             return;
@@ -124,7 +131,7 @@ export const disableMfa = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const totpOk = totp.verify({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret });
+        const totpOk = verifySync({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret }).valid;
         if (!totpOk) {
             res.status(400).json({ message: 'Invalid authenticator code.' });
             return;
@@ -182,7 +189,7 @@ export const validateMfaLogin = async (req: AuthRequest, res: Response): Promise
             return;
         }
 
-        const totpOk = totp.verify({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret });
+        const totpOk = verifySync({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret }).valid;
         if (!totpOk) {
             res.status(401).json({ message: 'Invalid authenticator code.' });
             return;
