@@ -121,7 +121,9 @@ export const useActiveTimerHeartbeat = () => {
 
                 const newIsPaused = Boolean(response.data.activeTimer?.is_paused);
                 if (newIsPaused && !isPausedRef.current) {
-                    window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT));
+                    window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT, {
+                        detail: { reason: response.data.activeTimer?.pause_reason ?? null },
+                    }));
                 }
                 isPausedRef.current = newIsPaused;
 
@@ -234,7 +236,9 @@ export const useActiveTimerHeartbeat = () => {
             // If the server enforced a pause during the ping guardrail, update local state.
             if (response.data.state === 'paused') {
                 isPausedRef.current = true;
-                window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT));
+                window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT, {
+                    detail: { reason: 'server_enforced' },
+                }));
             }
         } catch (error) {
             const status = (error as { response?: { status?: number } })?.response?.status;
@@ -300,10 +304,15 @@ export const useActiveTimerHeartbeat = () => {
             }
         };
 
-        // Pause via sendBeacon when the tab/window is closing.
-        // pagehide is more reliable than beforeunload (works on mobile and bfcache navigation).
+        // Pause via sendBeacon when the tab/window is actually closing.
+        // pagehide is more reliable than beforeunload (works on mobile and bfcache navigation),
+        // BUT it also fires when the page is merely frozen/put into the back-forward cache
+        // (app switch on mobile, tab freeze, back/forward navigation). In that case
+        // event.persisted === true and the session is NOT ending — pausing there made the
+        // timer feel hair-trigger ("left the browser for a few seconds and it paused").
         // Only fires if there is an active, unpaused timer.
-        const onPageHide = () => {
+        const onPageHide = (event: PageTransitionEvent) => {
+            if (event.persisted) return;
             if (!hasActiveTimerRef.current || isPausedRef.current) return;
             const token = getStoredToken();
             if (!token) return;

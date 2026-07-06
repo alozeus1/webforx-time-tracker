@@ -108,6 +108,7 @@ export interface ActiveTimerSummary {
     start_time: string;
     last_active_ping?: string | null;
     is_paused?: boolean;
+    pause_reason?: string | null;
     paused_at?: string | null;
     paused_duration_seconds?: number;
     project?: ProjectReference | null;

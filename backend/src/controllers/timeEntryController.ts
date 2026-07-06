@@ -569,6 +569,36 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
                     type: 'correction_request_submitted',
                 },
             });
+
+            // Alert reviewers so pending requests are seen without polling the
+            // Admin → Corrections tab (mirrors the leave-request flow).
+            const requester = await prisma.user.findUnique({
+                where: { id: user_id },
+                select: { first_name: true, last_name: true, email: true },
+            });
+            const requesterLabel = requester
+                ? `${requester.first_name} ${requester.last_name}`.trim() || requester.email
+                : 'A team member';
+            const reviewers = await prisma.user.findMany({
+                where: {
+                    organization_id: req.user!.organization_id,
+                    is_active: true,
+                    id: { not: user_id },
+                    role: { name: { in: ['Admin', 'Manager'] } },
+                },
+                select: { id: true },
+            });
+            if (reviewers.length > 0) {
+                await prisma.notification.createMany({
+                    data: reviewers.map((reviewer) => ({
+                        user_id: reviewer.id,
+                        organization_id: req.user!.organization_id,
+                        message: `${requesterLabel} submitted a time correction request for ${windowStartLabel}–${windowEndLabel} — pending review.`,
+                        type: 'correction_request_review',
+                    })),
+                    skipDuplicates: true,
+                });
+            }
         } catch (notificationError) {
             console.error('Failed to create correction request notification:', notificationError);
         }
