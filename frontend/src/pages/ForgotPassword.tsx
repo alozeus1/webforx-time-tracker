@@ -101,7 +101,7 @@ const ForgotPassword: React.FC = () => {
 
         setLoading(true);
         try {
-            await api.post('/auth/reset-password', { code, password: newPassword });
+            await api.post('/auth/reset-password', { token: code, password: newPassword });
             setStep('done');
         } catch (err) {
             const data = (err as { response?: { data?: { message?: string; requirements?: string[] } } }).response?.data;
