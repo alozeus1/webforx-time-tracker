@@ -47,13 +47,19 @@ self.addEventListener('fetch', (event) => {
                     // Refresh in background
                     event.waitUntil(
                         fetch(request).then(res => {
-                            if (res.ok) caches.open(CACHE_NAME).then(c => c.put(request, res.clone()));
+                            if (res.ok) {
+                                const resClone = res.clone();
+                                caches.open(CACHE_NAME).then(c => c.put(request, resClone));
+                            }
                         }).catch(() => {})
                     );
                     return cached;
                 }
                 return fetch(request).then(res => {
-                    if (res.ok) caches.open(CACHE_NAME).then(c => c.put(request, res.clone()));
+                    if (res.ok) {
+                        const resClone = res.clone();
+                        caches.open(CACHE_NAME).then(c => c.put(request, resClone));
+                    }
                     return res;
                 });
             })
@@ -64,7 +70,10 @@ self.addEventListener('fetch', (event) => {
     // HTML navigation — network-first, offline → /index.html shell
     event.respondWith(
         fetch(request).then(res => {
-            if (res.ok) caches.open(CACHE_NAME).then(c => c.put(request, res.clone()));
+            if (res.ok) {
+                const resClone = res.clone();
+                caches.open(CACHE_NAME).then(c => c.put(request, resClone));
+            }
             return res;
         }).catch(() =>
             caches.match(request).then(cached => cached || caches.match('/index.html'))
