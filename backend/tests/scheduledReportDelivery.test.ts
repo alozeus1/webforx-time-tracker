@@ -19,6 +19,9 @@ jest.mock('../src/config/db', () => ({
         timeEntry: {
             findMany: jest.fn(),
         },
+        user: {
+            findMany: jest.fn(),
+        },
     },
 }));
 
@@ -42,6 +45,10 @@ beforeEach(() => {
         },
     ]);
     (prisma.scheduledReport.update as jest.Mock).mockResolvedValue({});
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([
+        { email: 'employee@webforxtech.com', first_name: 'Employee', last_name: 'One' },
+        { email: 'defaulter@webforxtech.com', first_name: 'Defaulter', last_name: 'Two' },
+    ]);
 });
 
 describe('scheduled report delivery', () => {
@@ -53,6 +60,7 @@ describe('scheduled report delivery', () => {
                 day_of_week: 1,
                 recipients: ['admin@webforxtech.com'],
                 report_type: 'summary',
+                organization_id: 'org-1',
                 last_sent_at: null,
                 created_at: new Date('2026-04-01T00:00:00.000Z'),
             },
@@ -69,12 +77,19 @@ describe('scheduled report delivery', () => {
         }));
         expect(prisma.timeEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
             where: expect.objectContaining({
+                organization_id: 'org-1',
                 start_time: {
                     gte: expect.any(Date),
                     lt: expect.any(Date),
                 },
             }),
         }));
+        // Defaulters: active org users with no time entries in the window must be
+        // looked up so the report can flag them, not just the users who logged hours.
+        expect(prisma.user.findMany).toHaveBeenCalledWith({
+            where: { organization_id: 'org-1', is_active: true },
+            select: { email: true, first_name: true, last_name: true },
+        });
         expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({
             from: 'Web Forx Reports <reports@webforxtech.com>',
             to: ['admin@webforxtech.com'],

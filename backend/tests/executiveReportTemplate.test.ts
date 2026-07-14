@@ -45,6 +45,7 @@ describe('executive report template', () => {
         const model = buildExecutiveReportModel(
             'Weekly Summary Report - 2026-03-31 to 2026-04-06',
             entries,
+            [],
             new Date('2026-04-10T12:00:00.000Z'),
         );
 
@@ -87,6 +88,23 @@ describe('executive report template', () => {
         expect(buildExecutiveReportModel('Weekly Summary Report - 2026-03-31 to 2026-04-06', entries).displayTitle).toBe('Weekly Timesheet Executive Report');
         expect(buildExecutiveReportModel('Monthly Summary Report - 2026-04-01 to 2026-04-30', entries).displayTitle).toBe('Monthly Timesheet Executive Report');
         expect(buildExecutiveReportModel('Daily Autonomous Time Report - 2026-04-06', entries).displayTitle).toBe('Daily Timesheet Executive Report');
+    });
+
+    it('includes active users with zero logged hours as flagged defaulters', () => {
+        const defaulters = [
+            { email: 'noshow@webforxtech.com', first_name: 'No', last_name: 'Show' },
+        ];
+        const model = buildExecutiveReportModel('Weekly Summary Report - 2026-03-31 to 2026-04-06', entries, defaulters);
+
+        expect(model.totals.defaulters).toBe(1);
+        expect(model.defaulters).toEqual([{ name: 'No Show', email: 'noshow@webforxtech.com' }]);
+    });
+
+    it('reports zero defaulters when every active user logged time', () => {
+        const model = buildExecutiveReportModel('Weekly Summary Report - 2026-03-31 to 2026-04-06', entries, []);
+
+        expect(model.totals.defaulters).toBe(0);
+        expect(model.defaulters).toEqual([]);
     });
 
     it('generates a non-empty PDF buffer', () => {

@@ -39,6 +39,17 @@ type GroupSummary = {
     entries: DetailEntry[];
 };
 
+export type DefaulterUser = {
+    email: string;
+    first_name?: string | null;
+    last_name?: string | null;
+};
+
+type DefaulterRow = {
+    name: string;
+    email: string;
+};
+
 export type ExecutiveReportModel = {
     title: string;
     displayTitle: string;
@@ -47,6 +58,7 @@ export type ExecutiveReportModel = {
     generatedAt: Date;
     entries: DetailEntry[];
     zeroHourEntries: number;
+    defaulters: DefaulterRow[];
     totals: {
         totalHours: number;
         approvedHours: number;
@@ -55,6 +67,7 @@ export type ExecutiveReportModel = {
         contributors: number;
         projects: number;
         entries: number;
+        defaulters: number;
     };
     statusCounts: Record<StatusKey, number>;
     employees: GroupSummary[];
@@ -111,6 +124,11 @@ const employeeName = (entry: ExecutiveReportEntry): string => {
     return name || entry.user.email;
 };
 
+const defaulterName = (user: DefaulterUser): string => {
+    const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+    return name || user.email;
+};
+
 const displayProject = (entry: ExecutiveReportEntry): string => entry.project?.name?.trim() || 'Unassigned';
 
 const buildReportId = (periodLabel: string, generatedAt: Date): string => {
@@ -164,7 +182,12 @@ const createGroups = (entries: DetailEntry[], getKey: (entry: DetailEntry) => st
     return [...groups.values()].sort((a, b) => b.approvedHours - a.approvedHours || a.label.localeCompare(b.label));
 };
 
-export const buildExecutiveReportModel = (title: string, rawEntries: ExecutiveReportEntry[], generatedAt = new Date()): ExecutiveReportModel => {
+export const buildExecutiveReportModel = (
+    title: string,
+    rawEntries: ExecutiveReportEntry[],
+    defaulters: DefaulterUser[] = [],
+    generatedAt = new Date(),
+): ExecutiveReportModel => {
     const periodLabel = parsePeriodFromTitle(title);
     const detailEntries = rawEntries
         .map((entry) => ({
@@ -193,6 +216,9 @@ export const buildExecutiveReportModel = (title: string, rawEntries: ExecutiveRe
         generatedAt,
         entries: nonZeroEntries,
         zeroHourEntries: detailEntries.length - nonZeroEntries.length,
+        defaulters: [...defaulters]
+            .map((user) => ({ name: defaulterName(user), email: user.email }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
         totals: {
             totalHours: roundHours(nonZeroEntries.reduce((sum, entry) => sum + entry.hours, 0)),
             approvedHours: sumByStatus(nonZeroEntries, 'approved'),
@@ -201,6 +227,7 @@ export const buildExecutiveReportModel = (title: string, rawEntries: ExecutiveRe
             contributors: contributorSet.size,
             projects: projectSet.size,
             entries: nonZeroEntries.length,
+            defaulters: defaulters.length,
         },
         statusCounts: {
             approved: approvedEntries.length,
@@ -436,7 +463,7 @@ const renderExecutiveSummary = (doc: jsPDF, model: ExecutiveReportModel, logos: 
     drawKpiCard(doc, 'Contributors', String(model.totals.contributors), 36, 276, 155, COLORS.blue);
     drawKpiCard(doc, 'Projects', String(model.totals.projects), 207, 276, 155, COLORS.cyan);
     drawKpiCard(doc, 'Entries reviewed', String(model.totals.entries), 378, 276, 155, COLORS.orange);
-    drawKpiCard(doc, 'Zero-hour items', String(model.zeroHourEntries), 549, 276, 155, COLORS.muted);
+    drawKpiCard(doc, 'Defaulters (0h logged)', String(model.totals.defaulters), 549, 276, 155, model.totals.defaulters > 0 ? COLORS.red : COLORS.muted);
 
     setFill(doc, COLORS.white);
     setDraw(doc, '#E2E8F0');
@@ -454,6 +481,9 @@ const renderExecutiveSummary = (doc: jsPDF, model: ExecutiveReportModel, logos: 
         model.projects.some((project) => project.label === 'Unassigned')
             ? 'Unassigned project time appears in this report and should be treated as an operational cleanup item.'
             : 'No unassigned project time was detected in the included detail rows.',
+        model.totals.defaulters > 0
+            ? `${model.totals.defaulters} active team member(s) logged zero hours this period and are flagged as defaulters — see the Defaulters section.`
+            : 'All active team members logged time during this period.',
     ].join(' ');
     doc.text(doc.splitTextToSize(summary, 620), 56, 424);
 };
@@ -615,6 +645,64 @@ const renderDetailSection = (
     });
 };
 
+const renderDefaultersSection = (doc: jsPDF, model: ExecutiveReportModel, logos: ReturnType<typeof getReportLogoAssets>): void => {
+    addPage(doc, model, logos);
+    setFill(doc, COLORS.white);
+    doc.rect(0, 58, PAGE.width, PAGE.height - 58, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    setText(doc, COLORS.navy);
+    doc.text('Defaulters — No Time Logged', PAGE.marginX, 92);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    setText(doc, COLORS.muted);
+    doc.text('Active team members with zero logged hours during this reporting period.', PAGE.marginX, 110);
+
+    if (model.defaulters.length === 0) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        setText(doc, COLORS.text);
+        doc.text('No defaulters — every active team member logged time this period.', PAGE.marginX, 140);
+        return;
+    }
+
+    autoTable(doc, {
+        startY: tableStartY(doc, 128),
+        margin: { left: PAGE.marginX, right: PAGE.marginX, top: 72, bottom: 56 },
+        head: [['Employee', 'Email', 'Status']],
+        body: model.defaulters.map((defaulter) => [defaulter.name, defaulter.email, 'NO TIME LOGGED']),
+        theme: 'grid',
+        styles: {
+            font: 'helvetica',
+            fontSize: 9,
+            cellPadding: 6,
+            textColor: COLORS.text,
+            lineColor: '#E2E8F0',
+            lineWidth: 0.4,
+        },
+        headStyles: {
+            fillColor: COLORS.navy,
+            textColor: COLORS.white,
+            fontStyle: 'bold',
+            fontSize: 9,
+            halign: 'left',
+            cellPadding: 6,
+        },
+        alternateRowStyles: { fillColor: COLORS.light },
+        columnStyles: {
+            2: { halign: 'center' },
+        },
+        didDrawPage: () => drawHeader(doc, model, logos),
+        didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 2) {
+                data.cell.styles.fillColor = COLORS.red;
+                data.cell.styles.textColor = COLORS.white;
+                data.cell.styles.fontStyle = 'bold';
+            }
+        },
+    });
+};
+
 const renderApprovalPage = (doc: jsPDF, model: ExecutiveReportModel, logos: ReturnType<typeof getReportLogoAssets>): void => {
     addPage(doc, model, logos);
     setFill(doc, COLORS.light);
@@ -658,8 +746,8 @@ const renderApprovalPage = (doc: jsPDF, model: ExecutiveReportModel, logos: Retu
     doc.text(`Workflow: Prepared -> Reviewed -> Approved`, PAGE.marginX + 330, y + 62);
 };
 
-export const generateExecutiveReportPdf = (title: string, entries: ExecutiveReportEntry[]): ArrayBuffer => {
-    const model = buildExecutiveReportModel(title, entries);
+export const generateExecutiveReportPdf = (title: string, entries: ExecutiveReportEntry[], defaulters: DefaulterUser[] = []): ArrayBuffer => {
+    const model = buildExecutiveReportModel(title, entries, defaulters);
     const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' });
     const logos = getReportLogoAssets();
 
@@ -667,6 +755,7 @@ export const generateExecutiveReportPdf = (title: string, entries: ExecutiveRepo
     renderVisualOverview(doc, model, logos);
     renderDetailSection(doc, model, logos, 'Detailed Breakdown by Employee', model.employees, 'employee');
     renderDetailSection(doc, model, logos, 'Detailed Breakdown by Project', model.projects, 'project');
+    renderDefaultersSection(doc, model, logos);
     renderApprovalPage(doc, model, logos);
 
     const pageCount = doc.getNumberOfPages();

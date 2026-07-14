@@ -14,12 +14,19 @@ type ReportEntry = {
     status: string;
 };
 
+export type DefaulterUser = {
+    email: string;
+    first_name?: string | null;
+    last_name?: string | null;
+};
+
 type ScheduledReportRecord = {
     id: string;
     frequency: string;
     day_of_week: number | null;
     recipients: unknown;
     report_type: string;
+    organization_id: string;
 };
 
 export type ScheduledReportRunResult = {
@@ -87,9 +94,9 @@ const getReportTitle = (frequency: string, reportType: string, label: string): s
     return `${normalizedFrequency} ${normalizedType} Report - ${label}`;
 };
 
-const generateReportPdf = (title: string, entries: ReportEntry[]): ArrayBuffer => {
+const generateReportPdf = (title: string, entries: ReportEntry[], defaulters: DefaulterUser[] = []): ArrayBuffer => {
     if (env.executiveReportTemplateEnabled) {
-        return generateExecutiveReportPdf(title, entries);
+        return generateExecutiveReportPdf(title, entries, defaulters);
     }
 
     const doc = new jsPDF();
@@ -104,6 +111,10 @@ const generateReportPdf = (title: string, entries: ReportEntry[]): ArrayBuffer =
         new Date(entry.start_time).toLocaleString(),
         entry.status,
     ]);
+
+    defaulters.forEach((defaulter) => {
+        tableData.push([defaulter.email, '-', 'No time logged this period', '0.00', '-', 'DEFAULTER']);
+    });
 
     autoTable(doc, {
         startY: 30,
@@ -159,15 +170,37 @@ const sendPdfReport = async ({
     return true;
 };
 
-const fetchReportEntries = async (start: Date, end: Date, reportType: string): Promise<ReportEntry[]> => {
+const fetchReportEntries = async (
+    start: Date,
+    end: Date,
+    reportType: string,
+    organizationId?: string,
+): Promise<ReportEntry[]> => {
     return prisma.timeEntry.findMany({
         where: {
             start_time: { gte: start, lt: end },
             ...(reportType === 'billable' ? { is_billable: true } : {}),
+            ...(organizationId ? { organization_id: organizationId } : {}),
         },
         include: { user: true, project: true },
         orderBy: { start_time: 'asc' },
     }) as Promise<ReportEntry[]>;
+};
+
+const fetchDefaulters = async (
+    entries: ReportEntry[],
+    organizationId?: string,
+): Promise<DefaulterUser[]> => {
+    const activeUsers = await prisma.user.findMany({
+        where: {
+            is_active: true,
+            ...(organizationId ? { organization_id: organizationId } : {}),
+        },
+        select: { email: true, first_name: true, last_name: true },
+    });
+
+    const loggedEmails = new Set(entries.map((entry) => entry.user.email.toLowerCase()));
+    return activeUsers.filter((user) => !loggedEmails.has(user.email.toLowerCase()));
 };
 
 export const generateAndEmailDailyReport = async (): Promise<void> => {
@@ -175,8 +208,9 @@ export const generateAndEmailDailyReport = async (): Promise<void> => {
     const today = startOfDay(new Date());
     const tomorrow = addDays(today, 1);
     const entries = await fetchReportEntries(today, tomorrow, 'summary');
+    const defaulters = await fetchDefaulters(entries);
     const title = `Daily Autonomous Time Report - ${today.toLocaleDateString()}`;
-    const pdfBuffer = generateReportPdf(title, entries);
+    const pdfBuffer = generateReportPdf(title, entries, defaulters);
 
     console.log('[ReporterService] Sending PDF via Resend to admin@webforxtech.com...');
     const sent = await sendPdfReport({
@@ -231,9 +265,10 @@ export const processDueScheduledReports = async (now = new Date()): Promise<Sche
 
         try {
             const window = buildReportWindow(report.frequency, now);
-            const entries = await fetchReportEntries(window.start, window.end, report.report_type);
+            const entries = await fetchReportEntries(window.start, window.end, report.report_type, report.organization_id);
+            const defaulters = await fetchDefaulters(entries, report.organization_id);
             const title = getReportTitle(report.frequency, report.report_type, window.label);
-            const pdfBuffer = generateReportPdf(title, entries);
+            const pdfBuffer = generateReportPdf(title, entries, defaulters);
 
             await sendPdfReport({
                 to: recipients,
