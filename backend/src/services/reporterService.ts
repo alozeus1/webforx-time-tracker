@@ -203,27 +203,49 @@ const fetchDefaulters = async (
     return activeUsers.filter((user) => !loggedEmails.has(user.email.toLowerCase()));
 };
 
+// Falls back to this address for any organization that hasn't configured its
+// own recipient yet under Organization.settings.daily_report_recipient.
+const DEFAULT_DAILY_REPORT_RECIPIENT = 'admin@webforxtech.com';
+
+const resolveDailyReportRecipient = (settings: unknown): string => {
+    const raw = (settings as { daily_report_recipient?: unknown } | null | undefined)?.daily_report_recipient;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : DEFAULT_DAILY_REPORT_RECIPIENT;
+};
+
 export const generateAndEmailDailyReport = async (): Promise<void> => {
     console.log('[ReporterService] Fetching timesheets for daily summary...');
     const today = startOfDay(new Date());
     const tomorrow = addDays(today, 1);
-    const entries = await fetchReportEntries(today, tomorrow, 'summary');
-    const defaulters = await fetchDefaulters(entries);
-    const title = `Daily Autonomous Time Report - ${today.toLocaleDateString()}`;
-    const pdfBuffer = generateReportPdf(title, entries, defaulters);
 
-    console.log('[ReporterService] Sending PDF via Resend to admin@webforxtech.com...');
-    const sent = await sendPdfReport({
-        to: ['admin@webforxtech.com'],
-        subject: `Daily Hours Report - ${today.toLocaleDateString()}`,
-        html: '<p>Hello Admin,</p><p>Please find attached the automated daily timesheet summary for all engineers.</p>',
-        filename: `Report-${formatDate(today)}.pdf`,
-        pdfBuffer,
-        allowMissingProvider: true,
+    const organizations = await prisma.organization.findMany({
+        where: { status: 'active' },
+        select: { id: true, name: true, settings: true },
     });
 
-    if (sent) {
-        console.log('[ReporterService] Successfully dispatched daily report email.');
+    for (const org of organizations) {
+        const recipient = resolveDailyReportRecipient(org.settings);
+        try {
+            const entries = await fetchReportEntries(today, tomorrow, 'summary', org.id);
+            const defaulters = await fetchDefaulters(entries, org.id);
+            const title = `Daily Autonomous Time Report - ${today.toLocaleDateString()}`;
+            const pdfBuffer = generateReportPdf(title, entries, defaulters);
+
+            console.log(`[ReporterService] Sending daily report for ${org.name} to ${recipient}...`);
+            const sent = await sendPdfReport({
+                to: [recipient],
+                subject: `Daily Hours Report - ${today.toLocaleDateString()}`,
+                html: `<p>Hello,</p><p>Please find attached the automated daily timesheet summary for ${org.name}.</p>`,
+                filename: `Report-${formatDate(today)}.pdf`,
+                pdfBuffer,
+                allowMissingProvider: true,
+            });
+
+            if (sent) {
+                console.log(`[ReporterService] Successfully dispatched daily report email for ${org.name}.`);
+            }
+        } catch (error) {
+            console.error(`[ReporterService] Daily report failed for organization ${org.id} (${org.name}):`, error);
+        }
     }
 };
 
