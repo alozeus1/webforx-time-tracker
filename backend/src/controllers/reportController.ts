@@ -425,6 +425,87 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
     }
 };
 
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const parseDateOnly = (value: unknown): Date | null => {
+    if (typeof value !== 'string') return null;
+    const match = DATE_ONLY_PATTERN.exec(value.trim());
+    if (!match) return null;
+    const [, year, month, day] = match;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
+/**
+ * Single user, single day breakdown — powers the admin "pick a user, pick a
+ * day" view and the individual's own Timeline -> Reports drill-down. Managers
+ * and Admins may pass queryUserId to inspect another org member; everyone
+ * else always sees their own day regardless of what's passed.
+ */
+export const getDailyBreakdown = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            res.status(401).json({ message: 'Authenticated user is required' });
+            return;
+        }
+
+        const dayStart = parseDateOnly(req.query.date);
+        if (!dayStart) {
+            res.status(400).json({ message: 'A valid date (YYYY-MM-DD) is required' });
+            return;
+        }
+        const nextDayStart = new Date(dayStart);
+        nextDayStart.setDate(nextDayStart.getDate() + 1);
+
+        const role = req.user?.role;
+        const canViewAll = role === 'Manager' || role === 'Admin';
+        const requestedUserId = normalizeOptionalFilter(req.query.queryUserId);
+        const targetUserId = canViewAll && requestedUserId ? requestedUserId : userId;
+
+        const targetUser = await prisma.user.findFirst({
+            where: { id: targetUserId, organization_id: req.user!.organization_id },
+            select: { id: true, first_name: true, last_name: true, email: true },
+        });
+
+        if (!targetUser) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        const entries = await prisma.timeEntry.findMany({
+            where: {
+                organization_id: req.user!.organization_id,
+                user_id: targetUserId,
+                start_time: { gte: dayStart, lt: nextDayStart },
+            },
+            select: {
+                id: true,
+                task_description: true,
+                duration: true,
+                start_time: true,
+                end_time: true,
+                status: true,
+                is_billable: true,
+                project: { select: { id: true, name: true } },
+            },
+            orderBy: { start_time: 'asc' },
+        });
+
+        const totalSeconds = entries.reduce((sum, entry) => sum + entry.duration, 0);
+
+        res.status(200).json({
+            date: (req.query.date as string).trim(),
+            user: targetUser,
+            entries,
+            totalSeconds,
+        });
+    } catch (error) {
+        console.error('Failed to load daily breakdown:', error);
+        res.status(500).json({ message: 'Internal server error while loading daily breakdown' });
+    }
+};
+
 export const getOperationsDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const insights = await getOperationsInsights(req.user!.organization_id);

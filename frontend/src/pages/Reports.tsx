@@ -3,7 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import type { PieLabelRenderProps } from 'recharts';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
-import type { TimeEntrySummary, AnalyticsDashboardResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
+import type { TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
@@ -16,6 +16,30 @@ const formatHoursText = (hours: number) => {
 };
 
 const formatSecondsText = (seconds: number) => formatHoursText(seconds / 3600);
+
+const parseDateInputValue = (value: string): Date => {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, (month || 1) - 1, day || 1);
+};
+
+const toDateInputValue = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const getStartOfWeek = (date: Date): Date => {
+    const value = new Date(date);
+    value.setHours(0, 0, 0, 0);
+    const day = value.getDay();
+    const diff = (day + 6) % 7; // Monday-start week
+    value.setDate(value.getDate() - diff);
+    return value;
+};
+
+const formatDayLabel = (date: Date): string =>
+    date.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 
 const formatStopReason = (reason?: string | null) => {
     if (!reason) return null;
@@ -41,6 +65,7 @@ const Reports: React.FC = () => {
     const initialProjectId = searchParams.get('projectId') || 'all';
     const initialQueryUserId = searchParams.get('queryUserId') || 'all';
     const initialTeamName = searchParams.get('teamName') || 'all';
+    const initialFocusDate = searchParams.get('focusDate') || '';
 
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
     const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
@@ -51,6 +76,11 @@ const Reports: React.FC = () => {
     const [projectId, setProjectId] = useState(initialProjectId);
     const [queryUserId, setQueryUserId] = useState(initialQueryUserId);
     const [teamName, setTeamName] = useState(initialTeamName);
+
+    // Daily breakdown (pick a user + a specific day)
+    const [focusDate, setFocusDate] = useState(initialFocusDate);
+    const [dailyBreakdown, setDailyBreakdown] = useState<DailyBreakdownResponse | null>(null);
+    const [dailyLoading, setDailyLoading] = useState(false);
 
     // Dropdown Data
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
@@ -129,14 +159,53 @@ const Reports: React.FC = () => {
         if (projectId !== 'all') nextParams.set('projectId', projectId);
         if (queryUserId !== 'all') nextParams.set('queryUserId', queryUserId);
         if (teamName !== 'all') nextParams.set('teamName', teamName);
-        const focusDate = searchParams.get('focusDate');
-        const source = searchParams.get('source');
         if (focusDate) nextParams.set('focusDate', focusDate);
+        const source = searchParams.get('source');
         if (source) nextParams.set('source', source);
         setSearchParams(nextParams, { replace: true });
         // Intentionally keep this effect driven by active filters only.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [projectId, queryUserId, range, teamName, setSearchParams]);
+    }, [projectId, queryUserId, range, teamName, focusDate, setSearchParams]);
+
+    // A specific user must be selected before an admin/manager can drill into
+    // a single day; individual contributors always see their own day.
+    const canShowDailyBreakdown = !canReviewApprovals || queryUserId !== 'all';
+
+    const fetchDailyBreakdown = useCallback(async () => {
+        if (!focusDate || !canShowDailyBreakdown) {
+            setDailyBreakdown(null);
+            return;
+        }
+        setDailyLoading(true);
+        try {
+            const res = await api.get<DailyBreakdownResponse>('/reports/day', {
+                params: {
+                    date: focusDate,
+                    ...(canReviewApprovals && queryUserId !== 'all' ? { queryUserId } : {}),
+                },
+            });
+            setDailyBreakdown(res.data);
+        } catch (error) {
+            console.error('Failed to fetch daily breakdown:', error);
+            setDailyBreakdown(null);
+        } finally {
+            setDailyLoading(false);
+        }
+    }, [focusDate, canShowDailyBreakdown, canReviewApprovals, queryUserId]);
+
+    useEffect(() => {
+        void fetchDailyBreakdown();
+    }, [fetchDailyBreakdown]);
+
+    const calendarWeekDays = useMemo(() => {
+        const anchor = focusDate ? parseDateInputValue(focusDate) : new Date();
+        const weekStart = getStartOfWeek(anchor);
+        return Array.from({ length: 7 }, (_, index) => {
+            const next = new Date(weekStart);
+            next.setDate(weekStart.getDate() + index);
+            return next;
+        });
+    }, [focusDate]);
 
     const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
         try {
@@ -257,8 +326,111 @@ const Reports: React.FC = () => {
                             <option value="30d">Last 30 Days</option>
                             <option value="90d">Last 90 Days</option>
                         </select>
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="date"
+                                value={focusDate}
+                                onChange={(e) => setFocusDate(e.target.value)}
+                                className={pillSelectClass}
+                                aria-label="Pick a day to see its breakdown"
+                            />
+                            {focusDate && (
+                                <button
+                                    type="button"
+                                    onClick={() => setFocusDate('')}
+                                    className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+                                    title="Clear selected day"
+                                >
+                                    <span className="material-symbols-outlined text-lg">close</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
+                    {canReviewApprovals && queryUserId === 'all' && focusDate && (
+                        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                            Select a specific user above to see their day-by-day breakdown for {focusDate}.
+                        </p>
+                    )}
                 </div>
+
+                {/* Daily Breakdown — pick a user (admin/manager) or view your own day, then pick a day */}
+                {focusDate && canShowDailyBreakdown && (
+                    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h4 className="font-bold text-slate-900 dark:text-white">Daily Breakdown</h4>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    {dailyBreakdown?.user
+                                        ? `${dailyBreakdown.user.first_name} ${dailyBreakdown.user.last_name} — ${formatDayLabel(parseDateInputValue(focusDate))}`
+                                        : formatDayLabel(parseDateInputValue(focusDate))}
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1 text-center">
+                                {calendarWeekDays.map((day) => {
+                                    const dayValue = toDateInputValue(day);
+                                    const isSelected = dayValue === focusDate;
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={dayValue}
+                                            onClick={() => setFocusDate(dayValue)}
+                                            className={`text-xs px-2 py-1.5 rounded-lg transition-colors ${isSelected ? 'bg-primary text-white font-bold' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300'}`}
+                                            title={formatDayLabel(day)}
+                                        >
+                                            <div className="text-[10px] uppercase opacity-70">{day.toLocaleDateString([], { weekday: 'short' }).slice(0, 2)}</div>
+                                            <div>{day.getDate()}</div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {dailyLoading ? (
+                            <div className="px-6 py-10 text-center text-slate-400 text-sm">Loading day...</div>
+                        ) : !dailyBreakdown || dailyBreakdown.entries.length === 0 ? (
+                            <div className="px-6 py-10 text-center">
+                                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No time logged this day.</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {dailyBreakdown?.user ? `${dailyBreakdown.user.first_name} ${dailyBreakdown.user.last_name} did not log any hours on this date.` : 'Nothing logged for this date.'}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead className="bg-slate-50 dark:bg-slate-900/50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Task</th>
+                                            <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Project</th>
+                                            <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Duration</th>
+                                            <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                        {dailyBreakdown.entries.map((entry) => (
+                                            <tr key={entry.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-slate-200">{entry.task_description}</td>
+                                                <td className="px-6 py-4 text-sm text-slate-500">{entry.project?.name || 'Unassigned'}</td>
+                                                <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">{formatSecondsText(entry.duration)}</td>
+                                                <td className="px-6 py-4">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 capitalize">
+                                                        {entry.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="bg-slate-50 dark:bg-slate-900/50">
+                                            <td colSpan={2} className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Total</td>
+                                            <td className="px-6 py-3 text-sm font-bold text-slate-900 dark:text-white">{formatSecondsText(dailyBreakdown.totalSeconds)}</td>
+                                            <td />
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {isLoading && !analytics ? (
                     <div className="flex justify-center items-center py-20 text-slate-400">Loading analytics...</div>

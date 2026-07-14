@@ -101,6 +101,24 @@ export interface TimeEntrySummary {
     project?: ProjectReference | null;
 }
 
+export interface DailyEntry {
+    id: string;
+    task_description: string;
+    duration: number;
+    start_time: string;
+    end_time: string;
+    status: string;
+    is_billable?: boolean;
+    project?: ProjectReference | null;
+}
+
+export interface DailyBreakdownResponse {
+    date: string;
+    user: { id: string; first_name: string; last_name: string; email: string } | null;
+    entries: DailyEntry[];
+    totalSeconds: number;
+}
+
 export interface ActiveTimerSummary {
     id: string;
     project_id?: string | null;
