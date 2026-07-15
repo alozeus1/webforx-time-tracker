@@ -29,8 +29,9 @@ jest.mock('../src/config/db', () => ({
 import prisma from '../src/config/db';
 
 const JWT_SECRET = 'test-jwt-secret';
+const TEST_ORG_ID = 'org-1';
 const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role }, JWT_SECRET);
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: TEST_ORG_ID }, JWT_SECRET);
 
 const adminToken = makeToken('user-admin-1', 'Admin');
 const managerToken = makeToken('user-mgr-1', 'Manager');
@@ -183,7 +184,7 @@ describe('DELETE /api/v1/admin/notifications/:notificationId', () => {
 
         expect(res.status).toBe(200);
         expect(prisma.notification.update).toHaveBeenCalledWith(expect.objectContaining({
-            where: { id: 'notif-1' },
+            where: expect.objectContaining({ id: 'notif-1' }),
             data: expect.objectContaining({
                 deleted_at: expect.any(Date),
                 is_read: true,

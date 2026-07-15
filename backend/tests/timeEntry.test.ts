@@ -44,6 +44,13 @@ jest.mock('../src/config/db', () => ({
         },
         notification: {
             create: jest.fn(),
+            createMany: jest.fn(),
+        },
+        organization: {
+            findUnique: jest.fn(),
+        },
+        payrollPeriod: {
+            findFirst: jest.fn(),
         },
         webhookSubscription: {
             findMany: jest.fn().mockResolvedValue([]),
@@ -51,6 +58,7 @@ jest.mock('../src/config/db', () => ({
         user: {
             findFirst: jest.fn(),
             findUnique: jest.fn(),
+            findMany: jest.fn(),
         },
         // $transaction executes the callback synchronously with a tx object
         $transaction: jest.fn(),
@@ -109,7 +117,31 @@ beforeEach(() => {
     jest.clearAllMocks();
     (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
     (prisma.notification.create as jest.Mock).mockResolvedValue({});
+    (prisma.notification.createMany as jest.Mock).mockResolvedValue({ count: 0 });
+    (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
+    (prisma.payrollPeriod.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.timerPolicyConfig.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ organization_id: TEST_ORG_ID });
+    (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+        const tx = {
+            activeTimer: {
+                delete: (...args: unknown[]) => (prisma.activeTimer.delete as jest.Mock)(...args),
+                update: (...args: unknown[]) => (prisma.activeTimer.update as jest.Mock)(...args),
+            },
+            notification: {
+                create: (...args: unknown[]) => (prisma.notification.create as jest.Mock)(...args),
+            },
+            timeEntry: {
+                create: (...args: unknown[]) => (prisma.timeEntry.create as jest.Mock)(...args),
+                update: (...args: unknown[]) => (prisma.timeEntry.update as jest.Mock)(...args),
+            },
+            timeEntryTag: {
+                createMany: (...args: unknown[]) => (prisma.timeEntryTag.createMany as jest.Mock)(...args),
+            },
+        };
+        return fn(tx);
+    });
 });
 
 // ─── startTimer ────────────────────────────────────────────────────────────
@@ -579,7 +611,7 @@ describe('Timer correction requests', () => {
         }));
     });
 
-    it('supports the singular correction route as a compatibility alias', async () => {
+    it('does not register the removed singular correction route', async () => {
         const res = await request(app)
             .post('/api/v1/timers/correction')
             .set('Authorization', `Bearer ${employeeToken}`)
@@ -589,8 +621,8 @@ describe('Timer correction requests', () => {
                 reason: 'Timer paused while working',
             });
 
-        expect(res.status).toBe(201);
-        expect(prisma.timerCorrectionRequest.create).toHaveBeenCalled();
+        expect(res.status).toBe(404);
+        expect(prisma.timerCorrectionRequest.create).not.toHaveBeenCalled();
     });
 
     it('allows a user to view only their correction requests', async () => {

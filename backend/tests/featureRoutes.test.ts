@@ -11,6 +11,7 @@ jest.mock('../src/config/db', () => ({
     default: {
         invoice: {
             findMany: jest.fn(),
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
@@ -23,6 +24,7 @@ jest.mock('../src/config/db', () => ({
         },
         projectTemplate: {
             findMany: jest.fn(),
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
             create: jest.fn(),
             delete: jest.fn(),
@@ -49,8 +51,9 @@ jest.mock('../src/config/db', () => ({
 import prisma from '../src/config/db';
 
 const JWT_SECRET = 'test-jwt-secret';
-const managerToken = jwt.sign({ userId: 'user-mgr', email: 'mgr@test.com', role: 'Manager' }, JWT_SECRET);
-const adminToken = jwt.sign({ userId: 'user-admin', email: 'admin@test.com', role: 'Admin' }, JWT_SECRET);
+const TEST_ORG_ID = 'org-1';
+const managerToken = jwt.sign({ userId: 'user-mgr', email: 'mgr@test.com', role: 'Manager', organization_id: TEST_ORG_ID }, JWT_SECRET);
+const adminToken = jwt.sign({ userId: 'user-admin', email: 'admin@test.com', role: 'Admin', organization_id: TEST_ORG_ID }, JWT_SECRET);
 
 const app = express();
 app.use(express.json());
@@ -86,7 +89,19 @@ beforeEach(() => {
         line_items: [],
         project: null,
     });
+    (prisma.invoice.findFirst as jest.Mock).mockResolvedValue({
+        id: 'inv-1',
+        invoice_number: 'INV-20260101-1001',
+        client_name: 'Acme Corp',
+        status: 'draft',
+        subtotal: 120,
+        tax_rate: 10,
+        total: 132,
+        line_items: [],
+        project: null,
+    });
 
+    (prisma.projectTemplate.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.projectTemplate.findUnique as jest.Mock).mockResolvedValue(null);
     (prisma.project.findUnique as jest.Mock).mockResolvedValue(null);
     (prisma.projectTemplate.create as jest.Mock).mockResolvedValue({ id: 'tpl-1', name: 'Template A' });

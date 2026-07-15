@@ -8,6 +8,7 @@ jest.mock('../src/config/db', () => ({
     default: {
         project: {
             findMany: jest.fn(),
+            findFirst: jest.fn(),
             findUnique: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
@@ -21,8 +22,9 @@ jest.mock('../src/config/db', () => ({
 import prisma from '../src/config/db';
 
 const JWT_SECRET = 'test-jwt-secret';
+const TEST_ORG_ID = 'org-1';
 const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role }, JWT_SECRET);
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: TEST_ORG_ID }, JWT_SECRET);
 
 const adminToken = makeToken('user-admin-1', 'Admin');
 const employeeToken = makeToken('user-emp-1', 'Employee');
@@ -49,6 +51,7 @@ const mockProject = {
 beforeEach(() => {
     jest.clearAllMocks();
     (prisma.auditLog.create as jest.Mock).mockResolvedValue({});
+    (prisma.project.findFirst as jest.Mock).mockResolvedValue(null);
 });
 
 // ─── getAllProjects ──────────────────────────────────────────────────────────
@@ -89,7 +92,7 @@ describe('GET /api/v1/projects', () => {
 
 describe('POST /api/v1/projects', () => {
     it('admin can create project and returns 201', async () => {
-        (prisma.project.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(null);
         (prisma.project.create as jest.Mock).mockResolvedValue({
             id: 'proj-2',
             name: 'New Project',
@@ -111,7 +114,7 @@ describe('POST /api/v1/projects', () => {
     });
 
     it('returns 400 when project name already exists', async () => {
-        (prisma.project.findUnique as jest.Mock).mockResolvedValue(mockProject);
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(mockProject);
 
         const res = await request(app)
             .post('/api/v1/projects')
@@ -137,6 +140,7 @@ describe('POST /api/v1/projects', () => {
 describe('PUT /api/v1/projects/:id', () => {
     it('returns 200 with updated project on success', async () => {
         const updatedProject = { ...mockProject, description: 'Updated description' };
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(mockProject);
         (prisma.project.update as jest.Mock).mockResolvedValue(updatedProject);
 
         const res = await request(app)
@@ -149,6 +153,8 @@ describe('PUT /api/v1/projects/:id', () => {
     });
 
     it('returns 400 when no valid fields provided', async () => {
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(mockProject);
+
         const res = await request(app)
             .put('/api/v1/projects/proj-1')
             .set('Authorization', `Bearer ${adminToken}`)
@@ -163,6 +169,7 @@ describe('PUT /api/v1/projects/:id', () => {
 
 describe('DELETE /api/v1/projects/:id', () => {
     it('returns 200 and soft-deletes the project', async () => {
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(mockProject);
         (prisma.project.update as jest.Mock).mockResolvedValue({
             ...mockProject,
             is_active: false,
