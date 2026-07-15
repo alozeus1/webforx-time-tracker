@@ -80,7 +80,7 @@ describe('HelpChatbot', () => {
         await ask(user, 'How do I mark someone as an intern');
 
         await waitFor(() => {
-            expect(screen.getByText(/employment type/i)).toBeInTheDocument();
+            expect(screen.getByText(/Every member has an EMPLOYMENT TYPE/i)).toBeInTheDocument();
             expect(screen.getByText(/minimum weekly-hours/i)).toBeInTheDocument();
         });
     });

@@ -29,7 +29,8 @@ const HelpChatbot: React.FC = () => {
 
     const addMsg = useCallback((from: 'bot' | 'user', text: string, options?: HelpMenuOption[]) => {
         idRef.current += 1;
-        setMessages(prev => [...prev, { id: idRef.current, from, text, options }]);
+        const id = idRef.current;
+        setMessages(prev => [...prev, { id, from, text, options }]);
     }, []);
 
     // Hide manager/admin follow-up links from Employees so they aren't pointed
