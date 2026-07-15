@@ -99,6 +99,15 @@ const Reports: React.FC = () => {
         return Array.from(values).sort((a, b) => a.localeCompare(b));
     }, [managedTeams, users]);
 
+    // Alphabetical user list for the filter dropdown (by full name, then email).
+    const sortedUsers = useMemo(
+        () => [...users].sort((a, b) =>
+            `${a.first_name} ${a.last_name}`.localeCompare(`${b.first_name} ${b.last_name}`, undefined, { sensitivity: 'base' })
+            || (a.email || '').localeCompare(b.email || '')
+        ),
+        [users],
+    );
+
     async function fetchApprovals() {
         try {
             const res = await api.get<{ entries: TimeEntrySummary[] }>('/timers/approvals');
@@ -287,7 +296,7 @@ const Reports: React.FC = () => {
                                 className={pillSelectClass}
                             >
                                 <option value="all">User: All</option>
-                                {users.map(u => (
+                                {sortedUsers.map(u => (
                                     <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
                                 ))}
                             </select>

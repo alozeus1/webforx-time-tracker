@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { CalendarDays, Plus, X, CheckCircle2, XCircle, Clock3, ChevronDown, ChevronUp, History } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { CalendarDays, Plus, X, CheckCircle2, XCircle, Clock3, ChevronDown, ChevronUp, History, Download, Search } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import { hasAnyRole } from '../utils/session';
 import { usePageMetadata } from '../hooks/usePageMetadata';
@@ -62,6 +62,22 @@ const fmtDateTime = (d: string) =>
         day: '2-digit', month: 'short', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
     });
+
+// Local calendar date as YYYY-MM-DD. Using local components (not toISOString,
+// which is UTC) keeps "on leave now" and CSV dates consistent with what the
+// page displays via toLocaleDateString — avoids off-by-one for non-UTC users.
+const ymd = (d: string | Date): string => {
+    const x = new Date(d);
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+};
+
+// "Currently on leave" = an approved request whose date range includes today.
+// Compared as YYYY-MM-DD strings so it is timezone-stable.
+const isOnLeaveNow = (r: { status: string; start_date: string; end_date: string }): boolean => {
+    if (r.status !== 'approved') return false;
+    const today = ymd(new Date());
+    return ymd(r.start_date) <= today && today <= ymd(r.end_date);
+};
 
 // ─── Status Timeline ─────────────────────────────────────────────────────────
 
@@ -142,6 +158,63 @@ const Leave: React.FC = () => {
     const [reviewingId, setReviewingId] = useState<string | null>(null);
     const [reviewNote, setReviewNote] = useState('');
     const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    // Team-list (manager) filters
+    const [teamStatus, setTeamStatus] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+    const [teamType, setTeamType] = useState('all');
+    const [onLeaveNow, setOnLeaveNow] = useState(false);
+    const [teamSearch, setTeamSearch] = useState('');
+
+    const filteredTeam = useMemo(() => {
+        const q = teamSearch.trim().toLowerCase();
+        return allRequests
+            .filter((r) => teamStatus === 'all' || r.status === teamStatus)
+            .filter((r) => teamType === 'all' || r.leave_type === teamType)
+            .filter((r) => !onLeaveNow || isOnLeaveNow(r))
+            .filter((r) => {
+                if (!q) return true;
+                const name = `${r.user?.first_name ?? ''} ${r.user?.last_name ?? ''}`.toLowerCase();
+                return name.includes(q) || (r.user?.email ?? '').toLowerCase().includes(q);
+            })
+            .sort((a, b) => {
+                const nameA = `${a.user?.first_name ?? ''} ${a.user?.last_name ?? ''}`.trim();
+                const nameB = `${b.user?.first_name ?? ''} ${b.user?.last_name ?? ''}`.trim();
+                return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' })
+                    || new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
+            });
+    }, [allRequests, teamStatus, teamType, onLeaveNow, teamSearch]);
+
+    const onLeaveNowCount = useMemo(() => allRequests.filter(isOnLeaveNow).length, [allRequests]);
+
+    const exportTeamCsv = () => {
+        const header = ['Name', 'Email', 'Leave Type', 'Start', 'End', 'Working Days', 'Status', 'On Leave Now', 'Reason', 'Reviewed By', 'Submitted'];
+        const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [header.join(',')];
+        filteredTeam.forEach((r) => {
+            lines.push([
+                `${r.user?.first_name ?? ''} ${r.user?.last_name ?? ''}`.trim(),
+                r.user?.email ?? '',
+                r.leave_type.replace('_', ' '),
+                ymd(r.start_date),
+                ymd(r.end_date),
+                Number(r.days),
+                r.status,
+                isOnLeaveNow(r) ? 'Yes' : 'No',
+                r.reason ?? '',
+                r.reviewer ? `${r.reviewer.first_name} ${r.reviewer.last_name}` : '',
+                ymd(r.created_at),
+            ].map(esc).join(','));
+        });
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `leave-list-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     // Form state
     const [leaveType, setLeaveType] = useState('annual');
@@ -400,14 +473,61 @@ const Leave: React.FC = () => {
                 {/* Team Requests — Manager/Admin only */}
                 {isManager && activeView === 'team' && (
                     <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50">
-                            <h3 className="font-bold text-slate-900 dark:text-white">Team Leave Requests</h3>
+                        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <div>
+                                    <h3 className="font-bold text-slate-900 dark:text-white">Team Leave Requests</h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">
+                                        <strong className="text-emerald-600">{onLeaveNowCount}</strong> currently on leave · {filteredTeam.length} shown
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={exportTeamCsv}
+                                    disabled={filteredTeam.length === 0}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Download the currently filtered list as CSV"
+                                >
+                                    <Download size={15} /> Export CSV
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={teamSearch}
+                                        onChange={e => setTeamSearch(e.target.value)}
+                                        placeholder="Search name or email…"
+                                        className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary w-56"
+                                    />
+                                </div>
+                                <select value={teamStatus} onChange={e => setTeamStatus(e.target.value as typeof teamStatus)} className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                    <option value="all">Status: All</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="approved">Approved</option>
+                                    <option value="rejected">Rejected</option>
+                                </select>
+                                <select value={teamType} onChange={e => setTeamType(e.target.value)} className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                    <option value="all">Type: All</option>
+                                    {LEAVE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setOnLeaveNow(v => !v)}
+                                    className={`px-3 py-2 rounded-lg text-sm font-bold border transition-colors ${onLeaveNow ? 'bg-primary text-white border-primary' : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                                >
+                                    On leave now
+                                </button>
+                            </div>
                         </div>
                         {allRequests.length === 0 ? (
                             <p className="px-6 py-10 text-center text-slate-400 text-sm">No requests in the organisation yet.</p>
+                        ) : filteredTeam.length === 0 ? (
+                            <p className="px-6 py-10 text-center text-slate-400 text-sm">No requests match the current filters.</p>
                         ) : (
                             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {allRequests.map(r => {
+                                {filteredTeam.map(r => {
                                     const isExpanded = expandedId === r.id;
                                     return (
                                         <div key={r.id} className="px-6 py-4">
