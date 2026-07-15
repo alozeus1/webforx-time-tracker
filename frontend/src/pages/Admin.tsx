@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Plus, X, Lock, Unlock, Shield, Globe, Palette, TrendingUp, AlertTriangle, CheckCircle2, CircleDashed, Pencil, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, X, Lock, Unlock, Shield, Globe, Palette, TrendingUp, AlertTriangle, CheckCircle2, CircleDashed, Pencil, ChevronLeft, ChevronRight, Download, Search } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
@@ -133,8 +133,13 @@ const Admin: React.FC = () => {
     const [users, setUsers] = useState<UserSummary[]>([]);
     const [integrations, setIntegrations] = useState<IntegrationSummary[]>([]);
     const [auditLogs, setAuditLogs] = useState<AuditLogSummary[]>([]);
+    const [auditSearch, setAuditSearch] = useState('');
+    const [auditSource, setAuditSource] = useState<'all' | 'audit' | 'auth'>('all');
+    const [auditOutcome, setAuditOutcome] = useState<'all' | 'success' | 'failure'>('all');
     const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
     const [corrections, setCorrections] = useState<TimerCorrectionRequestSummary[]>([]);
+    const [correctionSearch, setCorrectionSearch] = useState('');
+    const [correctionStatus, setCorrectionStatus] = useState<'all' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'>('all');
     const tabStripRef = useRef<HTMLDivElement | null>(null);
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
@@ -270,6 +275,52 @@ const Admin: React.FC = () => {
         }
     }
 
+    const filteredAuditLogs = useMemo(() => {
+        const q = auditSearch.trim().toLowerCase();
+        return auditLogs.filter((log) => {
+            if (auditSource !== 'all' && log.source !== auditSource) return false;
+            if (auditOutcome !== 'all' && (log.outcome || '').toLowerCase() !== auditOutcome) return false;
+            if (!q) return true;
+            const haystack = [
+                getAuditUserPrimary(log),
+                getAuditUserSecondary(log) || '',
+                getAuditActionLabel(log),
+                log.action,
+                log.resource || '',
+                getAuditDetails(log).headline,
+                log.reason || '',
+            ].join(' ').toLowerCase();
+            return haystack.includes(q);
+        });
+    }, [auditLogs, auditSearch, auditSource, auditOutcome]);
+
+    const exportAuditCsv = () => {
+        const header = ['Timestamp', 'Source', 'User', 'Email', 'Action', 'Outcome', 'Reason', 'Details'];
+        const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [header.join(',')];
+        filteredAuditLogs.forEach((log) => {
+            lines.push([
+                new Date(log.created_at).toISOString(),
+                log.source === 'auth' ? 'Auth Event' : 'Audit Log',
+                getAuditUserPrimary(log),
+                log.email || log.user?.email || '',
+                getAuditActionLabel(log),
+                log.outcome || '',
+                log.reason || '',
+                getAuditDetails(log).headline,
+            ].map(esc).join(','));
+        });
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     async function fetchNotifications() {
         try {
             const res = await api.get<{ notifications: NotificationSummary[] }>('/admin/notifications');
@@ -287,6 +338,46 @@ const Admin: React.FC = () => {
             console.error('Error fetching correction requests:', error);
         }
     }
+
+    const filteredCorrections = useMemo(() => {
+        const q = correctionSearch.trim().toLowerCase();
+        return corrections.filter((c) => {
+            if (correctionStatus !== 'all' && c.status !== correctionStatus) return false;
+            if (!q) return true;
+            const name = `${c.user?.first_name ?? ''} ${c.user?.last_name ?? ''}`.toLowerCase();
+            return name.includes(q)
+                || (c.user?.email ?? '').toLowerCase().includes(q)
+                || (c.reason ?? '').toLowerCase().includes(q);
+        });
+    }, [corrections, correctionSearch, correctionStatus]);
+
+    const exportCorrectionsCsv = () => {
+        const header = ['Submitted', 'User', 'Email', 'Requested Start', 'Requested End', 'Duration (h)', 'Reason', 'Status', 'Reviewer Note'];
+        const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const lines = [header.join(',')];
+        filteredCorrections.forEach((c) => {
+            lines.push([
+                new Date(c.created_at).toISOString(),
+                `${c.user?.first_name ?? ''} ${c.user?.last_name ?? ''}`.trim() || c.user_id,
+                c.user?.email ?? '',
+                new Date(c.requested_start_time).toISOString(),
+                new Date(c.requested_end_time).toISOString(),
+                (c.requested_duration_seconds / 3600).toFixed(2),
+                c.reason ?? '',
+                c.status,
+                c.reviewer_note ?? '',
+            ].map(esc).join(','));
+        });
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `correction-requests-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
 
     async function fetchTimerPolicy() {
         try {
@@ -1576,10 +1667,79 @@ const Admin: React.FC = () => {
                 {/* ═══════════ ORIGINAL TABLE (legacy tabs) ═══════════ */}
                 {!['payroll', 'bots', 'compliance', 'branding', 'budgets'].includes(activeTab) && (
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
-                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                    <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center gap-3 flex-wrap bg-slate-50/50 dark:bg-slate-900/50">
                         <h3 className="font-bold text-slate-900 dark:text-white capitalize">
                             {activeTab === 'audit' ? 'System Audit Logs' : `${activeTab} Directory`}
+                            {activeTab === 'audit' && (
+                                <span className="ml-2 text-xs font-semibold text-slate-400">{filteredAuditLogs.length} shown</span>
+                            )}
+                            {activeTab === 'corrections' && (
+                                <span className="ml-2 text-xs font-semibold text-slate-400">{filteredCorrections.length} shown</span>
+                            )}
                         </h3>
+                        {activeTab === 'audit' && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={auditSearch}
+                                        onChange={e => setAuditSearch(e.target.value)}
+                                        placeholder="Search user, action, details…"
+                                        className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary w-60"
+                                    />
+                                </div>
+                                <select value={auditSource} onChange={e => setAuditSource(e.target.value as typeof auditSource)} className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                    <option value="all">Source: All</option>
+                                    <option value="audit">Audit Log</option>
+                                    <option value="auth">Auth Event</option>
+                                </select>
+                                <select value={auditOutcome} onChange={e => setAuditOutcome(e.target.value as typeof auditOutcome)} className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                    <option value="all">Outcome: All</option>
+                                    <option value="success">Success</option>
+                                    <option value="failure">Failure</option>
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={exportAuditCsv}
+                                    disabled={filteredAuditLogs.length === 0}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Download the currently filtered audit logs as CSV"
+                                >
+                                    <Download size={15} /> Export CSV
+                                </button>
+                            </div>
+                        )}
+                        {activeTab === 'corrections' && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                        type="text"
+                                        value={correctionSearch}
+                                        onChange={e => setCorrectionSearch(e.target.value)}
+                                        placeholder="Search user or reason…"
+                                        className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary w-56"
+                                    />
+                                </div>
+                                <select value={correctionStatus} onChange={e => setCorrectionStatus(e.target.value as typeof correctionStatus)} className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30">
+                                    <option value="all">Status: All</option>
+                                    <option value="PENDING">Pending</option>
+                                    <option value="APPROVED">Approved</option>
+                                    <option value="REJECTED">Rejected</option>
+                                    <option value="CANCELLED">Cancelled</option>
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={exportCorrectionsCsv}
+                                    disabled={filteredCorrections.length === 0}
+                                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Download the currently filtered correction requests as CSV"
+                                >
+                                    <Download size={15} /> Export CSV
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="overflow-x-auto">
@@ -1834,7 +1994,9 @@ const Admin: React.FC = () => {
                                 )))}
                                 {activeTab === 'audit' && (auditLogs.length === 0 ? (
                                     <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">No audit logs found.</td></tr>
-                                ) : auditLogs.map((log) => (
+                                ) : filteredAuditLogs.length === 0 ? (
+                                    <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">No audit logs match the current filters.</td></tr>
+                                ) : filteredAuditLogs.map((log) => (
                                     <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                         <td className="px-6 py-4 text-sm text-slate-500">{new Date(log.created_at).toLocaleString()}</td>
                                         <td className="px-6 py-4">
@@ -1904,7 +2066,9 @@ const Admin: React.FC = () => {
                                 )))}
                                 {activeTab === 'corrections' && (corrections.length === 0 ? (
                                     <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests found.</td></tr>
-                                ) : corrections.map((correction) => (
+                                ) : filteredCorrections.length === 0 ? (
+                                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests match the current filters.</td></tr>
+                                ) : filteredCorrections.map((correction) => (
                                     <tr key={correction.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                                         <td className="px-6 py-4 text-sm text-slate-500">{new Date(correction.created_at).toLocaleString()}</td>
                                         <td className="px-6 py-4 text-sm font-semibold dark:text-slate-200">

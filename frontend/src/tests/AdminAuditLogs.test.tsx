@@ -113,10 +113,10 @@ describe('Admin audit logs', () => {
         );
 
         await waitFor(() => {
-            expect(screen.getByText('Auth Event')).toBeInTheDocument();
+            expect(screen.getAllByText('Auth Event').some((node) => node.tagName.toLowerCase() === 'span')).toBe(true);
             expect(screen.getByText('Login attempt')).toBeInTheDocument();
             expect(screen.getByText('Entered the wrong password for this account.')).toBeInTheDocument();
-            expect(screen.getByText('Audit Log')).toBeInTheDocument();
+            expect(screen.getAllByText('Audit Log').some((node) => node.tagName.toLowerCase() === 'span')).toBe(true);
             expect(screen.getByText('Project Archive')).toBeInTheDocument();
         });
     });
