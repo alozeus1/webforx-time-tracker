@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { createEmptyOperationsInsights, getOperationsInsights } from '../services/opsInsightsService';
+import { getOrgEmploymentHours, resolveMinWeeklyHours } from '../services/employmentService';
 
 const formatHoursMetric = (hours: number) => {
     if (hours > 0 && hours < 0.1) {
@@ -144,12 +145,17 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                         last_name: true,
                         hourly_rate: true,
                         team_name: true,
+                        employment_type: true,
+                        min_weekly_hours: true,
                         role: { select: { name: true } },
                     },
                 },
                 project: { select: { id: true, name: true } }
             }
         });
+
+        // Employment-type-driven minimum-hours targets for under-hours flagging.
+        const orgEmploymentHours = await getOrgEmploymentHours(req.user!.organization_id);
 
         // Compute Metric Cards
         let totalDurationSec = 0;
@@ -265,6 +271,8 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                     name: `${entry.user.first_name} ${entry.user.last_name}`,
                     teamName: entry.user.team_name || 'Unassigned',
                     role: entry.user.role?.name || 'Employee',
+                    employmentType: entry.user.employment_type ?? null,
+                    minWeeklyHours: resolveMinWeeklyHours(entry.user, orgEmploymentHours),
                     initials: `${entry.user.first_name[0]}${entry.user.last_name[0]}`,
                     totalHours: 0,
                     approvedSec: 0,
@@ -296,11 +304,20 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 }
             }
             const efficiency = maxUserHours > 0 ? Math.round((u.totalHours / maxUserHours) * 100) : 0;
+            // Expected hours scale the employment-type weekly minimum across the
+            // selected period. Under-hours is judged per classification, so an
+            // intern is measured at the intern target — not a blanket 40h.
+            const expectedHours = Number((u.minWeeklyHours * weekCount).toFixed(1));
+            const belowMinimum = u.totalHours + 1e-6 < expectedHours;
             return {
                 id: u.id,
                 name: u.name,
                 role: u.role,
                 teamName: u.teamName,
+                employmentType: u.employmentType,
+                minWeeklyHours: u.minWeeklyHours,
+                expectedHours,
+                belowMinimum,
                 initials: u.initials,
                 primaryProject,
                 totalHours: formatHoursMetric(u.totalHours),

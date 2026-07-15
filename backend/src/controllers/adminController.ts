@@ -3,6 +3,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { getGlobalTimerPolicy, normalizeTimerPolicy, validateTimerPolicy } from '../services/timerPolicyService';
 import { resolvePasswordPolicy } from '../services/passwordPolicyService';
+import { EMPLOYMENT_TYPES, resolveEmploymentHours } from '../services/employmentService';
 
 // ---------------------------------------------------------------------------
 // GET /admin/org-settings  — returns compliance_mode + time_rounding + password_policy + daily_report_recipient
@@ -20,6 +21,7 @@ export const getOrgSettings = async (req: AuthRequest, res: Response): Promise<v
             time_rounding: (settings.time_rounding as { increment: number; direction: string } | null) ?? null,
             password_policy: resolvePasswordPolicy(settings),
             daily_report_recipient: (settings.daily_report_recipient as string) ?? null,
+            employment_hours: resolveEmploymentHours(settings),
         });
     } catch (error) {
         console.error('[admin] getOrgSettings error:', error);
@@ -33,7 +35,27 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
         const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
         const current = (org?.settings as Record<string, unknown>) ?? {};
 
-        const { compliance_mode, time_rounding, password_policy, daily_report_recipient } = req.body ?? {};
+        const { compliance_mode, time_rounding, password_policy, daily_report_recipient, employment_hours } = req.body ?? {};
+
+        if (
+            employment_hours !== undefined
+            && employment_hours !== null
+            && (typeof employment_hours !== 'object' || Array.isArray(employment_hours))
+        ) {
+            res.status(400).json({ message: 'employment_hours must be an object.' });
+            return;
+        }
+        if (employment_hours && typeof employment_hours === 'object') {
+            for (const type of EMPLOYMENT_TYPES) {
+                const raw = (employment_hours as Record<string, unknown>)[type];
+                if (raw === undefined || raw === null) continue;
+                const n = Number(raw);
+                if (!Number.isFinite(n) || n < 0 || n > 168) {
+                    res.status(400).json({ message: `employment_hours.${type} must be between 0 and 168.` });
+                    return;
+                }
+            }
+        }
 
         const validModes = ['none', 'dcaa', 'flsa', 'wtd'];
         if (compliance_mode !== undefined && !validModes.includes(compliance_mode)) {
@@ -83,6 +105,14 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
                 next.daily_report_recipient = daily_report_recipient.trim();
             }
         }
+        if (employment_hours !== undefined) {
+            if (employment_hours === null) {
+                delete next.employment_hours;
+            } else {
+                // resolveEmploymentHours clamps + fills defaults, dropping unknown keys.
+                next.employment_hours = resolveEmploymentHours({ employment_hours });
+            }
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await prisma.organization.update({ where: { id: orgId }, data: { settings: next as any } });
@@ -107,6 +137,7 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
             time_rounding: next.time_rounding ?? null,
             password_policy: resolvePasswordPolicy(next),
             daily_report_recipient: (next.daily_report_recipient as string) ?? null,
+            employment_hours: resolveEmploymentHours(next),
         });
     } catch (error) {
         console.error('[admin] updateOrgSettings error:', error);

@@ -66,3 +66,26 @@ export const requireRole = (roles: string[]) => {
         next();
     };
 };
+
+/**
+ * Privileged-role assignment guard (single source of truth for all user
+ * write paths: createUser, importUsers, updateUser).
+ *
+ * Only an Admin may create or assign the `Admin` access role. This is enforced
+ * server-side because hiding the option in the UI is not a security control —
+ * the API can be called directly. Throws a typed error the controllers map to 403.
+ */
+export class RoleAssignmentError extends Error {
+    code = 'ROLE_ASSIGNMENT_FORBIDDEN' as const;
+    constructor(message: string) {
+        super(message);
+        this.name = 'RoleAssignmentError';
+    }
+}
+
+export const assertCanAssignRole = (actorRole: string | undefined, targetRoleName: string): void => {
+    const target = (targetRoleName || '').trim().toLowerCase();
+    if (target === 'admin' && actorRole !== 'Admin') {
+        throw new RoleAssignmentError('Only Admin users can assign the Admin role.');
+    }
+};

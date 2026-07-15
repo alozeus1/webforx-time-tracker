@@ -8,6 +8,7 @@ jest.mock('../src/config/db', () => ({
     default: {
         user: {
             findUnique: jest.fn(),
+            findFirst: jest.fn(),
             findMany: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
@@ -24,6 +25,10 @@ jest.mock('../src/config/db', () => ({
         role: {
             findMany: jest.fn(),
             findUnique: jest.fn(),
+            findFirst: jest.fn(),
+        },
+        organization: {
+            findUnique: jest.fn(),
         },
         auditLog: {
             create: jest.fn(),
@@ -39,7 +44,7 @@ import prisma from '../src/config/db';
 
 const JWT_SECRET = 'test-jwt-secret';
 const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role }, JWT_SECRET);
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: 'org-1' }, JWT_SECRET);
 
 const adminToken = makeToken('user-admin-1', 'Admin');
 const managerToken = makeToken('user-mgr-1', 'Manager');
@@ -71,13 +76,17 @@ beforeEach(() => {
     (prisma.notification.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.notification.count as jest.Mock).mockResolvedValue(0);
     (prisma.notification.update as jest.Mock).mockResolvedValue({});
+    (prisma.role.findFirst as jest.Mock).mockResolvedValue(mockRole);
+    (prisma.role.findUnique as jest.Mock).mockResolvedValue(mockRole);
+    (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
 });
 
 // ─── getMe ───────────────────────────────────────────────────────────────────
 
 describe('GET /api/v1/users/me', () => {
     it('returns 200 with user profile for authenticated user', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
 
         const res = await request(app)
             .get('/api/v1/users/me')
@@ -90,7 +99,7 @@ describe('GET /api/v1/users/me', () => {
     });
 
     it('returns 404 when user not found in DB', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
 
         const res = await request(app)
             .get('/api/v1/users/me')
@@ -262,7 +271,7 @@ describe('GET /api/v1/users', () => {
 
 describe('GET /api/v1/users/:id/auth-events', () => {
     it('returns auth events for Admin and Manager users', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
         (prisma.authEvent.findMany as jest.Mock).mockResolvedValue([
             {
                 id: 'auth-1',
@@ -330,14 +339,14 @@ describe('POST /api/v1/users', () => {
     });
 
     it('returns 400 when email already exists', async () => {
-        (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
 
         const res = await request(app)
             .post('/api/v1/users')
             .set('Authorization', `Bearer ${adminToken}`)
             .send({
                 email: 'alice@test.com',
-                password: 'pass123',
+                password: 'securePass123!',
                 first_name: 'Alice',
                 last_name: 'Copy',
                 role: 'Employee',
@@ -347,14 +356,34 @@ describe('POST /api/v1/users', () => {
         expect(res.body.message).toMatch(/already exists/i);
     });
 
-    it('returns 400 when required fields are missing', async () => {
+    it('returns 400 when required fields are missing (schema validation)', async () => {
         const res = await request(app)
             .post('/api/v1/users')
             .set('Authorization', `Bearer ${adminToken}`)
             .send({ email: 'incomplete@test.com' });
 
         expect(res.status).toBe(400);
-        expect(res.body.message).toMatch(/missing/i);
+        expect(res.body.message).toMatch(/validation failed|missing/i);
+    });
+
+    it('blocks a Manager from creating an Admin user (privilege escalation)', async () => {
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.role.findFirst as jest.Mock).mockResolvedValue({ id: 'role-admin-1', name: 'Admin' });
+
+        const res = await request(app)
+            .post('/api/v1/users')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({
+                email: 'sneaky-admin@test.com',
+                password: 'securePass123!',
+                first_name: 'Sneaky',
+                last_name: 'Admin',
+                role: 'Admin',
+            });
+
+        expect(res.status).toBe(403);
+        expect(res.body.message).toMatch(/admin/i);
+        expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
     it('returns 403 for Employee role', async () => {

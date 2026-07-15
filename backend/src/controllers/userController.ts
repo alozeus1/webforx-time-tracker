@@ -8,6 +8,8 @@ import { sendWelcomeEmail } from '../services/emailService';
 import { env } from '../config/env';
 import { createUserSchema, formatZodIssues } from '../validation/schemas';
 import { getOrgPasswordPolicy, validatePasswordAgainstPolicy } from '../services/passwordPolicyService';
+import { assertCanAssignRole, RoleAssignmentError } from '../middlewares/auth';
+import { normalizeEmploymentType, FALLBACK_EMPLOYMENT_TYPE } from '../services/employmentService';
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -26,6 +28,7 @@ type ImportedUserPayload = {
     role?: unknown;
     user_type?: unknown;
     type?: unknown;
+    employment_type?: unknown;
     password?: unknown;
     team_name?: unknown;
     department?: unknown;
@@ -164,6 +167,8 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
             role: user.role.name,
             is_active: user.is_active,
             weekly_hour_limit: user.weekly_hour_limit,
+            employment_type: user.employment_type,
+            min_weekly_hours: user.min_weekly_hours,
         });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
@@ -340,6 +345,8 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
                 team_name: true,
                 is_active: true,
                 hourly_rate: true,
+                employment_type: true,
+                min_weekly_hours: true,
                 role: { select: { name: true } },
             },
         });
@@ -468,6 +475,28 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
+        // Privilege-escalation guard: a Manager must never be able to mint an Admin.
+        const targetRole = await prisma.role.findFirst({
+            where: { id: resolvedRoleId, organization_id: req.user!.organization_id },
+            select: { name: true },
+        });
+        try {
+            assertCanAssignRole(req.user?.role, targetRole?.name ?? '');
+        } catch (err) {
+            if (err instanceof RoleAssignmentError) {
+                res.status(403).json({ message: err.message });
+                return;
+            }
+            throw err;
+        }
+
+        // Worker classification — defaults to 'employee' for NEW users only.
+        const employmentType = normalizeEmploymentType(req.body?.employment_type) ?? FALLBACK_EMPLOYMENT_TYPE;
+        const minWeeklyHours =
+            req.body?.min_weekly_hours === undefined || req.body?.min_weekly_hours === null
+                ? null
+                : (Number.isFinite(Number(req.body.min_weekly_hours)) ? Math.trunc(Number(req.body.min_weekly_hours)) : null);
+
         // Enforce the organization's password policy on admin-set passwords.
         const passwordPolicy = await getOrgPasswordPolicy(req.user!.organization_id);
         const unmetRequirements = validatePasswordAgainstPolicy(password, passwordPolicy);
@@ -490,6 +519,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 last_name,
                 team_name: teamName,
                 role_id: resolvedRoleId,
+                employment_type: employmentType,
+                min_weekly_hours: minWeeklyHours,
                 organization_id: req.user!.organization_id,
                 password_changed_at: new Date(),
             },
@@ -500,6 +531,8 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
                 last_name: true,
                 team_name: true,
                 is_active: true,
+                employment_type: true,
+                min_weekly_hours: true,
                 role: { select: { name: true } },
             },
         });
@@ -629,9 +662,14 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                 continue;
             }
 
-            if (actorRole !== 'Admin' && roleRecord.name === 'Admin') {
-                failed.push({ email, reason: 'Only admins can import admin users' });
-                continue;
+            try {
+                assertCanAssignRole(actorRole, roleRecord.name);
+            } catch (err) {
+                if (err instanceof RoleAssignmentError) {
+                    failed.push({ email, reason: err.message });
+                    continue;
+                }
+                throw err;
             }
 
             if (skipExisting && existingEmailSet.has(email)) {
@@ -664,6 +702,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                         last_name: lastName,
                         team_name: teamName,
                         role_id: roleRecord.id,
+                        employment_type: normalizeEmploymentType(row.employment_type) ?? FALLBACK_EMPLOYMENT_TYPE,
                         organization_id: req.user!.organization_id,
                     },
                     select: {
@@ -672,6 +711,7 @@ export const importUsers = async (req: AuthRequest, res: Response): Promise<void
                         first_name: true,
                         last_name: true,
                         team_name: true,
+                        employment_type: true,
                         role: { select: { name: true } },
                     },
                 });
@@ -818,6 +858,32 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
             updateData.hourly_rate = null;
         }
 
+        // Employment type + min-hours override: editable by Admin AND Manager
+        // (the route is gated to those two). This is a classification attribute,
+        // NOT an access grant, so it does not go through the Admin-only role gate.
+        if ('employment_type' in (req.body || {})) {
+            const nextType = normalizeEmploymentType(req.body.employment_type);
+            if (!nextType) {
+                res.status(400).json({ message: 'employment_type must be employee, intern, or contractor.' });
+                return;
+            }
+            updateData.employment_type = nextType;
+        }
+
+        if ('min_weekly_hours' in (req.body || {})) {
+            const raw = req.body.min_weekly_hours;
+            if (raw === null || raw === '') {
+                updateData.min_weekly_hours = null;
+            } else {
+                const n = Number(raw);
+                if (!Number.isFinite(n) || n < 0 || n > 168) {
+                    res.status(400).json({ message: 'min_weekly_hours must be between 0 and 168.' });
+                    return;
+                }
+                updateData.min_weekly_hours = Math.trunc(n);
+            }
+        }
+
         if (typeof password === 'string' && password.trim()) {
             const passwordPolicy = await getOrgPasswordPolicy(req.user!.organization_id);
             const unmetRequirements = validatePasswordAgainstPolicy(password.trim(), passwordPolicy);
@@ -899,6 +965,8 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
                 last_name: true,
                 team_name: true,
                 is_active: true,
+                employment_type: true,
+                min_weekly_hours: true,
                 role: { select: { name: true } },
             },
         });
@@ -915,6 +983,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
                         target_user_id: updatedUser.id,
                         updated_fields: Object.keys(updateData),
                         ...(isRoleChange && { new_role: updatedUser.role?.name }),
+                        ...('employment_type' in updateData && { new_employment_type: updatedUser.employment_type }),
                     },
                 },
             });

@@ -173,6 +173,11 @@ const Admin: React.FC = () => {
     const [complianceSaving, setComplianceSaving] = useState(false);
     const [complianceFeedback, setComplianceFeedback] = useState<string | null>(null);
 
+    // ── Employment-type minimum weekly hours (drives under-hours compliance) ──
+    const [employmentHours, setEmploymentHours] = useState<{ employee: number; intern: number; contractor: number }>({ employee: 40, intern: 10, contractor: 40 });
+    const [employmentHoursSaving, setEmploymentHoursSaving] = useState(false);
+    const [employmentHoursFeedback, setEmploymentHoursFeedback] = useState<string | null>(null);
+
     // ── Password policy (stored in org settings alongside compliance) ───────
     const [passwordPolicy, setPasswordPolicy] = useState({
         min_length: 12,
@@ -438,7 +443,7 @@ const Admin: React.FC = () => {
     // ── Compliance + Rounding functions ──────────────────────────────────────
     async function fetchComplianceSettings() {
         try {
-            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null; password_policy?: typeof passwordPolicy; daily_report_recipient?: string | null }>('/admin/org-settings');
+            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null; password_policy?: typeof passwordPolicy; daily_report_recipient?: string | null; employment_hours?: { employee: number; intern: number; contractor: number } }>('/admin/org-settings');
             setComplianceMode((res.data.compliance_mode || 'none') as 'none' | 'dcaa' | 'flsa' | 'wtd');
             if (res.data.time_rounding) {
                 setRoundingIncrement(res.data.time_rounding.increment || 15);
@@ -446,6 +451,9 @@ const Admin: React.FC = () => {
             }
             if (res.data.password_policy) {
                 setPasswordPolicy(prev => ({ ...prev, ...res.data.password_policy }));
+            }
+            if (res.data.employment_hours) {
+                setEmploymentHours(prev => ({ ...prev, ...res.data.employment_hours }));
             }
             setDailyReportRecipient(res.data.daily_report_recipient || '');
         } catch (error) {
@@ -465,6 +473,19 @@ const Admin: React.FC = () => {
             setComplianceFeedback('Failed to save settings.');
         } finally {
             setComplianceSaving(false);
+        }
+    }
+
+    async function handleSaveEmploymentHours() {
+        setEmploymentHoursSaving(true);
+        setEmploymentHoursFeedback(null);
+        try {
+            await api.put('/admin/org-settings', { employment_hours: employmentHours });
+            setEmploymentHoursFeedback('Minimum weekly hours saved.');
+        } catch {
+            setEmploymentHoursFeedback('Failed to save minimum weekly hours.');
+        } finally {
+            setEmploymentHoursSaving(false);
         }
     }
 
@@ -1132,6 +1153,42 @@ const Admin: React.FC = () => {
                                     ))}
                                 </div>
                             )}
+                        </div>
+
+                        {/* Employment-type minimum weekly hours */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-base text-primary">timelapse</span> Minimum Weekly Hours by Employment Type
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-5">Sets the under-hours compliance target per employment type. These are independent of a member&apos;s access role — an intern elevated to Manager is still measured at the intern minimum.</p>
+                            {employmentHoursFeedback && (
+                                <div className={`mb-4 rounded-lg px-3 py-2 text-sm font-medium ${employmentHoursFeedback.includes('Failed') ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                    {employmentHoursFeedback}
+                                </div>
+                            )}
+                            <div className="flex flex-wrap gap-6 items-end">
+                                {(['employee', 'intern', 'contractor'] as const).map((type) => (
+                                    <label key={type} className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        {type}
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={168}
+                                            value={employmentHours[type]}
+                                            onChange={(e) => setEmploymentHours(prev => ({ ...prev, [type]: Math.max(0, Math.min(168, Number(e.target.value) || 0)) }))}
+                                            className="mt-1 block w-28 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                                        />
+                                    </label>
+                                ))}
+                                <button
+                                    type="button"
+                                    disabled={employmentHoursSaving}
+                                    onClick={() => void handleSaveEmploymentHours()}
+                                    className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                                >
+                                    {employmentHoursSaving ? 'Saving…' : 'Save Minimums'}
+                                </button>
+                            </div>
                         </div>
 
                         {/* Time rounding */}

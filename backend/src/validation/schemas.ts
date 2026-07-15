@@ -75,6 +75,9 @@ export const createUserSchema = z.object({
   password: z.string().min(12, 'Password must be at least 12 characters'),
   team_name: z.string().optional(),
   hourly_rate: z.number().nonnegative().optional(),
+  // Worker classification — independent of access role. Drives min weekly hours.
+  employment_type: z.enum(['employee', 'intern', 'contractor']).optional(),
+  min_weekly_hours: z.number().int().min(0).max(168).nullable().optional(),
 }).refine((d) => d.role || d.role_id, { message: 'role or role_id is required', path: ['role'] });
 
 export const uuidParamSchema = z.object({

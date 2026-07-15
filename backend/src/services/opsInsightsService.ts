@@ -1,5 +1,6 @@
 import prisma from '../config/db';
 import { deriveWellbeingStatus } from './wellbeingService';
+import { getOrgEmploymentHours, resolveEmploymentHours, resolveMinWeeklyHours } from './employmentService';
 
 type RiskLevel = 'low' | 'medium' | 'high';
 
@@ -29,11 +30,14 @@ export interface OperationsInsights {
             user_id: string;
             name: string;
             role: string;
+            employment_type: string | null;
+            minWeeklyHours: number;
             sevenDayHours: number;
             projectedFourteenDayHours: number;
             remainingCapacityHours: number;
             projectedStatus: ReturnType<typeof deriveWellbeingStatus>;
             overloadRisk: boolean;
+            belowMinimumHours: boolean;
         }>;
         projects: Array<{
             project_id: string;
@@ -51,6 +55,7 @@ export interface OperationsInsights {
         approvalLatencyHours: number;
         billableLeakageHours: number;
         overloadRiskCount: number;
+        belowMinimumCount: number;
         byPerson: Array<{
             user_id: string;
             name: string;
@@ -88,6 +93,7 @@ export const createEmptyOperationsInsights = (): OperationsInsights => ({
         approvalLatencyHours: 0,
         billableLeakageHours: 0,
         overloadRiskCount: 0,
+        belowMinimumCount: 0,
         byPerson: [],
     },
     meta: {
@@ -198,6 +204,11 @@ export const getOperationsInsights = async (organizationId?: string): Promise<Op
 
     const orgFilter = organizationId ? { organization_id: organizationId } : {};
 
+    // Minimum-weekly-hours targets come from employment_type, never the access role.
+    const orgEmploymentHours = organizationId
+        ? await getOrgEmploymentHours(organizationId)
+        : resolveEmploymentHours({});
+
     const now = new Date();
     const sevenDaysAgo = new Date(now);
     sevenDaysAgo.setDate(now.getDate() - 7);
@@ -216,6 +227,8 @@ export const getOperationsInsights = async (organizationId?: string): Promise<Op
                 first_name: true,
                 last_name: true,
                 weekly_hour_limit: true,
+                employment_type: true,
+                min_weekly_hours: true,
                 role: { select: { name: true } },
             },
         }), []),
@@ -307,15 +320,22 @@ export const getOperationsInsights = async (organizationId?: string): Promise<Op
         const threshold = user.weekly_hour_limit ? user.weekly_hour_limit * 2 : 100;
         const remainingCapacityHours = Number((threshold - projectedFourteenDayHours).toFixed(1));
 
+        // Under-hours compliance is judged against the employment-type minimum,
+        // so an intern elevated to Manager is still measured at the intern target.
+        const minWeeklyHours = resolveMinWeeklyHours(user, orgEmploymentHours);
+
         return {
             user_id: user.id,
             name: `${user.first_name} ${user.last_name}`,
             role: user.role?.name || 'Employee',
+            employment_type: user.employment_type ?? null,
+            minWeeklyHours,
             sevenDayHours,
             projectedFourteenDayHours,
             remainingCapacityHours,
             projectedStatus: deriveWellbeingStatus(sevenDayHours),
             overloadRisk: projectedFourteenDayHours > threshold,
+            belowMinimumHours: sevenDayHours < minWeeklyHours,
         };
     }).sort((left, right) => right.projectedFourteenDayHours - left.projectedFourteenDayHours);
 
@@ -422,6 +442,7 @@ export const getOperationsInsights = async (organizationId?: string): Promise<Op
             approvalLatencyHours,
             billableLeakageHours,
             overloadRiskCount: memberForecast.filter((member) => member.overloadRisk).length,
+            belowMinimumCount: memberForecast.filter((member) => member.belowMinimumHours).length,
             byPerson: memberForecast.map((member) => ({
                 user_id: member.user_id,
                 name: member.name,

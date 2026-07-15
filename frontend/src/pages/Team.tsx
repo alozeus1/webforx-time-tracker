@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import api, { getApiErrorMessage } from '../services/api';
 import type { AuthEventSummary, BulkUserImportResponse, ProjectSummary, RoleOption, TeamSummary, UserSummary } from '../types/api';
+import { EMPLOYMENT_TYPE_OPTIONS } from '../types/api';
 import { getStoredRole, getStoredUserProfile } from '../utils/session';
 import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
 import AccessibleDialog from '../components/AccessibleDialog';
@@ -60,6 +61,7 @@ interface TeamFormState {
     password: string;
     team_name: string;
     role: string;
+    employment_type: string;
     is_active: boolean;
 }
 
@@ -80,6 +82,7 @@ const emptyForm: TeamFormState = {
     password: '',
     team_name: '',
     role: 'Employee',
+    employment_type: 'employee',
     is_active: true,
 };
 
@@ -298,6 +301,7 @@ const Team: React.FC = () => {
             password: '',
             team_name: user.team_name || '',
             role: user.role?.name || 'Employee',
+            employment_type: user.employment_type || 'employee',
             is_active: user.is_active,
         });
         setImportModalOpen(false);
@@ -485,6 +489,7 @@ const Team: React.FC = () => {
                     password: form.password,
                     team_name: form.team_name.trim() || null,
                     role: form.role,
+                    employment_type: form.employment_type,
                 });
                 setFeedback({ message: 'Team member added successfully', tone: 'success' });
             }
@@ -495,7 +500,11 @@ const Team: React.FC = () => {
                     last_name: form.last_name.trim(),
                     email: form.email.trim().toLowerCase(),
                     team_name: form.team_name.trim() || null,
-                    role: form.role,
+                    // Access-role changes are Admin-only on the server. Only send
+                    // `role` when it actually changed, so a Manager editing just
+                    // the employment type isn't rejected for an unchanged role.
+                    ...(form.role !== (selectedUser.role?.name || '') ? { role: form.role } : {}),
+                    employment_type: form.employment_type,
                     is_active: form.is_active,
                     password: form.password.trim() ? form.password : undefined,
                 });
@@ -1400,15 +1409,34 @@ const Team: React.FC = () => {
                                         onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value }))}
                                         className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                                     >
-                                        {(roles.length > 0 ? roles : [{ id: 'fallback', name: 'Employee' }, { id: 'fallback-admin', name: 'Admin' }]).map((option) => (
-                                            <option key={option.id} value={option.name}>
-                                                {option.name}
-                                            </option>
-                                        ))}
+                                        {(roles.length > 0 ? roles : [{ id: 'fallback', name: 'Employee' }, { id: 'fallback-admin', name: 'Admin' }])
+                                            // Only Admins may create/assign the Admin role. Hiding it is UX —
+                                            // the server enforces this regardless of what the client sends.
+                                            .filter((option) => isAdmin || option.name !== 'Admin')
+                                            .map((option) => (
+                                                <option key={option.id} value={option.name}>
+                                                    {option.name}
+                                                </option>
+                                            ))}
                                     </select>
                                     {formErrors.role && (
                                         <p className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-400">{formErrors.role}</p>
                                     )}
+                                </div>
+                                <div>
+                                    <label htmlFor="team-member-employment" className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Employment type</label>
+                                    <select
+                                        id="team-member-employment"
+                                        name="employment_type"
+                                        value={form.employment_type}
+                                        onChange={(event) => setForm((prev) => ({ ...prev, employment_type: event.target.value }))}
+                                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                    >
+                                        {EMPLOYMENT_TYPE_OPTIONS.map((option) => (
+                                            <option key={option.value} value={option.value}>{option.label}</option>
+                                        ))}
+                                    </select>
+                                    <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Sets the weekly-hours target for compliance — independent of access role.</p>
                                 </div>
                             </div>
 

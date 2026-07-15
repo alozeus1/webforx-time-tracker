@@ -23,6 +23,15 @@ jest.mock('../src/config/db', () => ({
         auditLog: {
             findMany: jest.fn(),
         },
+        organization: {
+            findUnique: jest.fn(),
+        },
+        leaveRequest: {
+            groupBy: jest.fn(),
+        },
+        timerCorrectionRequest: {
+            groupBy: jest.fn(),
+        },
     },
 }));
 
@@ -30,7 +39,7 @@ import prisma from '../src/config/db';
 
 const JWT_SECRET = 'test-jwt-secret';
 const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role }, JWT_SECRET);
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: 'org-1' }, JWT_SECRET);
 
 const managerToken = makeToken('user-mgr-1', 'Manager');
 
@@ -60,6 +69,9 @@ beforeEach(() => {
     (prisma.project.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.project.count as jest.Mock).mockResolvedValue(0);
     (prisma.auditLog.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
+    (prisma.leaveRequest.groupBy as jest.Mock).mockResolvedValue([]);
+    (prisma.timerCorrectionRequest.groupBy as jest.Mock).mockResolvedValue([]);
 });
 
 describe('GET /api/v1/reports/dashboard', () => {

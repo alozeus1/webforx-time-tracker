@@ -57,6 +57,7 @@ async function main() {
             billing_email: 'admin@webforxtech.com',
             plan: 'enterprise',
             status: 'active',
+            settings: { employment_hours: { employee: 40, intern: 10, contractor: 40 } },
         },
     });
     console.log(`✅ Organization seeded: ${defaultOrg.name} (${defaultOrg.id})`);

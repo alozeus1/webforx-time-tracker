@@ -22,7 +22,17 @@ export interface UserSummary {
     is_active: boolean;
     hourly_rate?: number | null;
     role?: RoleSummary;
+    employment_type?: string | null;
+    min_weekly_hours?: number | null;
 }
+
+export type EmploymentType = 'employee' | 'intern' | 'contractor';
+
+export const EMPLOYMENT_TYPE_OPTIONS: { value: EmploymentType; label: string }[] = [
+    { value: 'employee', label: 'Employee' },
+    { value: 'intern', label: 'Intern' },
+    { value: 'contractor', label: 'Contractor' },
+];
 
 export interface ProjectSummary {
     id: string;

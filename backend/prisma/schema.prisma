@@ -71,6 +71,12 @@ model User {
 
   weekly_hour_limit Int?
 
+  // Worker classification — independent of the access `role` above.
+  // Drives the minimum-weekly-hours compliance target. Nullable by design:
+  // existing users are intentionally NOT backfilled (left unclassified).
+  employment_type   String?   // 'employee' | 'intern' | 'contractor'
+  min_weekly_hours  Int?      // per-user override of the org default target
+
   project_members       ProjectMember[]
   time_entries          TimeEntry[]
   active_timers         ActiveTimer[]
@@ -91,6 +97,7 @@ model User {
   @@unique([email, organization_id])
   @@index([organization_id, is_active])
   @@index([organization_id, role_id])
+  @@index([organization_id, employment_type])
   @@index([team_name])
 }
 
