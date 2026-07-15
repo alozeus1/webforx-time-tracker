@@ -5,9 +5,11 @@ import { getGlobalTimerPolicy, normalizeTimerPolicy, validateTimerPolicy } from 
 import { resolvePasswordPolicy } from '../services/passwordPolicyService';
 
 // ---------------------------------------------------------------------------
-// GET /admin/org-settings  — returns compliance_mode + time_rounding + password_policy
-// PUT /admin/org-settings  — updates compliance_mode, time_rounding and/or password_policy
+// GET /admin/org-settings  — returns compliance_mode + time_rounding + password_policy + daily_report_recipient
+// PUT /admin/org-settings  — updates compliance_mode, time_rounding, password_policy and/or daily_report_recipient
 // ---------------------------------------------------------------------------
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export const getOrgSettings = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const orgId = req.user!.organization_id;
@@ -17,6 +19,7 @@ export const getOrgSettings = async (req: AuthRequest, res: Response): Promise<v
             compliance_mode: (settings.compliance_mode as string) ?? 'none',
             time_rounding: (settings.time_rounding as { increment: number; direction: string } | null) ?? null,
             password_policy: resolvePasswordPolicy(settings),
+            daily_report_recipient: (settings.daily_report_recipient as string) ?? null,
         });
     } catch (error) {
         console.error('[admin] getOrgSettings error:', error);
@@ -30,11 +33,20 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
         const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
         const current = (org?.settings as Record<string, unknown>) ?? {};
 
-        const { compliance_mode, time_rounding, password_policy } = req.body ?? {};
+        const { compliance_mode, time_rounding, password_policy, daily_report_recipient } = req.body ?? {};
 
         const validModes = ['none', 'dcaa', 'flsa', 'wtd'];
         if (compliance_mode !== undefined && !validModes.includes(compliance_mode)) {
             res.status(400).json({ message: 'compliance_mode must be none, dcaa, flsa, or wtd.' });
+            return;
+        }
+
+        if (
+            daily_report_recipient !== undefined
+            && daily_report_recipient !== null
+            && (typeof daily_report_recipient !== 'string' || !EMAIL_PATTERN.test(daily_report_recipient.trim()))
+        ) {
+            res.status(400).json({ message: 'daily_report_recipient must be a valid email address.' });
             return;
         }
 
@@ -64,6 +76,13 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
                 next.password_policy = { ...resolvePasswordPolicy({ password_policy }) };
             }
         }
+        if (daily_report_recipient !== undefined) {
+            if (daily_report_recipient === null) {
+                delete next.daily_report_recipient;
+            } else {
+                next.daily_report_recipient = daily_report_recipient.trim();
+            }
+        }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await prisma.organization.update({ where: { id: orgId }, data: { settings: next as any } });
@@ -74,7 +93,12 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
                 organization_id: orgId,
                 action: 'org_settings_updated',
                 resource: 'organization',
-                metadata: { compliance_mode, time_rounding, password_policy: next.password_policy ?? null },
+                metadata: {
+                    compliance_mode,
+                    time_rounding,
+                    password_policy: next.password_policy ?? null,
+                    daily_report_recipient: next.daily_report_recipient ?? null,
+                },
             },
         });
 
@@ -82,6 +106,7 @@ export const updateOrgSettings = async (req: AuthRequest, res: Response): Promis
             compliance_mode: next.compliance_mode ?? 'none',
             time_rounding: next.time_rounding ?? null,
             password_policy: resolvePasswordPolicy(next),
+            daily_report_recipient: (next.daily_report_recipient as string) ?? null,
         });
     } catch (error) {
         console.error('[admin] updateOrgSettings error:', error);

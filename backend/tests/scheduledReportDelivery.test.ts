@@ -102,6 +102,33 @@ describe('scheduled report delivery', () => {
         });
     });
 
+    it('computes defaulters from the full window, not the billable-filtered entries, for report_type=billable', async () => {
+        (prisma.scheduledReport.findMany as jest.Mock).mockResolvedValue([
+            {
+                id: 'schedule-billable',
+                frequency: 'weekly',
+                day_of_week: 1,
+                recipients: ['admin@webforxtech.com'],
+                report_type: 'billable',
+                organization_id: 'org-1',
+                last_sent_at: null,
+                created_at: new Date('2026-04-01T00:00:00.000Z'),
+            },
+        ]);
+
+        await processDueScheduledReports(monday);
+
+        // fetchReportEntries (billable report) and fetchDefaulters (always
+        // full-window) both call timeEntry.findMany — the defaulters call
+        // must NOT carry the report's own is_billable filter, otherwise an
+        // active user who only logged non-billable hours gets wrongly
+        // flagged as a defaulter in a billable report.
+        const timeEntryCalls = (prisma.timeEntry.findMany as jest.Mock).mock.calls;
+        expect(timeEntryCalls).toHaveLength(2);
+        expect(timeEntryCalls[0][0].where).toMatchObject({ is_billable: true });
+        expect(timeEntryCalls[1][0].where.is_billable).toBeUndefined();
+    });
+
     it('skips due schedules with no valid recipient instead of marking them sent', async () => {
         (prisma.scheduledReport.findMany as jest.Mock).mockResolvedValue([
             {

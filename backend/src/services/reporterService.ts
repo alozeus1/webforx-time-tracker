@@ -187,19 +187,35 @@ const fetchReportEntries = async (
     }) as Promise<ReportEntry[]>;
 };
 
+// Defaulter status is "did this active user log any time at all in the
+// window" — deliberately independent of a report's own display filter (e.g.
+// report_type='billable'). A user who only logged non-billable hours is not
+// a defaulter, even though a billable report's own entries table won't show
+// their work, so this queries the window fresh rather than reusing
+// fetchReportEntries' (possibly type-filtered) result.
 const fetchDefaulters = async (
-    entries: ReportEntry[],
+    start: Date,
+    end: Date,
     organizationId?: string,
 ): Promise<DefaulterUser[]> => {
-    const activeUsers = await prisma.user.findMany({
-        where: {
-            is_active: true,
-            ...(organizationId ? { organization_id: organizationId } : {}),
-        },
-        select: { email: true, first_name: true, last_name: true },
-    });
+    const [activeUsers, loggedEntries] = await Promise.all([
+        prisma.user.findMany({
+            where: {
+                is_active: true,
+                ...(organizationId ? { organization_id: organizationId } : {}),
+            },
+            select: { email: true, first_name: true, last_name: true },
+        }),
+        prisma.timeEntry.findMany({
+            where: {
+                start_time: { gte: start, lt: end },
+                ...(organizationId ? { organization_id: organizationId } : {}),
+            },
+            select: { user: { select: { email: true } } },
+        }),
+    ]);
 
-    const loggedEmails = new Set(entries.map((entry) => entry.user.email.toLowerCase()));
+    const loggedEmails = new Set(loggedEntries.map((entry) => entry.user.email.toLowerCase()));
     return activeUsers.filter((user) => !loggedEmails.has(user.email.toLowerCase()));
 };
 
@@ -225,8 +241,10 @@ export const generateAndEmailDailyReport = async (): Promise<void> => {
     for (const org of organizations) {
         const recipient = resolveDailyReportRecipient(org.settings);
         try {
-            const entries = await fetchReportEntries(today, tomorrow, 'summary', org.id);
-            const defaulters = await fetchDefaulters(entries, org.id);
+            const [entries, defaulters] = await Promise.all([
+                fetchReportEntries(today, tomorrow, 'summary', org.id),
+                fetchDefaulters(today, tomorrow, org.id),
+            ]);
             const title = `Daily Autonomous Time Report - ${today.toLocaleDateString()}`;
             const pdfBuffer = generateReportPdf(title, entries, defaulters);
 
@@ -287,8 +305,10 @@ export const processDueScheduledReports = async (now = new Date()): Promise<Sche
 
         try {
             const window = buildReportWindow(report.frequency, now);
-            const entries = await fetchReportEntries(window.start, window.end, report.report_type, report.organization_id);
-            const defaulters = await fetchDefaulters(entries, report.organization_id);
+            const [entries, defaulters] = await Promise.all([
+                fetchReportEntries(window.start, window.end, report.report_type, report.organization_id),
+                fetchDefaulters(window.start, window.end, report.organization_id),
+            ]);
             const title = getReportTitle(report.frequency, report.report_type, window.label);
             const pdfBuffer = generateReportPdf(title, entries, defaulters);
 

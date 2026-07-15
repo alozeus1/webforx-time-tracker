@@ -186,6 +186,11 @@ const Admin: React.FC = () => {
     const [passwordPolicySaving, setPasswordPolicySaving] = useState(false);
     const [passwordPolicyFeedback, setPasswordPolicyFeedback] = useState<string | null>(null);
 
+    // ── Daily report recipient (stored in org settings alongside compliance) ─
+    const [dailyReportRecipient, setDailyReportRecipient] = useState('');
+    const [dailyReportRecipientSaving, setDailyReportRecipientSaving] = useState(false);
+    const [dailyReportRecipientFeedback, setDailyReportRecipientFeedback] = useState<string | null>(null);
+
     // ── Feature 5: White-labeling / Branding ────────────────────────────────
     const [branding, setBranding] = useState({ app_name: '', logo_url: '', favicon_url: '', primary_color: '#4F46E5', secondary_color: '#7C3AED', custom_domain: '', email_from_name: '', email_from_address: '' });
     const [brandingLoaded, setBrandingLoaded] = useState(false);
@@ -433,7 +438,7 @@ const Admin: React.FC = () => {
     // ── Compliance + Rounding functions ──────────────────────────────────────
     async function fetchComplianceSettings() {
         try {
-            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null; password_policy?: typeof passwordPolicy }>('/admin/org-settings');
+            const res = await api.get<{ compliance_mode?: string; time_rounding?: { increment: number; direction: string } | null; password_policy?: typeof passwordPolicy; daily_report_recipient?: string | null }>('/admin/org-settings');
             setComplianceMode((res.data.compliance_mode || 'none') as 'none' | 'dcaa' | 'flsa' | 'wtd');
             if (res.data.time_rounding) {
                 setRoundingIncrement(res.data.time_rounding.increment || 15);
@@ -442,6 +447,7 @@ const Admin: React.FC = () => {
             if (res.data.password_policy) {
                 setPasswordPolicy(prev => ({ ...prev, ...res.data.password_policy }));
             }
+            setDailyReportRecipient(res.data.daily_report_recipient || '');
         } catch (error) {
             console.error('Error fetching compliance settings:', error);
         } finally {
@@ -472,6 +478,19 @@ const Admin: React.FC = () => {
             setPasswordPolicyFeedback('Failed to save password policy.');
         } finally {
             setPasswordPolicySaving(false);
+        }
+    }
+
+    async function handleSaveDailyReportRecipient() {
+        setDailyReportRecipientSaving(true);
+        setDailyReportRecipientFeedback(null);
+        try {
+            await api.put('/admin/org-settings', { daily_report_recipient: dailyReportRecipient.trim() || null });
+            setDailyReportRecipientFeedback('Daily report recipient saved.');
+        } catch (error) {
+            setDailyReportRecipientFeedback(getApiErrorMessage(error, 'Failed to save daily report recipient.'));
+        } finally {
+            setDailyReportRecipientSaving(false);
         }
     }
 
@@ -1223,6 +1242,45 @@ const Admin: React.FC = () => {
                                         {passwordPolicyFeedback && (
                                             <span className={`text-sm font-medium ${passwordPolicyFeedback.includes('Failed') ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                 {passwordPolicyFeedback}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Daily report recipient */}
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
+                            <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                                <span className="material-symbols-outlined text-base text-primary">mail</span> Daily Report Recipient
+                            </h3>
+                            <p className="text-xs text-slate-500 mb-5">Email address that receives the automated daily hours report for this organization. Leave blank to use the platform default.</p>
+                            {!complianceLoaded ? (
+                                <p className="text-sm text-slate-500">Loading…</p>
+                            ) : (
+                                <div className="space-y-4">
+                                    <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block max-w-sm">
+                                        Recipient email
+                                        <input
+                                            type="email"
+                                            placeholder="admin@webforxtech.com"
+                                            value={dailyReportRecipient}
+                                            onChange={e => setDailyReportRecipient(e.target.value)}
+                                            className="mt-1 block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                        />
+                                    </label>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            disabled={dailyReportRecipientSaving}
+                                            onClick={() => void handleSaveDailyReportRecipient()}
+                                            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
+                                        >
+                                            {dailyReportRecipientSaving ? 'Saving…' : 'Save Recipient'}
+                                        </button>
+                                        {dailyReportRecipientFeedback && (
+                                            <span className={`text-sm font-medium ${dailyReportRecipientFeedback.includes('Failed') ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                {dailyReportRecipientFeedback}
                                             </span>
                                         )}
                                     </div>

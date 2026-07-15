@@ -4,6 +4,7 @@ import { CalendarX, Lock, CheckSquare, Square, Trash2, Tag, FolderOpen } from 'l
 import api, { getApiErrorMessage } from '../services/api';
 import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
+import { getStoredUserProfile } from '../utils/session';
 
 interface ActivityItem {
     id: string;
@@ -412,6 +413,15 @@ const Timeline: React.FC = () => {
         const projectFilter = resolveProjectFilter(sourceEntries);
         if (projectFilter) {
             params.set('projectId', projectFilter);
+        }
+        // Timeline only ever shows the signed-in user's own entries. Reports'
+        // Daily Breakdown card is gated behind a specific user being selected
+        // (queryUserId !== 'all') for Managers/Admins, so without this a
+        // Manager/Admin following this link would land on the "select a
+        // user" hint instead of their own day.
+        const ownUserId = getStoredUserProfile()?.id;
+        if (ownUserId) {
+            params.set('queryUserId', ownUserId);
         }
         navigate(`/reports?${params.toString()}`);
     };
