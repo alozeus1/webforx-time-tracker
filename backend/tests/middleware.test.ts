@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { authenticateToken, requireRole } from '../src/middlewares/auth';
 import { AuthRequest, AuthenticatedUser } from '../src/types/auth';
 
-const JWT_SECRET = 'test-jwt-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 
 const makeRes = () => {
     const res = {

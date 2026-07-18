@@ -38,7 +38,7 @@ jest.mock('../src/config/db', () => ({
 
 import prisma from '../src/config/db';
 
-const JWT_SECRET = 'test-jwt-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 
 const app = express();
 app.use(express.json());

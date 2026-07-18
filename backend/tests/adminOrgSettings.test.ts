@@ -18,7 +18,7 @@ jest.mock('../src/config/db', () => ({
 
 import prisma from '../src/config/db';
 
-const JWT_SECRET = 'test-jwt-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 const makeToken = (userId: string, role: string, organizationId = 'org-1') =>
     jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: organizationId }, JWT_SECRET);
 
