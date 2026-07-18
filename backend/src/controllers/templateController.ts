@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { sendApiError } from '../utils/http';
+import { assertTagsBelongToOrganization, normalizeIdList } from '../services/tenantOwnershipService';
 
 const parseOptionalInteger = (value: unknown): number | null => {
     if (value === undefined || value === null || value === '') {
@@ -10,6 +11,14 @@ const parseOptionalInteger = (value: unknown): number | null => {
 
     const parsed = Number.parseInt(String(value), 10);
     return Number.isFinite(parsed) ? parsed : null;
+};
+
+const sendTenantOwnershipError = (res: Response, error: unknown): boolean => {
+    if ((error as NodeJS.ErrnoException)?.code === 'TENANT_TAG_NOT_FOUND') {
+        sendApiError(res, 404, 'TAG_NOT_FOUND', 'One or more tags not found');
+        return true;
+    }
+    return false;
 };
 
 const parseOptionalNumber = (value: unknown): number | null => {
@@ -67,6 +76,9 @@ export const createTemplate = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
 
+        const tagIds = normalizeIdList(req.body.tag_ids);
+        await assertTagsBelongToOrganization(tagIds, req.user!.organization_id);
+
         const template = await prisma.projectTemplate.create({
             data: {
                 name,
@@ -74,7 +86,7 @@ export const createTemplate = async (req: AuthRequest, res: Response): Promise<v
                 default_billable: req.body.default_billable !== false,
                 budget_hours: budgetHours,
                 budget_amount: budgetAmount,
-                tag_ids: Array.isArray(req.body.tag_ids) ? req.body.tag_ids : [],
+                tag_ids: tagIds,
                 created_by: userId,
                 organization_id: req.user!.organization_id,
             },
@@ -82,6 +94,7 @@ export const createTemplate = async (req: AuthRequest, res: Response): Promise<v
 
         res.status(201).json(template);
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         console.error('Failed to create template:', error);
         sendApiError(res, 500, 'TEMPLATE_CREATE_FAILED', 'Internal server error');
     }

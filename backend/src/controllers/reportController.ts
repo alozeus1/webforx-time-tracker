@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client/index';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
 import { createEmptyOperationsInsights, getOperationsInsights } from '../services/opsInsightsService';

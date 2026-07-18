@@ -84,3 +84,17 @@ export const env = {
     // when no desktop agent or stronger signal confirms activity.  Default: 10 minutes.
     hiddenConnectedGraceMinutes: parseMinutesEnv('HIDDEN_CONNECTED_GRACE_MINUTES', 10),
 };
+
+if (env.nodeEnv === 'production') {
+    for (const name of ['DATABASE_URL', 'JWT_SECRET', 'INTEGRATION_SECRET', 'CRON_SECRET', 'CORS_ORIGIN', 'FRONTEND_URL', 'ENABLE_BACKGROUND_WORKERS']) {
+        requireEnv(name);
+    }
+}
+
+const credentialedCorsOrigins = [env.corsOrigin, env.frontendUrl]
+    .flatMap((value) => value.split(','))
+    .map((value) => value.trim());
+
+if (credentialedCorsOrigins.includes('*')) {
+    throw new Error('Credentialed CORS cannot be configured with wildcard origin "*"');
+}

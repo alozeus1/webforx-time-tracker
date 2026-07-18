@@ -11,15 +11,12 @@ const { generateSecret, verifySync, generateURI } = require('otplib') as {
 };
 import QRCode from 'qrcode';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
-import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
+import { generateSessionTokens, verifyToken } from '../services/tokenService';
+import { decryptSecret, encryptSecret } from '../utils/crypto';
 
 const APP_NAME = 'Web Forx Time Tracker';
-
-// Helper — Prisma user cast for new MFA fields (until prisma generate runs on deploy)
-type UserWithMfa = { mfa_enabled: boolean; mfa_secret: string | null };
 
 /**
  * POST /auth/mfa/setup
@@ -31,7 +28,7 @@ export const setupMfa = async (req: AuthRequest, res: Response): Promise<void> =
         const userId = req.user?.userId;
         if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
 
-        const user = await (prisma.user as any).findUnique({ where: { id: userId } }) as UserWithMfa & { email: string } | null;
+        const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) { res.status(404).json({ message: 'User not found' }); return; }
 
         if (user.mfa_enabled) {
@@ -42,9 +39,9 @@ export const setupMfa = async (req: AuthRequest, res: Response): Promise<void> =
         const secret = generateSecret(20);
 
         // Store pending secret (enabled only after /mfa/verify)
-        await (prisma.user as any).update({
+        await prisma.user.update({
             where: { id: userId },
-            data: { mfa_secret: secret },
+            data: { mfa_secret: encryptSecret(secret) },
         });
 
         const otpAuthUrl = generateURI({ issuer: APP_NAME, label: user.email, secret });
@@ -77,19 +74,19 @@ export const verifyMfa = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
-        const user = await (prisma.user as any).findUnique({ where: { id: userId } }) as UserWithMfa | null;
+        const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user || !user.mfa_secret) {
             res.status(400).json({ message: 'No pending MFA setup. Call /auth/mfa/setup first.' });
             return;
         }
 
-        const isValid = verifySync({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret }).valid;
+        const isValid = verifySync({ token: totp_code.replace(/\s/g, ''), secret: decryptSecret(user.mfa_secret) }).valid;
         if (!isValid) {
             res.status(400).json({ message: 'Invalid code. Try again.' });
             return;
         }
 
-        await (prisma.user as any).update({
+        await prisma.user.update({
             where: { id: userId },
             data: { mfa_enabled: true },
         });
@@ -117,7 +114,7 @@ export const disableMfa = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const user = await (prisma.user as any).findUnique({ where: { id: userId } }) as (UserWithMfa & { password_hash: string }) | null;
+        const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) { res.status(404).json({ message: 'User not found' }); return; }
 
         if (!user.mfa_enabled || !user.mfa_secret) {
@@ -131,13 +128,13 @@ export const disableMfa = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        const totpOk = verifySync({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret }).valid;
+        const totpOk = verifySync({ token: totp_code.replace(/\s/g, ''), secret: decryptSecret(user.mfa_secret) }).valid;
         if (!totpOk) {
             res.status(400).json({ message: 'Invalid authenticator code.' });
             return;
         }
 
-        await (prisma.user as any).update({
+        await prisma.user.update({
             where: { id: userId },
             data: { mfa_enabled: false, mfa_secret: null },
         });
@@ -166,44 +163,67 @@ export const validateMfaLogin = async (req: AuthRequest, res: Response): Promise
             return;
         }
 
-        let decoded: { userId: string; type: string };
+        let decoded: { userId: string; type: string; purpose?: string; challengeId?: string };
         try {
-            decoded = jwt.verify(mfa_challenge_token, env.jwtSecret) as typeof decoded;
+            decoded = verifyToken<typeof decoded>(mfa_challenge_token);
         } catch {
             res.status(401).json({ message: 'MFA challenge token is invalid or expired. Please log in again.' });
             return;
         }
 
-        if (decoded.type !== 'mfa_challenge') {
+        if (decoded.type !== 'mfa_challenge' || decoded.purpose !== 'login_mfa' || !decoded.challengeId) {
             res.status(401).json({ message: 'Invalid token type.' });
             return;
         }
 
-        const user = await (prisma.user as any).findUnique({
+        const challenge = await prisma.mfaChallenge.findFirst({
+            where: {
+                id: decoded.challengeId,
+                user_id: decoded.userId,
+                purpose: 'login_mfa',
+                used_at: null,
+                expires_at: { gt: new Date() },
+            },
+            select: { id: true },
+        });
+
+        if (!challenge) {
+            res.status(401).json({ message: 'MFA challenge token is invalid or expired. Please log in again.' });
+            return;
+        }
+
+        const user = await prisma.user.findUnique({
             where: { id: decoded.userId },
             include: { role: true },
-        }) as (UserWithMfa & { id: string; email: string; first_name: string; last_name: string; organization_id: string; is_active: boolean; role: { name: string } }) | null;
+        });
 
         if (!user || !user.is_active || !user.mfa_enabled || !user.mfa_secret) {
             res.status(401).json({ message: 'User not found or MFA not configured.' });
             return;
         }
 
-        const totpOk = verifySync({ token: totp_code.replace(/\s/g, ''), secret: user.mfa_secret }).valid;
+        const totpOk = verifySync({ token: totp_code.replace(/\s/g, ''), secret: decryptSecret(user.mfa_secret) }).valid;
         if (!totpOk) {
             res.status(401).json({ message: 'Invalid authenticator code.' });
             return;
         }
 
-        // Issue full session tokens
-        const payload = {
-            userId: user.id,
-            email: user.email,
-            role: user.role.name,
-            organization_id: user.organization_id,
-        };
-        const accessToken = jwt.sign(payload, env.jwtSecret, { expiresIn: '15m' });
-        const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, env.jwtSecret, { expiresIn: '7d' });
+        const consumed = await prisma.mfaChallenge.updateMany({
+            where: {
+                id: challenge.id,
+                user_id: decoded.userId,
+                purpose: 'login_mfa',
+                used_at: null,
+                expires_at: { gt: new Date() },
+            },
+            data: { used_at: new Date() },
+        });
+        if (consumed.count !== 1) {
+            res.status(401).json({ message: 'MFA challenge token is invalid or expired. Please log in again.' });
+            return;
+        }
+
+        const { accessToken, refreshToken } = generateSessionTokens(user);
 
         const { accessTokenCookieOptions, refreshTokenCookieOptions } = await import('../config/cookies');
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
@@ -235,10 +255,10 @@ export const getMfaStatus = async (req: AuthRequest, res: Response): Promise<voi
         const userId = req.user?.userId;
         if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
 
-        const user = await (prisma.user as any).findUnique({
+        const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { mfa_enabled: true },
-        }) as { mfa_enabled: boolean } | null;
+        });
 
         res.status(200).json({ mfa_enabled: user?.mfa_enabled ?? false });
     } catch (error) {

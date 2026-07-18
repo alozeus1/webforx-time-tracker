@@ -2,6 +2,7 @@ import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { decryptConfig, encryptConfig } from '../utils/crypto';
+import { publicHttpsFetch, validatePublicHttpsUrl } from '../utils/outboundHttp';
 
 type IntegrationType = 'taiga' | 'mattermost' | 'quickbooks' | 'github' | 'jira' | 'linear' | 'asana' | 'clickup' | 'trello';
 
@@ -213,12 +214,9 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
             }
 
             try {
-                const url = new URL(config.webhookUrl);
-                if (!['http:', 'https:'].includes(url.protocol)) {
-                    throw new Error('Invalid protocol');
-                }
-            } catch (error) {
-                res.status(400).json({ message: 'Mattermost webhook URL is invalid' });
+                await validatePublicHttpsUrl(config.webhookUrl);
+            } catch {
+                res.status(400).json({ message: 'Mattermost webhook URL must be a public HTTPS URL' });
                 return;
             }
         }
@@ -326,7 +324,7 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
 
         if (type === 'mattermost') {
             const config = decryptConfig<MattermostConfig>(integration.config);
-            const response = await fetch(config.webhookUrl, {
+            const response = await publicHttpsFetch(config.webhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

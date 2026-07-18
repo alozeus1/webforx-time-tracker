@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client/index';
 import { Request } from 'express';
 import prisma from '../config/db';
 

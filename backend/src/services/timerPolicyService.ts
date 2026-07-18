@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client/index';
 import prisma from '../config/db';
 import { env } from '../config/env';
 

@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { google } from 'googleapis';
 import { env } from '../config/env';
-import { decryptConfig } from '../utils/crypto';
+import { decryptSecret } from '../utils/crypto';
 
 const GOOGLE_CALENDAR_SCOPES = [
     'openid',
@@ -100,14 +100,14 @@ export const getGoogleUserEmail = async (client: ReturnType<typeof createGoogleO
 
 export const createAuthorizedGoogleClient = (encryptedRefreshToken: string) => {
     const client = createGoogleOAuthClient();
-    const refreshToken = decryptConfig<string>(encryptedRefreshToken);
+    const refreshToken = decryptSecret(encryptedRefreshToken);
     client.setCredentials({ refresh_token: refreshToken });
 
     return client;
 };
 
 export const revokeGoogleRefreshToken = async (encryptedRefreshToken: string) => {
-    const refreshToken = decryptConfig<string>(encryptedRefreshToken);
+    const refreshToken = decryptSecret(encryptedRefreshToken);
     const client = createGoogleOAuthClient();
     await client.revokeToken(refreshToken);
 };
