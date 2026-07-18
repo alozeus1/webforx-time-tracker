@@ -26,17 +26,24 @@ CREATE TABLE IF NOT EXISTS "LeaveRequest" (
 );
 
 -- Foreign keys
-ALTER TABLE "LeaveRequest"
-    ADD CONSTRAINT "LeaveRequest_user_id_fkey"
-    FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
-ALTER TABLE "LeaveRequest"
-    ADD CONSTRAINT "LeaveRequest_organization_id_fkey"
-    FOREIGN KEY ("organization_id") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
-ALTER TABLE "LeaveRequest"
-    ADD CONSTRAINT "LeaveRequest_reviewed_by_fkey"
-    FOREIGN KEY ("reviewed_by") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LeaveRequest_user_id_fkey') THEN
+        ALTER TABLE "LeaveRequest"
+            ADD CONSTRAINT "LeaveRequest_user_id_fkey"
+            FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LeaveRequest_organization_id_fkey') THEN
+        ALTER TABLE "LeaveRequest"
+            ADD CONSTRAINT "LeaveRequest_organization_id_fkey"
+            FOREIGN KEY ("organization_id") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'LeaveRequest_reviewed_by_fkey') THEN
+        ALTER TABLE "LeaveRequest"
+            ADD CONSTRAINT "LeaveRequest_reviewed_by_fkey"
+            FOREIGN KEY ("reviewed_by") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS "LeaveRequest_org_user_start_idx"

@@ -1,6 +1,6 @@
 # Web Forx Time Tracker Agent Handbook
 
-Last updated: 2026-06-30 (America/Chicago)
+Last updated: 2026-07-17 (America/Chicago)
 
 This document is the single operational reference for any coding agent working in this repository.
 
@@ -91,7 +91,7 @@ Background workloads:
 - ORM: Prisma
 - Host/deploy: Vercel (frontend + backend), Neon PostgreSQL
 
-## 6. Current Production Topology (As Of 2026-03-26)
+## 6. Current Production Topology (As Of 2026-07-17)
 
 Vercel projects:
 
@@ -104,12 +104,12 @@ Current production URLs:
 - Frontend alias: `https://vercel-self-five-79.vercel.app`
 - Frontend alias: `https://vercel-alozeus-projects.vercel.app`
 - Frontend alias: `https://vercel-alozeus1-alozeus-projects.vercel.app`
-- Backend (canonical alias): `https://vercel-backend-xi-three.vercel.app`
-- Backend API base: `https://vercel-backend-xi-three.vercel.app/api/v1`
+- Backend (canonical alias): `https://api.dev.webforxtech.com`
+- Backend API base: `https://api.dev.webforxtech.com/api/v1`
 
 Google OAuth callback (production):
 
-- `https://vercel-backend-xi-three.vercel.app/api/v1/calendar/callback`
+- `https://api.dev.webforxtech.com/api/v1/calendar/callback`
 
 ## 7. Environment Variables
 
@@ -145,6 +145,7 @@ Current production behavior notes:
 
 - CORS supports multiple origins using comma-separated values in `CORS_ORIGIN` and `FRONTEND_URL` parsing logic.
 - Frontend API target is baked at build time from `VITE_API_URL`.
+- Production idle policy is warning after 15 minutes and pause after 20 minutes.
 
 ## 8. Auth, Roles, And Route Guards
 
@@ -261,8 +262,8 @@ For safe production rollout:
 1. Update backend env vars first.
 2. Deploy backend (`vercel deploy --prod`).
 3. Run DB migration/seed tasks.
-- Preferred with migrations: `npx prisma migrate deploy`
-- If migration history is not established yet, use controlled `npx prisma db push` policy.
+- Required for production: `npm run release:migrate`
+- Never run `prisma db push` against production or a shared database.
 4. Verify backend health (`/api/v1/health`) and critical auth flows.
 5. Update frontend `VITE_API_URL` if backend URL changed.
 6. Deploy frontend.
@@ -309,7 +310,7 @@ Checks:
 
 1. Verify backend auth directly:
 ```bash
-curl -i -X POST https://vercel-backend-xi-three.vercel.app/api/v1/auth/login \
+curl -i -X POST https://api.dev.webforxtech.com/api/v1/auth/login \
   -H 'content-type: application/json' \
   -d '{"email":"admin@webforxtech.com","password":"<password>"}'
 ```

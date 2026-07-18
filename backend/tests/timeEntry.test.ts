@@ -52,6 +52,12 @@ jest.mock('../src/config/db', () => ({
         payrollPeriod: {
             findFirst: jest.fn(),
         },
+        project: {
+            findFirst: jest.fn(),
+        },
+        tag: {
+            findMany: jest.fn(),
+        },
         webhookSubscription: {
             findMany: jest.fn().mockResolvedValue([]),
         },
@@ -67,7 +73,7 @@ jest.mock('../src/config/db', () => ({
 
 import prisma from '../src/config/db';
 
-const JWT_SECRET = 'test-jwt-secret';
+const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 
 const TEST_ORG_ID = 'org-1';
 
@@ -120,6 +126,8 @@ beforeEach(() => {
     (prisma.notification.createMany as jest.Mock).mockResolvedValue({ count: 0 });
     (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
     (prisma.payrollPeriod.findFirst as jest.Mock).mockResolvedValue(null);
+    (prisma.project.findFirst as jest.Mock).mockResolvedValue({ id: 'proj-1' });
+    (prisma.tag.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.timerPolicyConfig.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ organization_id: TEST_ORG_ID });
     (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
@@ -138,6 +146,10 @@ beforeEach(() => {
             },
             timeEntryTag: {
                 createMany: (...args: unknown[]) => (prisma.timeEntryTag.createMany as jest.Mock)(...args),
+                deleteMany: jest.fn(),
+            },
+            tag: {
+                findMany: (...args: unknown[]) => (prisma.tag.findMany as jest.Mock)(...args),
             },
         };
         return fn(tx);
@@ -186,6 +198,24 @@ describe('POST /api/v1/timers/start', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/task description/i);
+    });
+
+    it('returns 404 when project_id is not owned by the caller organization', async () => {
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(null);
+
+        const res = await request(app)
+            .post('/api/v1/timers/start')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({ project_id: 'foreign-project', task_description: 'Cross tenant attempt' });
+
+        expect(res.status).toBe(404);
+        expect(res.body.message).toBe('Project not found');
+        expect(prisma.project.findFirst).toHaveBeenCalledWith({
+            where: { id: 'foreign-project', organization_id: TEST_ORG_ID, is_active: true },
+            select: { id: true },
+        });
+        expect(prisma.activeTimer.create).not.toHaveBeenCalled();
     });
 
     it('returns 401 when no token is provided', async () => {
@@ -286,6 +316,29 @@ describe('POST /api/v1/timers/manual', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/task description/i);
+    });
+
+    it('returns 404 when tag_ids include another organization tag', async () => {
+        (prisma.tag.findMany as jest.Mock).mockResolvedValue([{ id: 'tag-a' }]);
+
+        const res = await request(app)
+            .post('/api/v1/timers/manual')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({
+                project_id: 'proj-1',
+                tag_ids: ['tag-a', 'foreign-tag'],
+                task_description: 'Manual task',
+                start_time: oneHourAgo.toISOString(),
+                end_time: now.toISOString(),
+            });
+
+        expect(res.status).toBe(404);
+        expect(res.body.message).toBe('One or more tags not found');
+        expect(prisma.tag.findMany).toHaveBeenCalledWith({
+            where: { id: { in: ['tag-a', 'foreign-tag'] }, organization_id: TEST_ORG_ID },
+            select: { id: true },
+        });
+        expect(prisma.timeEntry.create).not.toHaveBeenCalled();
     });
 });
 

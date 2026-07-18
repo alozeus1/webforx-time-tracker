@@ -1,18 +1,10 @@
 import crypto from 'crypto';
 import { Response } from 'express';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@prisma/client/index';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { sendApiError } from '../utils/http';
-
-const isValidUrl = (value: string): boolean => {
-    try {
-        const parsed = new URL(value);
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-    } catch {
-        return false;
-    }
-};
+import { validatePublicHttpsUrl } from '../utils/outboundHttp';
 
 export const listWebhooks = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
@@ -38,8 +30,10 @@ export const createWebhook = async (req: AuthRequest, res: Response): Promise<vo
             return;
         }
 
-        if (!isValidUrl(url)) {
-            sendApiError(res, 400, 'VALIDATION_ERROR', 'Webhook URL must be a valid HTTP or HTTPS URL');
+        try {
+            await validatePublicHttpsUrl(url);
+        } catch {
+            sendApiError(res, 400, 'VALIDATION_ERROR', 'Webhook URL must be a public HTTPS URL');
             return;
         }
 

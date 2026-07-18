@@ -73,14 +73,12 @@ const allowedOrigins = Array.from(
             .filter(Boolean),
     ),
 );
-const allowAnyOrigin = allowedOrigins.includes('*');
-
 app.use(
     cors({
         credentials: true,
         origin: (origin, callback) => {
             // Allow requests without an Origin header (for server-to-server calls, health checks, etc).
-            if (!origin || allowAnyOrigin || allowedOrigins.includes(origin)) {
+            if (!origin || allowedOrigins.includes(origin)) {
                 callback(null, true);
                 return;
             }
@@ -185,8 +183,30 @@ app.get('/', (_req, res) => {
     });
 });
 
-app.get('/api/v1/health', (req, res) => {
-    res.status(200).json({ status: 'ok', message: 'Time Tracker API is running' });
+const checkDatabaseReadiness = async () => {
+    const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Database readiness timeout')), 1500);
+    });
+
+    await Promise.race([prisma.$queryRaw`SELECT 1`, timeout]);
+};
+
+app.get('/api/v1/health', async (_req, res) => {
+    try {
+        await checkDatabaseReadiness();
+        res.status(200).json({ status: 'ok', database: 'ok', message: 'Time Tracker API is running' });
+    } catch {
+        res.status(503).json({ status: 'unhealthy', database: 'unavailable' });
+    }
+});
+
+app.get('/api/v1/ready', async (_req, res) => {
+    try {
+        await checkDatabaseReadiness();
+        res.status(200).json({ status: 'ready' });
+    } catch {
+        res.status(503).json({ status: 'unready' });
+    }
 });
 
 app.get('/api/v1', (_req, res) => {

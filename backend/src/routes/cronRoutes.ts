@@ -30,6 +30,7 @@ router.get('/hourly', runIdleChecks);
 router.get('/idle', runIdleChecks);
 router.get('/workload', runWorkloadChecks);
 router.get('/daily', runDailyReport);
+router.get('/reset-demo', resetDemoData);
 router.post('/reset-demo', resetDemoData);
 
 export default router;

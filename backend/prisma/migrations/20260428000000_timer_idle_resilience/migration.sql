@@ -50,7 +50,11 @@ ON "TimerPolicyConfig"("scope_type", "scope_id");
 CREATE INDEX IF NOT EXISTS "TimerPolicyConfig_scope_type_scope_id_idx"
 ON "TimerPolicyConfig"("scope_type", "scope_id");
 
-ALTER TABLE "TimerCorrectionRequest"
-ADD CONSTRAINT "TimerCorrectionRequest_user_id_fkey"
-FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'TimerCorrectionRequest_user_id_fkey') THEN
+        ALTER TABLE "TimerCorrectionRequest"
+        ADD CONSTRAINT "TimerCorrectionRequest_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    END IF;
+END $$;

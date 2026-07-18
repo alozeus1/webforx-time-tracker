@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
-import { env } from '../config/env';
 import { logAuthEvent } from '../services/authEventService';
 import { sendPasswordResetEmail } from '../services/emailService';
 import { accessTokenCookieOptions, refreshTokenCookieOptions } from '../config/cookies';
@@ -15,20 +13,7 @@ import {
     resolvePasswordPolicy,
     validatePasswordAgainstPolicy,
 } from '../services/passwordPolicyService';
-
-const generateTokens = (user: { id: string; email: string; organization_id: string; role: { name: string } }) => {
-    const payload = {
-        userId: user.id,
-        email: user.email,
-        role: user.role.name,
-        organization_id: user.organization_id,
-    };
-
-    const accessToken = jwt.sign(payload, env.jwtSecret, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ userId: user.id, type: 'refresh' }, env.jwtSecret, { expiresIn: '7d' });
-
-    return { accessToken, refreshToken };
-};
+import { issueMfaChallengeToken, generateSessionTokens, verifyToken } from '../services/tokenService';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -116,18 +101,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             metadata: { role: user.role.name },
         });
 
-        // If MFA is enabled, return a short-lived challenge token instead of a full session
-        if ((user as any).mfa_enabled) {
-            const challengeToken = jwt.sign(
-                { userId: user.id, type: 'mfa_challenge' },
-                env.jwtSecret,
-                { expiresIn: '5m' }
-            );
+        if (user.mfa_enabled) {
+            const challengeToken = await issueMfaChallengeToken(user.id);
             res.status(200).json({ mfa_required: true, mfa_challenge_token: challengeToken });
             return;
         }
 
-        const { accessToken, refreshToken } = generateTokens(user);
+        const { accessToken, refreshToken } = generateSessionTokens(user);
 
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions);
@@ -212,6 +192,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
             outcome: 'success',
         });
 
+        const { env } = await import('../config/env');
         const resetUrl = `${env.frontendUrl}/reset-password?code=${token}`;
         try {
             await sendPasswordResetEmail({
@@ -344,7 +325,7 @@ export const refreshAccessToken = async (req: Request, res: Response): Promise<v
             return;
         }
 
-        const decoded = jwt.verify(refreshToken, env.jwtSecret) as { userId: string; type?: string };
+        const decoded = verifyToken<{ userId: string; type?: string }>(refreshToken);
         if (decoded.type !== 'refresh') {
             res.status(401).json({ message: 'Invalid token type' });
             return;
@@ -360,7 +341,7 @@ export const refreshAccessToken = async (req: Request, res: Response): Promise<v
             return;
         }
 
-        const { accessToken, refreshToken: newRefreshToken } = generateTokens(user);
+        const { accessToken, refreshToken: newRefreshToken } = generateSessionTokens(user);
 
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions);

@@ -1,10 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt, { JwtPayload } from 'jsonwebtoken';
-import { env } from '../config/env';
 import prisma from '../config/db';
 import { AuthRequest, AuthenticatedUser } from '../types/auth';
+import { verifyToken } from '../services/tokenService';
 
-export const authenticateToken = (req: AuthRequest, res: Response, next: NextFunction): void => {
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     // Support both Bearer header and httpOnly cookie
     const authHeader = req.headers['authorization'];
     const headerToken = authHeader && authHeader.split(' ')[1];
@@ -19,19 +18,19 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
         return;
     }
 
-    jwt.verify(token, env.jwtSecret, async (err: jwt.VerifyErrors | null, user: string | JwtPayload | undefined) => {
-        if (err) {
+    try {
+        const authenticatedUser = verifyToken<AuthenticatedUser & { type?: string }>(token);
+        if (authenticatedUser.type && authenticatedUser.type !== 'access') {
             res.status(401).json({
                 message: 'Invalid or expired token',
                 error: {
-                    code: err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+                    code: 'TOKEN_INVALID',
                     message: 'Invalid or expired token',
                 },
             });
             return;
         }
 
-        const authenticatedUser = user as AuthenticatedUser;
         if (!authenticatedUser.organization_id && authenticatedUser.userId) {
             const dbUser = await prisma.user.findUnique({
                 where: { id: authenticatedUser.userId },
@@ -54,7 +53,15 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
 
         req.user = authenticatedUser;
         next();
-    });
+    } catch (err) {
+        res.status(401).json({
+            message: 'Invalid or expired token',
+            error: {
+                code: (err as { name?: string }).name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+                message: 'Invalid or expired token',
+            },
+        });
+    }
 };
 
 export const requireRole = (roles: string[]) => {

@@ -1,14 +1,12 @@
 import { Request, Response } from 'express';
+import type { Prisma } from '@prisma/client/index';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 
 export const listOrganizations = async (_req: AuthRequest, res: Response): Promise<void> => {
   try {
-    // Only super-admins can list all orgs; regular admins see only their own
     const orgs = await prisma.organization.findMany({
-      where: _req.user?.role === 'Admin' && _req.user?.organization_id
-        ? { id: _req.user.organization_id }
-        : undefined,
+      where: { id: _req.user!.organization_id },
       orderBy: { created_at: 'desc' },
     });
     res.status(200).json(orgs);
@@ -55,9 +53,34 @@ export const createOrganization = async (req: Request, res: Response): Promise<v
 
 export const updateOrganization = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const data: {
+      name?: string;
+      billing_email?: string | null;
+      settings?: Prisma.InputJsonValue;
+    } = {};
+
+    if (typeof req.body?.name === 'string' && req.body.name.trim()) {
+      data.name = req.body.name.trim();
+    }
+    if ('billing_email' in (req.body || {})) {
+      data.billing_email = typeof req.body.billing_email === 'string' && req.body.billing_email.trim()
+        ? req.body.billing_email.trim()
+        : null;
+    }
+    if ('settings' in (req.body || {})) {
+      data.settings = req.body.settings && typeof req.body.settings === 'object' && !Array.isArray(req.body.settings)
+        ? req.body.settings as Prisma.InputJsonValue
+        : {};
+    }
+
+    if (Object.keys(data).length === 0) {
+      res.status(400).json({ message: 'No valid organization fields provided' });
+      return;
+    }
+
     const org = await prisma.organization.update({
       where: { id: req.user!.organization_id },
-      data: req.body,
+      data,
     });
     res.status(200).json(org);
   } catch (error) {

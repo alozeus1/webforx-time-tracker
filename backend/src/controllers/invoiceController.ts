@@ -1,9 +1,10 @@
-import { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client/index';
 import { Response } from 'express';
 import PDFDocument from 'pdfkit';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { sendApiError } from '../utils/http';
+import { assertProjectBelongsToOrganization } from '../services/tenantOwnershipService';
 
 interface NormalizedLineItem {
     time_entry_id?: string;
@@ -24,6 +25,14 @@ const parseNumber = (value: unknown): number | null => {
     }
 
     return null;
+};
+
+const sendTenantOwnershipError = (res: Response, error: unknown): boolean => {
+    if ((error as NodeJS.ErrnoException)?.code === 'TENANT_PROJECT_NOT_FOUND') {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'Project not found');
+        return true;
+    }
+    return false;
 };
 
 const parseTaxRate = (value: unknown): number => {
@@ -175,6 +184,9 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
             return;
         }
 
+        const normalizedProjectId = typeof project_id === 'string' && project_id.trim() ? project_id.trim() : null;
+        await assertProjectBelongsToOrganization(normalizedProjectId, req.user!.organization_id);
+
         const subtotal = Number(
             normalizedLineItems.reduce((sum, item) => sum + item.amount, 0).toFixed(2),
         );
@@ -190,7 +202,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
                     invoice_number: invoiceNumber,
                     client_name: clientName,
                     client_email: typeof client_email === 'string' && client_email.trim() ? client_email.trim() : null,
-                    project_id: typeof project_id === 'string' && project_id.trim() ? project_id.trim() : null,
+                    project_id: normalizedProjectId,
                     user_id: userId,
                     organization_id: req.user!.organization_id,
                     subtotal,
@@ -222,6 +234,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
 
         res.status(201).json(fullInvoice);
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         console.error('Failed to create invoice:', error);
         sendApiError(res, 500, 'INVOICE_CREATE_FAILED', 'Internal server error');
     }
@@ -251,6 +264,7 @@ export const createAutopilotInvoice = async (req: AuthRequest, res: Response): P
         };
 
         if (projectId) {
+            await assertProjectBelongsToOrganization(projectId, req.user!.organization_id);
             where.project_id = projectId;
         }
 
@@ -333,6 +347,7 @@ export const createAutopilotInvoice = async (req: AuthRequest, res: Response): P
             invoice: fullInvoice,
         });
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         console.error('Failed to create autopilot invoice:', error);
         sendApiError(res, 500, 'INVOICE_AUTOPILOT_FAILED', 'Internal server error');
     }

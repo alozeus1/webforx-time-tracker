@@ -1,20 +1,9 @@
 import { Request, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
 import { env } from '../config/env';
 import { logAuthEvent } from '../services/authEventService';
-
-const generateTokens = (user: { id: string; email: string; organization_id: string; role: { name: string } }) => {
-    const payload = {
-        userId: user.id,
-        email: user.email,
-        role: user.role.name,
-        organization_id: user.organization_id,
-    };
-    const accessToken = jwt.sign(payload, env.jwtSecret, { expiresIn: '15m' });
-    return { accessToken };
-};
+import { issueMfaChallengeToken, generateSessionTokens } from '../services/tokenService';
 
 /**
  * POST /auth/google
@@ -89,12 +78,20 @@ export const googleSignIn = async (req: Request, res: Response): Promise<void> =
         email: user.email,
         userId: user.id,
         organizationId: user.organization_id,
-        eventType: 'login_success',
+        eventType: user.mfa_enabled ? 'login_attempt' : 'login_success',
         outcome: 'success',
         metadata: { provider: 'google', name: `${googleName.given} ${googleName.family}`.trim() },
     });
 
-    const { accessToken } = generateTokens(user);
+    if (user.mfa_enabled) {
+        res.status(200).json({ mfa_required: true, mfa_challenge_token: await issueMfaChallengeToken(user.id) });
+        return;
+    }
+
+    const { accessToken, refreshToken } = generateSessionTokens(user);
+    const { accessTokenCookieOptions, refreshTokenCookieOptions } = await import('../config/cookies');
+    res.cookie('access_token', accessToken, accessTokenCookieOptions);
+    res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions);
 
     res.status(200).json({
         token: accessToken,

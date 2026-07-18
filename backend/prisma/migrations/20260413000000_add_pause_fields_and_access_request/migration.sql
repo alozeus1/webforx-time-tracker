@@ -1,10 +1,10 @@
 -- AlterTable: add pause fields to ActiveTimer
-ALTER TABLE "ActiveTimer" ADD COLUMN "is_paused" BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE "ActiveTimer" ADD COLUMN "paused_at" TIMESTAMP(3);
-ALTER TABLE "ActiveTimer" ADD COLUMN "paused_duration_seconds" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "ActiveTimer" ADD COLUMN IF NOT EXISTS "is_paused" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "ActiveTimer" ADD COLUMN IF NOT EXISTS "paused_at" TIMESTAMP(3);
+ALTER TABLE "ActiveTimer" ADD COLUMN IF NOT EXISTS "paused_duration_seconds" INTEGER NOT NULL DEFAULT 0;
 
 -- CreateTable: AccessRequest
-CREATE TABLE "AccessRequest" (
+CREATE TABLE IF NOT EXISTS "AccessRequest" (
     "id" TEXT NOT NULL,
     "full_name" TEXT NOT NULL,
     "work_email" TEXT NOT NULL,

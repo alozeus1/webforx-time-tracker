@@ -270,6 +270,7 @@ export const deleteSystemNotification = async (req: AuthRequest, res: Response):
 export const getTeams = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
         const teams = await prisma.team.findMany({
+            where: { organization_id: _req.user!.organization_id },
             orderBy: [{ is_active: 'desc' }, { name: 'asc' }],
         });
 
@@ -293,7 +294,7 @@ export const createTeam = async (req: AuthRequest, res: Response): Promise<void>
         }
 
         const team = await prisma.team.create({
-            data: { name: name.slice(0, 80), description },
+            data: { name: name.slice(0, 80), description, organization_id: req.user!.organization_id },
         });
 
         if (req.user?.userId) {
@@ -342,6 +343,16 @@ export const updateTeam = async (req: AuthRequest, res: Response): Promise<void>
 
         if (Object.keys(updateData).length === 0) {
             res.status(400).json({ message: 'No valid team fields provided' });
+            return;
+        }
+
+        const existingTeam = await prisma.team.findFirst({
+            where: { id: teamId, organization_id: req.user!.organization_id },
+            select: { id: true },
+        });
+
+        if (!existingTeam) {
+            res.status(404).json({ message: 'Team not found' });
             return;
         }
 

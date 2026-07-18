@@ -1,4 +1,5 @@
 import prisma from '../config/db';
+import { normalizeIdList } from './tenantOwnershipService';
 
 type AutoStopReason = 'idle_timeout' | 'heartbeat_missing' | 'browser_inactive' | 'pause_expired' | 'active_duration_limit';
 
@@ -49,9 +50,15 @@ export const stopActiveTimerWithReason = async ({
             },
         });
 
-        if (Array.isArray(persistedState.tag_ids) && persistedState.tag_ids.length > 0) {
+        const persistedTagIds = normalizeIdList(persistedState.tag_ids);
+        if (persistedTagIds.length > 0) {
+            const orgTags = await tx.tag.findMany({
+                where: { id: { in: persistedTagIds }, organization_id: organizationId },
+                select: { id: true },
+            });
+
             await tx.timeEntryTag.createMany({
-                data: (persistedState.tag_ids as string[]).map((tagId) => ({
+                data: orgTags.map(({ id: tagId }) => ({
                     time_entry_id: entry.id,
                     tag_id: tagId,
                 })),

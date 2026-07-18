@@ -38,3 +38,15 @@ export const decryptConfig = <T>(value: string): T => {
 
     return JSON.parse(decrypted.toString('utf8')) as T;
 };
+
+export const looksEncryptedConfig = (value: string | null | undefined): value is string => {
+    if (!value) return false;
+    const parts = value.split(':');
+    return parts.length === 3 && parts.every((part) => /^[0-9a-f]+$/i.test(part));
+};
+
+export const encryptSecret = (value: string): string => encryptConfig(value);
+
+export const decryptSecret = (value: string): string => (
+    looksEncryptedConfig(value) ? decryptConfig<string>(value) : value
+);

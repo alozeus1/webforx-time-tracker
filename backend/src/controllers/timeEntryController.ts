@@ -1,5 +1,4 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
 import prisma from '../config/db';
 import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
@@ -10,6 +9,8 @@ import { getGlobalTimerPolicy } from '../services/timerPolicyService';
 import { assertPeriodNotLocked } from '../services/payrollLockService';
 import { assertComplianceAllowsDelete, assertComplianceAllowsEdit, notifyWtdIfNeeded } from '../services/complianceService';
 import { applyRounding } from '../services/roundingService';
+import { assertProjectBelongsToOrganization, assertTagsBelongToOrganization, normalizeIdList } from '../services/tenantOwnershipService';
+import { verifyToken } from '../services/tokenService';
 
 type GuardrailActiveTimer = {
     id: string;
@@ -31,6 +32,19 @@ const requireUserId = (req: AuthRequest): string => {
     }
 
     return req.user.userId;
+};
+
+const sendTenantOwnershipError = (res: Response, error: unknown): boolean => {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === 'TENANT_PROJECT_NOT_FOUND') {
+        res.status(404).json({ message: 'Project not found' });
+        return true;
+    }
+    if (code === 'TENANT_TAG_NOT_FOUND') {
+        res.status(404).json({ message: 'One or more tags not found' });
+        return true;
+    }
+    return false;
 };
 
 const resolveInactivitySource = ({
@@ -143,7 +157,7 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
         const project_id = typeof req.body?.project_id === 'string' && req.body.project_id.trim() ? req.body.project_id : null;
         const task_description = typeof req.body?.task_description === 'string' ? req.body.task_description.trim() : '';
         const is_billable = req.body?.is_billable !== false;
-        const tag_ids = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids : [];
+        const tag_ids = normalizeIdList(req.body?.tag_ids);
         const user_id = requireUserId(req);
 
         if (!task_description) {
@@ -158,6 +172,9 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
             res.status(400).json({ message: 'A timer is already running for this user' });
             return;
         }
+
+        await assertProjectBelongsToOrganization(project_id, req.user!.organization_id);
+        await assertTagsBelongToOrganization(tag_ids, req.user!.organization_id);
 
         const newTimer = await prisma.activeTimer.create({
             data: {
@@ -190,6 +207,7 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
 
         res.status(201).json(newTimer);
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         // P2002 = unique constraint violated — concurrent request already created the timer.
         if ((error as { code?: string })?.code === 'P2002') {
             res.status(409).json({ message: 'Timer already running for this user' });
@@ -322,7 +340,7 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
         // dropped on Vercel (non-critical side effect).
         emitWebhookEvent('timer.stopped', {
             time_entry_id: timeEntry.id, user_id, duration: timeEntry.duration, project_id: timeEntry.project_id,
-        }).catch(() => {});
+        }, { organizationId: req.user!.organization_id }).catch(() => {});
     } catch (error) {
         console.error('Failed to stop timer:', error);
         res.status(500).json({ message: 'Internal server error while stopping timer' });
@@ -376,7 +394,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
         } = req.body ?? {};
         const user_id = requireUserId(req);
         const is_billable = req.body?.is_billable !== false;
-        const tag_ids = Array.isArray(req.body?.tag_ids) ? req.body.tag_ids : [];
+        const tag_ids = normalizeIdList(req.body?.tag_ids);
 
         const start = new Date(start_time);
         const end = new Date(end_time);
@@ -416,6 +434,10 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             }
         }
 
+        const resolvedProjectId = typeof project_id === 'string' && project_id.trim() ? project_id.trim() : null;
+        await assertProjectBelongsToOrganization(resolvedProjectId, req.user!.organization_id);
+        await assertTagsBelongToOrganization(tag_ids, req.user!.organization_id);
+
         // Apply time rounding if org has a rounding rule configured
         const roundedStart = await applyRounding(req.user!.organization_id, start, 'start');
         const roundedEnd = await applyRounding(req.user!.organization_id, end, 'end');
@@ -430,7 +452,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
                 data: {
                     user_id,
                     organization_id: req.user!.organization_id,
-                    project_id: typeof project_id === 'string' && project_id.trim() ? project_id : null,
+                    project_id: resolvedProjectId,
                     task_description: task_description.trim(),
                     start_time: effectiveStart,
                     end_time: effectiveEnd,
@@ -473,6 +495,7 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
 
         res.status(201).json(timeEntry);
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         console.error('Failed to create manual entry:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
@@ -939,9 +962,8 @@ export const pauseBeacon = async (req: Request, res: Response): Promise<void> =>
 
         let userId: string;
         try {
-            const payload = jwt.verify(rawToken, env.jwtSecret) as { userId: string; type?: string };
-            // Guard: refresh tokens are longer-lived and must not be accepted here.
-            if (payload.type === 'refresh') throw new Error('Refresh token not accepted for beacon');
+            const payload = verifyToken<{ userId: string; type?: string }>(rawToken);
+            if (payload.type && payload.type !== 'access') throw new Error('Only access tokens are accepted for beacon');
             userId = payload.userId;
             if (!userId) throw new Error('No userId in token');
         } catch {
@@ -1101,9 +1123,17 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
 
         const data: Record<string, unknown> = {};
         const { task_description, project_id, start_time, end_time, notes, is_billable, tag_ids } = req.body ?? {};
+        const normalizedProjectId = typeof project_id === 'string' && project_id.trim() ? project_id.trim() : null;
+        const normalizedTagIds = normalizeIdList(tag_ids);
 
         if (typeof task_description === 'string' && task_description.trim()) data.task_description = task_description.trim();
-        if (project_id !== undefined) data.project_id = project_id || null;
+        if (project_id !== undefined) {
+            await assertProjectBelongsToOrganization(normalizedProjectId, req.user!.organization_id);
+            data.project_id = normalizedProjectId;
+        }
+        if (Array.isArray(tag_ids)) {
+            await assertTagsBelongToOrganization(normalizedTagIds, req.user!.organization_id);
+        }
         if (typeof notes === 'string') data.notes = notes.trim() || null;
         if (typeof is_billable === 'boolean') data.is_billable = is_billable;
 
@@ -1125,9 +1155,9 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
 
             if (Array.isArray(tag_ids)) {
                 await tx.timeEntryTag.deleteMany({ where: { time_entry_id: entryId } });
-                if (tag_ids.length > 0) {
+                if (normalizedTagIds.length > 0) {
                     await tx.timeEntryTag.createMany({
-                        data: tag_ids.map((tag_id: string) => ({ time_entry_id: entryId, tag_id })),
+                        data: normalizedTagIds.map((tag_id: string) => ({ time_entry_id: entryId, tag_id })),
                         skipDuplicates: true,
                     });
                 }
@@ -1138,6 +1168,7 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
 
         res.status(200).json(updated);
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         console.error('Failed to update entry:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
@@ -1247,6 +1278,8 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
         const user_id = requireUserId(req);
 
         const { entry_ids, action, project_id, is_billable, tag_ids } = req.body ?? {};
+        const normalizedProjectId = typeof project_id === 'string' && project_id.trim() ? project_id.trim() : null;
+        const normalizedTagIds = normalizeIdList(tag_ids);
 
         if (!Array.isArray(entry_ids) || entry_ids.length === 0) {
             res.status(400).json({ message: 'entry_ids must be a non-empty array.' });
@@ -1289,6 +1322,18 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
+        if (action === 'set_project') {
+            await assertProjectBelongsToOrganization(normalizedProjectId, orgId);
+        }
+
+        if (action === 'set_tags') {
+            if (!Array.isArray(tag_ids)) {
+                res.status(400).json({ message: 'tag_ids must be an array.' });
+                return;
+            }
+            await assertTagsBelongToOrganization(normalizedTagIds, orgId);
+        }
+
         const ids = filtered.map(e => e.id);
 
         // Payroll lock: skip any entry that falls in a locked period and report them
@@ -1322,7 +1367,7 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
             } else if (action === 'set_project') {
                 const result = await tx.timeEntry.updateMany({
                     where: { id: { in: editableIds }, organization_id: orgId },
-                    data: { project_id: project_id || null },
+                    data: { project_id: normalizedProjectId },
                 });
                 updatedCount = result.count;
             } else if (action === 'set_billable') {
@@ -1333,12 +1378,11 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
                 });
                 updatedCount = result.count;
             } else if (action === 'set_tags') {
-                if (!Array.isArray(tag_ids)) throw new Error('tag_ids must be an array.');
                 // Remove existing tags and set new ones for each entry
                 await tx.timeEntryTag.deleteMany({ where: { time_entry_id: { in: editableIds } } });
-                if (tag_ids.length > 0) {
+                if (normalizedTagIds.length > 0) {
                     const links = editableIds.flatMap((eid) =>
-                        (tag_ids as string[]).map((tid) => ({ time_entry_id: eid, tag_id: tid })),
+                        normalizedTagIds.map((tid) => ({ time_entry_id: eid, tag_id: tid })),
                     );
                     await tx.timeEntryTag.createMany({ data: links, skipDuplicates: true });
                 }
@@ -1377,6 +1421,7 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
                 : `${updatedCount} entries updated.`,
         });
     } catch (error) {
+        if (sendTenantOwnershipError(res, error)) return;
         const msg = error instanceof Error ? error.message : 'Internal server error';
         console.error('Failed bulk update:', error);
         res.status(500).json({ message: msg });

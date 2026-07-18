@@ -18,6 +18,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/db';
 import { encryptConfig, decryptConfig } from '../utils/crypto';
+import { validatePublicHttpsUrl } from '../utils/outboundHttp';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,7 +33,10 @@ function verifySlackSignature(signingSecret: string, rawBody: string, timestamp:
 
     const baseString = `${SLACK_SIGNING_VERSION}:${timestamp}:${rawBody}`;
     const expected = `${SLACK_SIGNING_VERSION}=` + crypto.createHmac('sha256', signingSecret).update(baseString).digest('hex');
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    const expectedBuffer = Buffer.from(expected);
+    const signatureBuffer = Buffer.from(signature);
+    if (expectedBuffer.length !== signatureBuffer.length) return false;
+    return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
 interface SlackConfig {
@@ -258,6 +262,15 @@ export const upsertSlackBotConfig = async (req: Request & { user?: { organizatio
     if (!nextConfig.signing_secret) {
         res.status(400).json({ message: 'signing_secret is required.' });
         return;
+    }
+
+    if (nextConfig.webhook_url) {
+        try {
+            await validatePublicHttpsUrl(nextConfig.webhook_url);
+        } catch {
+            res.status(400).json({ message: 'webhook_url must be a public HTTPS URL.' });
+            return;
+        }
     }
 
     const encryptedConfig = encryptConfig(nextConfig);

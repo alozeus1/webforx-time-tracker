@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { google } from 'googleapis';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
-import { encryptConfig } from '../utils/crypto';
+import { decryptSecret, encryptSecret } from '../utils/crypto';
 import {
     createAuthorizedGoogleClient,
     createGoogleCalendarAuthUrl,
@@ -107,15 +107,15 @@ export const handleGoogleCalendarCallback = async (req: AuthRequest, res: Respon
 
         const { client, tokens } = await exchangeGoogleCode(code);
         const refreshToken = tokens.refresh_token || (existingConnection ? undefined : '');
-        const effectiveRefreshToken = tokens.refresh_token || existingConnection?.refresh_token;
+        const effectiveRefreshToken = tokens.refresh_token || (
+            existingConnection?.refresh_token ? decryptSecret(existingConnection.refresh_token) : undefined
+        );
 
         if (!effectiveRefreshToken) {
             throw new Error('Google did not return a refresh token');
         }
 
-        const encryptedRefreshToken = tokens.refresh_token
-            ? encryptConfig(tokens.refresh_token)
-            : effectiveRefreshToken;
+        const encryptedRefreshToken = encryptSecret(effectiveRefreshToken);
 
         const googleEmail = await getGoogleUserEmail(client);
 

@@ -19,6 +19,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/db';
 import { encryptConfig, decryptConfig } from '../utils/crypto';
+import { publicHttpsFetch, validatePublicHttpsUrl } from '../utils/outboundHttp';
 
 interface PendingLink {
     mm_user_id: string;
@@ -83,7 +84,7 @@ async function resolveTimerUser(
     try {
         const base = config.mattermost_base_url.replace(/\/$/, '');
         const headers = { Authorization: `Bearer ${config.bot_token}` };
-        const mmUserRes = await fetch(`${base}/api/v4/users/${mmUserId}`, { headers });
+        const mmUserRes = await publicHttpsFetch(`${base}/api/v4/users/${mmUserId}`, { headers });
         if (!mmUserRes.ok) return null;
         const mmUser = await mmUserRes.json() as { email?: string };
         if (!mmUser?.email) return null;
@@ -155,7 +156,7 @@ async function openStartTimerDialog(
                 options: projects.map((p) => ({ text: p.name, value: p.id })),
             });
         }
-        const dialogRes = await fetch(`${base}/api/v4/actions/dialogs/open`, {
+        const dialogRes = await publicHttpsFetch(`${base}/api/v4/actions/dialogs/open`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.bot_token}` },
             body: JSON.stringify({
@@ -449,7 +450,7 @@ export const handleMattermostDialogSubmit = async (req: Request, res: Response):
         if (config.bot_token && config.mattermost_base_url && mmUserId && body.channel_id) {
             try {
                 const base = config.mattermost_base_url.replace(/\/$/, '');
-                await fetch(`${base}/api/v4/posts/ephemeral`, {
+                await publicHttpsFetch(`${base}/api/v4/posts/ephemeral`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.bot_token}` },
                     body: JSON.stringify({
@@ -562,10 +563,9 @@ export const upsertMattermostBotConfig = async (req: Request & { user?: { organi
     for (const [field, val] of [['incoming_webhook_url', incoming_webhook_url], ['mattermost_base_url', mattermost_base_url]]) {
         if (val) {
             try {
-                const u = new URL(String(val));
-                if (!['http:', 'https:'].includes(u.protocol)) throw new Error('bad protocol');
+                await validatePublicHttpsUrl(String(val));
             } catch {
-                res.status(400).json({ message: `${field} must be a valid http/https URL` });
+                res.status(400).json({ message: `${field} must be a public HTTPS URL` });
                 return;
             }
         }

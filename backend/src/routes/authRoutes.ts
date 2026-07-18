@@ -15,13 +15,11 @@ router.post('/reset-password', resetPassword);
 router.get('/password-policy', getPasswordPolicy);
 router.post('/refresh', refreshAccessToken);
 
-// MFA — second login step (no session required, uses challenge token)
-router.post('/mfa/validate', validateMfaLogin as any);
+router.post('/mfa/validate', validateMfaLogin);
 
-// MFA management (requires full session)
-router.get('/mfa/status', authenticateToken, getMfaStatus as any);
-router.post('/mfa/setup', authenticateToken, setupMfa as any);
-router.post('/mfa/verify', authenticateToken, verifyMfa as any);
-router.post('/mfa/disable', authenticateToken, disableMfa as any);
+router.get('/mfa/status', authenticateToken, getMfaStatus);
+router.post('/mfa/setup', authenticateToken, setupMfa);
+router.post('/mfa/verify', authenticateToken, verifyMfa);
+router.post('/mfa/disable', authenticateToken, disableMfa);
 
 export default router;
