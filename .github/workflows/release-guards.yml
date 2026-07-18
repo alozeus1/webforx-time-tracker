@@ -16,50 +16,160 @@ on:
       - 'backend/**'
       - 'DEPLOYMENT.md'
   workflow_dispatch:
-    inputs:
-      run_login_smoke:
-        description: "Run login smoke check against deployed backend"
-        required: false
-        default: true
-        type: boolean
-  workflow_call:
-    inputs:
-      run_login_smoke:
-        required: false
-        default: false
-        type: boolean
-    secrets:
-      DATABASE_URL:
-        required: true
-      RELEASE_SMOKE_BASE_URL:
-        required: false
-      RELEASE_SMOKE_EMAIL:
-        required: false
-      RELEASE_SMOKE_PASSWORD:
-        required: false
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  NODE_VERSION: 22.12.0
 
 jobs:
-  frontend-accessibility-guard:
-    name: Frontend Accessibility Guard
+  backend:
+    name: Backend Build, Tests, Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/time_tracker_ci
+      JWT_SECRET: ci-jwt-secret
+      INTEGRATION_SECRET: ci-integration-secret
+      CRON_SECRET: ci-cron-secret
+      CORS_ORIGIN: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173
+      ENABLE_BACKGROUND_WORKERS: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Prisma validate and generate
+        run: npx prisma validate && npx prisma generate
+
+      - name: Typecheck/build
+        run: npm run build
+
+      - name: Backend tests
+        run: npm test -- --runInBand
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev
+
+  frontend:
+    name: Frontend Typecheck, Lint, Unit, Build, Audit
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 22.12.0
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
+      - name: Clean install
         run: npm ci
 
-      - name: Install Playwright browser
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Lint
+        run: npm run lint -- --max-warnings=2
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Production build
+        run: npm run build
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev
+
+  migration-drift:
+    name: Prisma Migration Bootstrap and Drift Guard
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: time_tracker_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/time_tracker_ci
+      JWT_SECRET: ci-jwt-secret
+      INTEGRATION_SECRET: ci-integration-secret
+      CRON_SECRET: ci-cron-secret
+      CORS_ORIGIN: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173
+      ENABLE_BACKGROUND_WORKERS: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Empty database migrate deploy
+        run: npm run release:migrate
+
+      - name: Schema drift check
+        run: npm run release:preflight
+
+  playwright-smoke:
+    name: Critical Playwright Smoke
+    runs-on: ubuntu-latest
+    needs:
+      - frontend
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
       - name: Build frontend
@@ -78,7 +188,6 @@ jobs:
             fi
             sleep 2
           done
-          echo "Frontend preview server did not become ready."
           cat /tmp/webforx-frontend-preview.log || true
           exit 1
 
@@ -89,7 +198,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: frontend-release-guard-artifacts
           path: |
@@ -104,75 +213,89 @@ jobs:
             kill "$(cat /tmp/webforx-frontend-preview.pid)" || true
           fi
 
-  schema-drift-guard:
-    name: Schema Drift Guard
+  secret-scan:
+    name: Secret Scan
     runs-on: ubuntu-latest
-    needs: frontend-accessibility-guard
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
-    defaults:
-      run:
-        working-directory: backend
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20.19.0
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Verify DATABASE_URL is configured
+      - name: Reject common committed secret patterns
         run: |
-          if [ -z "$DATABASE_URL" ]; then
-            echo "DATABASE_URL secret is required for schema drift guard."
+          if git grep -nE '(ghp_[A-Za-z0-9_]{30,}|github_pat_[A-Za-z0-9_]{50,}|sk_live_[A-Za-z0-9]{20,}|sk_test_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----)' -- . ':!package-lock.json' ':!frontend/package-lock.json' ':!backend/package-lock.json'; then
+            echo "Potential committed secret detected."
             exit 1
           fi
 
-      - name: Install backend dependencies
-        run: npm ci
+  codeql:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Block release on schema drift
-        run: npm run release:preflight
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@ddf5ce7296213f5548c91e2dd19df2d77d2b2d66
+        with:
+          languages: javascript-typescript
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@ddf5ce7296213f5548c91e2dd19df2d77d2b2d66
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@ddf5ce7296213f5548c91e2dd19df2d77d2b2d66
 
   login-smoke:
-    name: Post-Deploy Login Smoke
+    name: Login Smoke
     runs-on: ubuntu-latest
-    needs:
-      - frontend-accessibility-guard
-      - schema-drift-guard
-    if: ${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call') && inputs.run_login_smoke }}
     defaults:
       run:
         working-directory: backend
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      RELEASE_SMOKE_BASE_URL: ${{ secrets.RELEASE_SMOKE_BASE_URL }}
+      RELEASE_SMOKE_BASE_URL: ${{ secrets.RELEASE_SMOKE_BASE_URL || 'https://api.dev.webforxtech.com' }}
       RELEASE_SMOKE_EMAIL: ${{ secrets.RELEASE_SMOKE_EMAIL }}
       RELEASE_SMOKE_PASSWORD: ${{ secrets.RELEASE_SMOKE_PASSWORD }}
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/time_tracker_ci
+      JWT_SECRET: ci-jwt-secret
+      INTEGRATION_SECRET: ci-integration-secret
+      CRON_SECRET: ci-cron-secret
+      CORS_ORIGIN: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173
+      ENABLE_BACKGROUND_WORKERS: "false"
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 20.19.0
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
       - name: Verify smoke secrets are configured
         run: |
-          if [ -z "$RELEASE_SMOKE_BASE_URL" ] || [ -z "$RELEASE_SMOKE_EMAIL" ] || [ -z "$RELEASE_SMOKE_PASSWORD" ]; then
-            echo "Set RELEASE_SMOKE_BASE_URL, RELEASE_SMOKE_EMAIL, and RELEASE_SMOKE_PASSWORD secrets before running login smoke."
-            exit 1
-          fi
+          test -n "$RELEASE_SMOKE_BASE_URL"
+          test -n "$RELEASE_SMOKE_EMAIL"
+          test -n "$RELEASE_SMOKE_PASSWORD"
 
-      - name: Install backend dependencies
+      - name: Clean install
         run: npm ci
 
       - name: Run login smoke check
         run: npm run release:smoke:login
+
+  verification-complete:
+    name: Verification Complete
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+      - migration-drift
+      - playwright-smoke
+      - login-smoke
+      - secret-scan
+      - codeql
+    steps:
+      - name: All required release guards passed
+        run: echo "All required release guards passed."
