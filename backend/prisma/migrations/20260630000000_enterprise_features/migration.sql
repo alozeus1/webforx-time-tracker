@@ -1,5 +1,5 @@
 -- CreateTable
-CREATE TABLE "PayrollPeriod" (
+CREATE TABLE IF NOT EXISTS "PayrollPeriod" (
     "id" TEXT NOT NULL,
     "organization_id" TEXT NOT NULL,
     "period_type" TEXT NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE "PayrollPeriod" (
 );
 
 -- CreateTable
-CREATE TABLE "BrandingConfig" (
+CREATE TABLE IF NOT EXISTS "BrandingConfig" (
     "id" TEXT NOT NULL,
     "organization_id" TEXT NOT NULL,
     "app_name" TEXT,
@@ -36,19 +36,34 @@ CREATE TABLE "BrandingConfig" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PayrollPeriod_organization_id_start_date_end_date_key" ON "PayrollPeriod"("organization_id", "start_date", "end_date");
+CREATE UNIQUE INDEX IF NOT EXISTS "PayrollPeriod_organization_id_start_date_end_date_key" ON "PayrollPeriod"("organization_id", "start_date", "end_date");
 
 -- CreateIndex
-CREATE INDEX "PayrollPeriod_organization_id_status_start_date_idx" ON "PayrollPeriod"("organization_id", "status", "start_date");
+CREATE INDEX IF NOT EXISTS "PayrollPeriod_organization_id_status_start_date_idx" ON "PayrollPeriod"("organization_id", "status", "start_date");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "BrandingConfig_organization_id_key" ON "BrandingConfig"("organization_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "BrandingConfig_organization_id_key" ON "BrandingConfig"("organization_id");
 
 -- AddForeignKey
-ALTER TABLE "PayrollPeriod" ADD CONSTRAINT "PayrollPeriod_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PayrollPeriod_organization_id_fkey') THEN
+        ALTER TABLE "PayrollPeriod" ADD CONSTRAINT "PayrollPeriod_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "PayrollPeriod" ADD CONSTRAINT "PayrollPeriod_locked_by_fkey" FOREIGN KEY ("locked_by") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PayrollPeriod_locked_by_fkey') THEN
+        ALTER TABLE "PayrollPeriod" ADD CONSTRAINT "PayrollPeriod_locked_by_fkey" FOREIGN KEY ("locked_by") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+    END IF;
+END $$;
 
 -- AddForeignKey
-ALTER TABLE "BrandingConfig" ADD CONSTRAINT "BrandingConfig_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'BrandingConfig_organization_id_fkey') THEN
+        ALTER TABLE "BrandingConfig" ADD CONSTRAINT "BrandingConfig_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    END IF;
+END $$;
