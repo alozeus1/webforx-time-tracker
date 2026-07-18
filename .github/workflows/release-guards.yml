@@ -2,19 +2,9 @@ name: Release Guards
 
 on:
   pull_request:
-    paths:
-      - '.github/workflows/release-guards.yml'
-      - 'frontend/**'
-      - 'backend/**'
-      - 'DEPLOYMENT.md'
   push:
     branches:
       - main
-    paths:
-      - '.github/workflows/release-guards.yml'
-      - 'frontend/**'
-      - 'backend/**'
-      - 'DEPLOYMENT.md'
   workflow_dispatch:
 
 permissions:
@@ -288,6 +278,7 @@ jobs:
   verification-complete:
     name: Verification Complete
     runs-on: ubuntu-latest
+    if: ${{ always() }}
     needs:
       - backend
       - frontend
@@ -297,5 +288,12 @@ jobs:
       - secret-scan
       - codeql
     steps:
-      - name: All required release guards passed
-        run: echo "All required release guards passed."
+      - name: Require all release guards to pass
+        run: |
+          needs='${{ toJson(needs) }}'
+          echo "$needs" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! echo "$needs" | jq -e 'to_entries | all(.value.result == "success")' >/dev/null; then
+            echo "One or more required release guards failed."
+            exit 1
+          fi
+          echo "All required release guards passed."
