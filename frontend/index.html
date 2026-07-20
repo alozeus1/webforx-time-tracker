@@ -22,7 +22,9 @@
     <meta property="og:image" content="/webforx-logo.png" />
     <meta property="og:type" content="website" />
     <script>if(localStorage.getItem('wfx-theme')==='dark')document.documentElement.classList.add('dark')</script>
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <!-- Material Symbols is now self-hosted and subset (see src/index.css + scripts/subset-icons.sh).
+         The previous fonts.googleapis.com link used display=swap, which rendered raw ligature
+         text ("play_arrow", "calendar_month") whenever the font was slow or blocked. -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>

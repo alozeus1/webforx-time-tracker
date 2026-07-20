@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, Bell, Search } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getStoredRole } from '../utils/session';
+import { getSearchShortcutLabel, isSearchShortcut } from '../utils/platform';
 import api, { getApiErrorMessage } from '../services/api';
 import './Navbar.css';
 
@@ -50,6 +51,9 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
     const [searchOpen, setSearchOpen] = useState(false);
     const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
     const searchRef = useRef<HTMLDivElement | null>(null);
+    const searchInputRef = useRef<HTMLInputElement | null>(null);
+    // "⌘K" on macOS, "Ctrl+K" on Windows/Linux. Computed once — the OS cannot change mid-session.
+    const searchShortcutLabel = useMemo(() => getSearchShortcutLabel(), []);
     const notificationRef = useRef<HTMLDivElement | null>(null);
     const searchRequestIdRef = useRef(0);
     const loadNotificationsRef = useRef<(() => Promise<void>) | null>(null);
@@ -171,6 +175,24 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
 
         document.addEventListener('mousedown', onDocumentClick);
         return () => document.removeEventListener('mousedown', onDocumentClick);
+    }, []);
+
+    // Global "open search" shortcut — ⌘K on macOS, Ctrl+K on Windows/Linux.
+    // The placeholder advertised this shortcut but no handler existed, so pressing
+    // it did nothing on any platform. preventDefault stops the browser's own
+    // Ctrl+K / ⌘K (focus address-bar search) from hijacking it.
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (!isSearchShortcut(event)) {
+                return;
+            }
+            event.preventDefault();
+            searchInputRef.current?.focus();
+            searchInputRef.current?.select();
+        };
+
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
     }, []);
 
     useEffect(() => {
@@ -309,8 +331,9 @@ const Navbar: React.FC<NavbarProps> = ({ onMenuClick }) => {
                     <div className="search-bar">
                     <Search size={18} className="search-icon" />
                     <input
+                        ref={searchInputRef}
                         type="text"
-                        placeholder="Search projects or tasks... (Press ⌘K)"
+                        placeholder={`Search projects or tasks... (Press ${searchShortcutLabel})`}
                         className="search-input"
                         value={query}
                         onChange={(event) => setQuery(event.target.value)}
