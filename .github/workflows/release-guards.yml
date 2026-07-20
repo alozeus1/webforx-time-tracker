@@ -131,6 +131,13 @@ jobs:
       - name: Clean install
         run: npm ci
 
+      # Runs FIRST, while the service database is still empty, so this is a genuine
+      # from-scratch provision. Asserts: empty-DB deploy, zero drift vs schema.prisma
+      # (via prisma migrate diff), idempotent re-run, and a fully-applied history.
+      # Guards AUDIT_REPORT.md BLK-7 against regression.
+      - name: Verify migrations build a database from scratch
+        run: npm run verify:migrations
+
       - name: Empty database migrate deploy
         run: npm run release:migrate
 
