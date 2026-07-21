@@ -93,10 +93,13 @@ reset by an administrator, with a note to contact their admin if they didn't exp
 
 ### Audit trail
 
-No new logging code. Attaching `auditLog('user.mfa_reset')` (existing middleware,
-`backend/src/middlewares/auditMiddleware.ts`) to the route writes a row to `AuditLog` with the
-acting user, org, action name, and request metadata — identical to how other admin actions are
-already audited.
+`backend/src/middlewares/auditMiddleware.ts`'s `auditLog()` helper turned out to be unused
+dead code — no route in this app currently wires it in. The actual established convention,
+used 30+ times across `userController.ts`, `timeEntryController.ts`, `adminController.ts`, etc.,
+is an inline `prisma.auditLog.create(...)` call wrapped in its own try/catch (logged on failure,
+never fails the request). `resetUserMfa` follows that real convention: after updating the user,
+it writes an `AuditLog` row with `action: 'user_mfa_reset'`, `resource: 'user'`, and
+`metadata: { target_user_id, target_email }`.
 
 ### `getAllUsers` change
 
