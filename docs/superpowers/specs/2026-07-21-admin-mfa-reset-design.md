@@ -56,10 +56,12 @@ router.post(
     '/:id/mfa/reset',
     authenticateToken,
     requireRole(['Admin', 'Manager']),
-    auditLog('user.mfa_reset'),
     resetUserMfa,
 );
 ```
+
+(No `auditLog(...)` middleware — see "Audit trail" below: the actual audit write happens
+inline inside `resetUserMfa`, matching the codebase's real convention.)
 
 ### Controller
 
