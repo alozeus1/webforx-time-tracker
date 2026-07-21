@@ -347,6 +347,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response): Promise<void
                 hourly_rate: true,
                 employment_type: true,
                 min_weekly_hours: true,
+                mfa_enabled: true,
                 role: { select: { name: true } },
             },
         });
