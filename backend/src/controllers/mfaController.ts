@@ -15,6 +15,7 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { generateSessionTokens, verifyToken } from '../services/tokenService';
 import { decryptSecret, encryptSecret } from '../utils/crypto';
+import { sendMfaResetNotificationEmail } from '../services/emailService';
 
 const APP_NAME = 'Web Forx Time Tracker';
 
@@ -263,6 +264,71 @@ export const getMfaStatus = async (req: AuthRequest, res: Response): Promise<voi
         res.status(200).json({ mfa_enabled: user?.mfa_enabled ?? false });
     } catch (error) {
         console.error('MFA status error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+/**
+ * POST /users/:id/mfa/reset
+ * Admin/Manager-initiated MFA reset. Bypasses the TOTP requirement in
+ * disableMfa() above — that's the point: this exists for the case where
+ * the user has lost the device that would produce a valid code.
+ * Ends in the same state as self-service disable; the user re-enrolls
+ * via /auth/mfa/setup + /auth/mfa/verify whenever they're ready.
+ */
+export const resetUserMfa = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const targetIdParam = req.params.id;
+        const targetId = Array.isArray(targetIdParam) ? targetIdParam[0] : targetIdParam;
+        const user = await prisma.user.findFirst({
+            where: { id: targetId, organization_id: req.user!.organization_id },
+        });
+
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        if (!user.mfa_enabled) {
+            res.status(200).json({ message: 'MFA was already disabled for this user.', mfa_enabled: false });
+            return;
+        }
+
+        await prisma.user.update({
+            where: { id: targetId },
+            data: { mfa_enabled: false, mfa_secret: null },
+        });
+
+        await prisma.mfaChallenge.deleteMany({ where: { user_id: targetId } });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: req.user!.userId,
+                    organization_id: req.user!.organization_id,
+                    action: 'user_mfa_reset',
+                    resource: 'user',
+                    metadata: {
+                        target_user_id: user.id,
+                        target_email: user.email,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write MFA reset audit log:', error);
+        }
+
+        sendMfaResetNotificationEmail({
+            to: user.email,
+            firstName: user.first_name,
+        }).catch((err) => console.error('Failed to send MFA reset notification email:', err));
+
+        res.status(200).json({
+            message: 'MFA has been reset. The user can set up a new device from their account settings.',
+            mfa_enabled: false,
+        });
+    } catch (error) {
+        console.error('MFA reset error:', error);
         res.status(500).json({ message: 'Internal server error' });
     }
 };
