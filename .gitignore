@@ -1,5 +1,8 @@
 .DS_Store
 
+# Local git worktrees (superpowers:using-git-worktrees)
+.worktrees/
+
 # Dependencies
 node_modules/
 */node_modules/
