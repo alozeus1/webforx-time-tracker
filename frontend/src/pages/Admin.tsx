@@ -703,6 +703,20 @@ const Admin: React.FC = () => {
         }
     }
 
+    async function handleResetUserMfa(user: UserSummary) {
+        if (!window.confirm(`Reset MFA for ${user.first_name} ${user.last_name}? They will need to set up a new authenticator device.`)) return;
+
+        try {
+            await api.post(`/users/${user.id}/mfa/reset`);
+            setUsers((current) => current.map((item) => (
+                item.id === user.id ? { ...item, mfa_enabled: false } : item
+            )));
+        } catch (error) {
+            console.error('Error resetting user MFA:', error);
+            alert('Failed to reset MFA for this user.');
+        }
+    }
+
     async function handleSaveRate(userId: string) {
         const rate = parseFloat(editingRateValue);
         if (isNaN(rate) || rate < 0) { alert('Enter a valid rate (0 or higher).'); return; }
@@ -1762,6 +1776,7 @@ const Admin: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Team / Group</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Rate ($/hr)</th>
                                             <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">Status</th>
+                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-center">MFA</th>
                                         </>
                                     )}
                                     {activeTab === 'teams' && (
@@ -1951,6 +1966,22 @@ const Admin: React.FC = () => {
                                             <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${u.is_active ? 'text-emerald-500' : 'text-slate-400'}`}>
                                                 <span className={`h-1.5 w-1.5 rounded-full ${u.is_active ? 'bg-emerald-500' : 'bg-slate-400'}`}></span> {u.is_active ? 'Active' : 'Inactive'}
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <span className={`inline-flex items-center gap-1.5 text-xs font-bold ${u.mfa_enabled ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                                    <span className={`h-1.5 w-1.5 rounded-full ${u.mfa_enabled ? 'bg-emerald-500' : 'bg-slate-400'}`}></span> {u.mfa_enabled ? 'Enabled' : 'Off'}
+                                                </span>
+                                                {u.mfa_enabled && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => void handleResetUserMfa(u)}
+                                                        className="text-xs font-bold text-rose-600 hover:text-rose-700"
+                                                    >
+                                                        Reset MFA
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

@@ -24,6 +24,7 @@ export interface UserSummary {
     role?: RoleSummary;
     employment_type?: string | null;
     min_weekly_hours?: number | null;
+    mfa_enabled?: boolean;
 }
 
 export type EmploymentType = 'employee' | 'intern' | 'contractor';
