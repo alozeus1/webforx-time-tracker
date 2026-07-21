@@ -171,6 +171,39 @@ export const sendPasswordResetEmail = async (opts: PasswordResetEmailOptions): P
     });
 };
 
+// ─── MFA reset notification (admin/manager initiated) ─────────────────────────
+
+export interface MfaResetNotificationEmailOptions {
+    to: string;
+    firstName: string;
+}
+
+export const sendMfaResetNotificationEmail = async (opts: MfaResetNotificationEmailOptions): Promise<void> => {
+    const client = getClient();
+    if (!client) {
+        if (env.nodeEnv === 'development') {
+            console.log(`[email:dev] MFA reset notification skipped (no RESEND_API_KEY) — ${opts.to}`);
+        }
+        return;
+    }
+
+    const body = `
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:800;color:#0f172a;">Your two-factor authentication was reset</h2>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;">
+        Hi ${opts.firstName}, an administrator on your account reset two-factor authentication (MFA) for your login. You can now sign in with just your password, and set up a new authenticator device from your account settings whenever you're ready.
+      </p>
+
+      ${MUTED('If you did not expect this, contact your administrator right away.')}
+    `;
+
+    await send(client, {
+        from: env.emailFrom,
+        to: opts.to,
+        subject: 'Your two-factor authentication was reset',
+        html: BASE_HTML('MFA Reset', body),
+    });
+};
+
 // ─── Access request — admin notification ────────────────────────────────────
 
 export interface AccessRequestNotificationOptions {
