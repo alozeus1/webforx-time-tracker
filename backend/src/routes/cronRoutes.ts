@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runIdleChecks, runWorkloadChecks, runDailyReport, resetDemoData } from '../controllers/cronController';
+import { runIdleChecks, runWorkloadChecks, runDailyReport, runScheduledReports, resetDemoData } from '../controllers/cronController';
 import { env } from '../config/env';
 
 const router = Router();
@@ -30,6 +30,7 @@ router.get('/hourly', runIdleChecks);
 router.get('/idle', runIdleChecks);
 router.get('/workload', runWorkloadChecks);
 router.get('/daily', runDailyReport);
+router.get('/scheduled-reports', runScheduledReports);
 router.get('/reset-demo', resetDemoData);
 router.post('/reset-demo', resetDemoData);
 

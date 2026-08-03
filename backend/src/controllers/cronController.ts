@@ -31,12 +31,24 @@ export const runDailyReport = async (_req: Request, res: Response): Promise<void
         console.log('[Cron] Running daily PDF report generation...');
         await generateAndEmailDailyReport();
         const scheduledReports = await processDueScheduledReports();
-        const status = scheduledReports.failed > 0 ? 'partial_failure' : 'success';
-        const message = scheduledReports.failed > 0
-            ? 'Daily report completed, but one or more scheduled reports failed'
-            : 'Daily report completed successfully';
 
-        res.status(scheduledReports.failed > 0 ? 500 : 200).json({
+        // A blocked report is a *correct* outcome — the validation gate did its job —
+        // so it must not be reported as a 500, or the cron platform will retry and the
+        // operator will chase a phantom infrastructure fault instead of the data issue.
+        // It is surfaced as `validation_blocked` with a 200 so it stays visible.
+        const hasFailures = scheduledReports.failed > 0;
+        const hasBlocked = scheduledReports.blocked > 0;
+
+        const status = hasFailures
+            ? 'partial_failure'
+            : hasBlocked ? 'validation_blocked' : 'success';
+        const message = hasFailures
+            ? 'Daily report completed, but one or more scheduled reports failed'
+            : hasBlocked
+                ? 'Daily report completed. One or more scheduled reports were blocked by validation gates and were not sent.'
+                : 'Daily report completed successfully';
+
+        res.status(hasFailures ? 500 : 200).json({
             status,
             message,
             scheduledReports,
@@ -44,6 +56,36 @@ export const runDailyReport = async (_req: Request, res: Response): Promise<void
     } catch (error) {
         console.error('[Cron] Error during daily report:', error);
         res.status(500).json({ status: 'error', message: 'Failed to run daily report' });
+    }
+};
+
+/**
+ * Scheduled report tick.
+ *
+ * Runs hourly. A single daily tick cannot serve multiple reporting timezones: at
+ * 23:59 UTC on a Monday it is already Tuesday in Pacific/Auckland, so an Auckland
+ * report's Monday 06:00 slot would never be observed and the report would never
+ * send. Ticking hourly lets every timezone's Monday-morning slot be seen, while
+ * `isGenerationDue` plus window-based de-duplication keep delivery exactly-once.
+ */
+export const runScheduledReports = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const scheduledReports = await processDueScheduledReports();
+
+        const hasFailures = scheduledReports.failed > 0;
+        const hasBlocked = scheduledReports.blocked > 0;
+
+        if (scheduledReports.sent > 0 || hasFailures || hasBlocked) {
+            console.log('[Cron] Scheduled report tick:', JSON.stringify(scheduledReports));
+        }
+
+        res.status(hasFailures ? 500 : 200).json({
+            status: hasFailures ? 'partial_failure' : hasBlocked ? 'validation_blocked' : 'success',
+            scheduledReports,
+        });
+    } catch (error) {
+        console.error('[Cron] Error during scheduled report tick:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run scheduled reports' });
     }
 };
 

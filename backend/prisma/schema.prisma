@@ -490,6 +490,27 @@ model ScheduledReport {
   last_sent_at DateTime?
   created_at   DateTime  @default(now())
 
+  // ── Export window & scheduling (timezone-aware) ──────────────────────────
+  // IANA zone the export window and generation time are evaluated in. All window
+  // boundaries are wall-clock times in this zone, never UTC — running the window
+  // in server-local time is what previously dropped a working day from every report.
+  reporting_timezone       String  @default("UTC")
+  // Window boundaries are stored explicitly so the contract is visible in data.
+  // Currently fixed to a full Monday-to-Sunday week.
+  export_window_start      String  @default("monday 00:00:00")
+  export_window_end        String  @default("sunday 23:59:59")
+  // 24-hour "HH:mm" in reporting_timezone. Must fall on Monday, after the window closes.
+  schedule_generation_time String  @default("06:00")
+
+  // ── Pre-generation validation gates ──────────────────────────────────────
+  validation_gates_enabled          Boolean @default(true)
+  validation_gate_zero_entries      Boolean @default(true)
+  validation_gate_window_integrity  Boolean @default(true)
+  // Weekday indices (0 = Sunday .. 6 = Saturday) that must contain at least one
+  // org-wide entry. Defaults to all seven days; narrow it for organisations that
+  // legitimately do not log at weekends rather than disabling the gate outright.
+  validation_gate_required_days     Json    @default("[0, 1, 2, 3, 4, 5, 6]")
+
   user User @relation(fields: [user_id], references: [id])
 
   @@index([organization_id, is_active])
