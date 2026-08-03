@@ -68,6 +68,11 @@ Request flow:
 4. Frontend stores token in localStorage and sends `Authorization: Bearer <token>` for protected calls.
 5. Backend enforces role-based access via middleware.
 
+Cookie-authenticated mutations use a signed double-submit CSRF token. The SPA
+obtains it from login/MFA/Google responses or `GET /api/v1/auth/csrf-token` and
+sends it as `X-CSRF-Token`. Bearer-authenticated API mutations are exempt because
+the browser does not attach bearer credentials implicitly.
+
 Data persistence:
 
 - PostgreSQL via Prisma.
@@ -333,6 +338,27 @@ Checks:
 1. Confirm `/timers/start` and `/timers/me` responses include active timer.
 2. Verify backend DB connectivity.
 3. Verify auth token is present and not removed by 401 interceptor.
+
+### Weekly report covers the wrong dates / a day is missing
+
+Fixed 2026-08-03. The weekly export window was derived from server-local time as
+`[now-6d 00:00, now+1d 00:00)`, producing a Tuesday-to-Monday window and dropping one
+working day from every weekly report. Windows are now Monday 00:00:00 to Sunday
+23:59:59 in each report's `reporting_timezone`, generated the following Monday at
+`schedule_generation_time` (default 06:00 local).
+
+Checks:
+
+1. Confirm `reporting_timezone` on the scheduled report matches where the team works.
+2. Confirm the **Scheduled Reports Tick** GitHub Actions workflow is enabled and running
+   hourly. It lives in GH Actions rather than `backend/vercel.json` because Vercel's Hobby
+   plan rejects sub-daily cron expressions at deploy time. A daily tick cannot serve
+   timezones far from UTC. GitHub auto-disables scheduled workflows after 60 days of
+   repository inactivity, and that failure is silent.
+3. If a report did not send, check the logs for `[ReportValidation] FAIL` — the report may
+   have been correctly blocked by a validation gate (returns HTTP 200, `status: validation_blocked`).
+
+Full reference: `docs/scheduled-report-windows.md`.
 
 ### Cron endpoints return unauthorized
 

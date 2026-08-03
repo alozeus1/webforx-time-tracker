@@ -2,6 +2,16 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CalendarClock, Plus, Trash2 } from 'lucide-react';
 import api, { getApiErrorMessage, parseApiError } from '../services/api';
 
+interface SchedulePreview {
+    timeZone: string;
+    generationTime: string;
+    generationDay: string;
+    nextRunUtc: string;
+    nextWindowLabel: string;
+    nextWindowStartUtc: string;
+    nextWindowEndUtc: string;
+}
+
 interface ScheduledReportItem {
     id: string;
     frequency: string;
@@ -11,9 +21,56 @@ interface ScheduledReportItem {
     is_active: boolean;
     last_sent_at?: string | null;
     created_at: string;
+    reporting_timezone?: string;
+    export_window_start?: string;
+    export_window_end?: string;
+    schedule_generation_time?: string;
+    validation_gates_enabled?: boolean;
+    validation_gate_zero_entries?: boolean;
+    validation_gate_window_integrity?: boolean;
+    validation_gate_required_days?: number[];
+    schedule_preview?: SchedulePreview | null;
 }
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const SHORT_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const FALLBACK_TIMEZONES = [
+    'UTC',
+    'Africa/Lagos', 'Africa/Nairobi', 'Africa/Johannesburg',
+    'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/New_York', 'America/Sao_Paulo',
+    'Asia/Dubai', 'Asia/Kolkata', 'Asia/Shanghai', 'Asia/Singapore', 'Asia/Tokyo',
+    'Australia/Sydney',
+    'Europe/Berlin', 'Europe/London', 'Europe/Madrid', 'Europe/Paris',
+    'Pacific/Auckland',
+];
+
+/**
+ * Prefer the runtime's full IANA list so operators are never blocked by a curated
+ * subset; fall back to a representative list on older engines.
+ */
+const getTimeZoneOptions = (): string[] => {
+    const supported = (Intl as unknown as { supportedValuesOf?: (key: string) => string[] }).supportedValuesOf;
+    if (typeof supported === 'function') {
+        try {
+            const zones = supported('timeZone');
+            if (Array.isArray(zones) && zones.length > 0) {
+                return Array.from(new Set(['UTC', ...zones]));
+            }
+        } catch {
+            // fall through to the static list
+        }
+    }
+    return FALLBACK_TIMEZONES;
+};
+
+const detectBrowserTimeZone = (): string => {
+    try {
+        return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    } catch {
+        return 'UTC';
+    }
+};
 
 const ScheduledReports: React.FC = () => {
     const [reports, setReports] = useState<ScheduledReportItem[]>([]);
@@ -24,12 +81,29 @@ const ScheduledReports: React.FC = () => {
     const [creating, setCreating] = useState(false);
     const [processingId, setProcessingId] = useState<string | null>(null);
 
+    const timeZoneOptions = React.useMemo(getTimeZoneOptions, []);
+
     const [form, setForm] = useState({
         frequency: 'weekly',
         day_of_week: '1',
         recipients: '',
         report_type: 'summary',
+        reporting_timezone: detectBrowserTimeZone(),
+        schedule_generation_time: '06:00',
+        validation_gates_enabled: true,
+        validation_gate_zero_entries: true,
+        validation_gate_window_integrity: true,
+        validation_gate_required_days: [0, 1, 2, 3, 4, 5, 6] as number[],
     });
+
+    const toggleRequiredDay = (day: number) => {
+        setForm(prev => {
+            const next = prev.validation_gate_required_days.includes(day)
+                ? prev.validation_gate_required_days.filter(d => d !== day)
+                : [...prev.validation_gate_required_days, day].sort((a, b) => a - b);
+            return { ...prev, validation_gate_required_days: next };
+        });
+    };
 
     const fetchReports = useCallback(async () => {
         setLoadError(null);
@@ -57,6 +131,10 @@ const ScheduledReports: React.FC = () => {
             setFeedback({ message: 'At least one recipient email required', tone: 'error' });
             return;
         }
+        if (form.validation_gates_enabled && form.validation_gate_zero_entries && form.validation_gate_required_days.length === 0) {
+            setFeedback({ message: 'Select at least one day for the zero-entry check, or turn that gate off.', tone: 'error' });
+            return;
+        }
         setCreating(true);
         try {
             await api.post('/scheduled-reports', {
@@ -64,10 +142,27 @@ const ScheduledReports: React.FC = () => {
                 day_of_week: form.frequency === 'weekly' ? parseInt(form.day_of_week) : undefined,
                 recipients,
                 report_type: form.report_type,
+                reporting_timezone: form.reporting_timezone,
+                schedule_generation_time: form.schedule_generation_time,
+                validation_gates_enabled: form.validation_gates_enabled,
+                validation_gate_zero_entries: form.validation_gate_zero_entries,
+                validation_gate_window_integrity: form.validation_gate_window_integrity,
+                validation_gate_required_days: form.validation_gate_required_days,
             });
             setFeedback({ message: 'Scheduled report created', tone: 'success' });
             setShowCreate(false);
-            setForm({ frequency: 'weekly', day_of_week: '1', recipients: '', report_type: 'summary' });
+            setForm({
+                frequency: 'weekly',
+                day_of_week: '1',
+                recipients: '',
+                report_type: 'summary',
+                reporting_timezone: detectBrowserTimeZone(),
+                schedule_generation_time: '06:00',
+                validation_gates_enabled: true,
+                validation_gate_zero_entries: true,
+                validation_gate_window_integrity: true,
+                validation_gate_required_days: [0, 1, 2, 3, 4, 5, 6],
+            });
             void fetchReports();
         } catch (error) {
             setFeedback({ message: getApiErrorMessage(error, 'Failed to create scheduled report'), tone: 'error' });
@@ -195,6 +290,136 @@ const ScheduledReports: React.FC = () => {
                                 />
                             </div>
                         </div>
+
+                        {/* ── Export window & schedule ─────────────────────────── */}
+                        <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-4">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Export window &amp; schedule</h3>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                    Weekly reports always cover a full Monday–Sunday week in the reporting timezone, and are
+                                    generated the following Monday so the week is complete before the report runs.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="schedule-timezone" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Reporting Timezone</label>
+                                    <select
+                                        id="schedule-timezone"
+                                        name="reportingTimezone"
+                                        className={`${inputClass} mt-1`}
+                                        value={form.reporting_timezone}
+                                        onChange={e => setForm(p => ({ ...p, reporting_timezone: e.target.value }))}
+                                    >
+                                        {timeZoneOptions.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                    </select>
+                                    <p className="text-[11px] text-slate-400 mt-1">All window boundaries and the generation time are wall-clock times in this zone.</p>
+                                </div>
+                                <div>
+                                    <label htmlFor="schedule-generation-time" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Generation Time (Monday)</label>
+                                    <input
+                                        id="schedule-generation-time"
+                                        name="scheduleGenerationTime"
+                                        type="time"
+                                        className={`${inputClass} mt-1`}
+                                        value={form.schedule_generation_time}
+                                        onChange={e => setForm(p => ({ ...p, schedule_generation_time: e.target.value }))}
+                                    />
+                                    <p className="text-[11px] text-slate-400 mt-1">Runs Monday only. Sunday is blocked — it closes the window.</p>
+                                </div>
+                                <div>
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Export Window Start</span>
+                                    <div className={`${inputClass} mt-1 bg-slate-50 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 cursor-not-allowed`}>Monday 00:00:00</div>
+                                </div>
+                                <div>
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Export Window End</span>
+                                    <div className={`${inputClass} mt-1 bg-slate-50 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 cursor-not-allowed`}>Sunday 23:59:59</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ── Validation gates ─────────────────────────────────── */}
+                        <div className="pt-4 border-t border-slate-200 dark:border-slate-700 space-y-3">
+                            <label className="flex items-start gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    name="validationGatesEnabled"
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                    checked={form.validation_gates_enabled}
+                                    onChange={e => setForm(p => ({ ...p, validation_gates_enabled: e.target.checked }))}
+                                />
+                                <span>
+                                    <span className="text-sm font-bold text-slate-900 dark:text-white">Enable validation gates</span>
+                                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                                        Halt generation and alert an admin instead of sending a report built on an incomplete window.
+                                    </span>
+                                </span>
+                            </label>
+
+                            {form.validation_gates_enabled && (
+                                <div className="ml-6 space-y-3">
+                                    <label className="flex items-start gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            name="validationGateZeroEntries"
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                            checked={form.validation_gate_zero_entries}
+                                            onChange={e => setForm(p => ({ ...p, validation_gate_zero_entries: e.target.checked }))}
+                                        />
+                                        <span>
+                                            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Fail on zero-entry days</span>
+                                            <span className="block text-xs text-slate-500 dark:text-slate-400">
+                                                Every selected day must have at least one entry across the organization.
+                                            </span>
+                                        </span>
+                                    </label>
+
+                                    {form.validation_gate_zero_entries && (
+                                        <div className="ml-6">
+                                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Days that must have entries</span>
+                                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                {SHORT_DAY_NAMES.map((name, index) => {
+                                                    const selected = form.validation_gate_required_days.includes(index);
+                                                    return (
+                                                        <button
+                                                            key={name}
+                                                            type="button"
+                                                            onClick={() => toggleRequiredDay(index)}
+                                                            aria-pressed={selected}
+                                                            className={`px-2.5 py-1 rounded-md text-xs font-semibold border transition-colors ${selected
+                                                                ? 'bg-primary text-white border-primary'
+                                                                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}
+                                                        >
+                                                            {name}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <p className="text-[11px] text-slate-400 mt-1.5">
+                                                Deselect weekends only if your team genuinely does not log time then — an unselected day
+                                                that should have data will no longer be caught.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    <label className="flex items-start gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            name="validationGateWindowIntegrity"
+                                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                            checked={form.validation_gate_window_integrity}
+                                            onChange={e => setForm(p => ({ ...p, validation_gate_window_integrity: e.target.checked }))}
+                                        />
+                                        <span>
+                                            <span className="text-sm font-medium text-slate-800 dark:text-slate-200">Enforce 7-day window ending Sunday</span>
+                                            <span className="block text-xs text-slate-500 dark:text-slate-400">
+                                                Rejects any window that is not exactly seven days or does not close on a Sunday.
+                                            </span>
+                                        </span>
+                                    </label>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="flex gap-2">
                             <button type="button" onClick={handleCreate} disabled={creating} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold hover:bg-primary/90 transition-all disabled:opacity-60">{creating ? 'Creating...' : 'Create'}</button>
                             <button type="button" onClick={() => setShowCreate(false)} disabled={creating} className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-all disabled:opacity-60">Cancel</button>
@@ -222,9 +447,41 @@ const ScheduledReports: React.FC = () => {
                                     </div>
                                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                                         {r.frequency === 'weekly' && r.day_of_week != null ? `Every ${DAY_NAMES[r.day_of_week]}` : 'Monthly'}
+                                        {r.schedule_generation_time && ` at ${r.schedule_generation_time}`}
+                                        {r.reporting_timezone && ` (${r.reporting_timezone})`}
                                         {' · '}To: {(r.recipients || []).join(', ')}
                                         {r.last_sent_at && ` · Last sent ${new Date(r.last_sent_at).toLocaleDateString()}`}
                                     </p>
+                                    {r.frequency === 'weekly' && (
+                                        <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
+                                            Window: Monday 00:00:00 → Sunday 23:59:59
+                                            {r.schedule_preview?.nextWindowLabel && ` · Next covers ${r.schedule_preview.nextWindowLabel}`}
+                                            {r.schedule_preview?.nextRunUtc && ` · Next run ${new Date(r.schedule_preview.nextRunUtc).toLocaleString()}`}
+                                        </p>
+                                    )}
+                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                        {r.validation_gates_enabled === false ? (
+                                            <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                                Validation gates off
+                                            </span>
+                                        ) : (
+                                            <>
+                                                {r.validation_gate_zero_entries !== false && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                                        Zero-entry check
+                                                        {Array.isArray(r.validation_gate_required_days) && r.validation_gate_required_days.length < 7
+                                                            ? `: ${r.validation_gate_required_days.map(d => SHORT_DAY_NAMES[d]).join(' ')}`
+                                                            : ': all 7 days'}
+                                                    </span>
+                                                )}
+                                                {r.validation_gate_window_integrity !== false && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                                                        Window integrity
+                                                    </span>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="flex gap-1 shrink-0">
                                     <button type="button" onClick={() => handleToggle(r)} disabled={processingId === r.id} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-60 ${r.is_active ? 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-400' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400'}`}>

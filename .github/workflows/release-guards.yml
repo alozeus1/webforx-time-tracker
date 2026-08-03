@@ -53,7 +53,10 @@ jobs:
         run: npm test -- --runInBand
 
       - name: Production dependency audit
-        run: npm audit --omit=dev
+        # Strict audit with an explicit, time-boxed exception list. Any advisory
+        # not justified in scripts/audit-guard.cjs fails the build. See that file
+        # for why bare `npm audit --omit=dev` was insufficient.
+        run: node ../scripts/audit-guard.cjs
 
   frontend:
     name: Frontend Typecheck, Lint, Unit, Build, Audit
@@ -88,7 +91,10 @@ jobs:
         run: npm run build
 
       - name: Production dependency audit
-        run: npm audit --omit=dev
+        # Strict audit with an explicit, time-boxed exception list. Any advisory
+        # not justified in scripts/audit-guard.cjs fails the build. See that file
+        # for why bare `npm audit --omit=dev` was insufficient.
+        run: node ../scripts/audit-guard.cjs
 
   migration-drift:
     name: Prisma Migration Bootstrap and Drift Guard
@@ -130,6 +136,13 @@ jobs:
 
       - name: Clean install
         run: npm ci
+
+      # Runs FIRST, while the service database is still empty, so this is a genuine
+      # from-scratch provision. Asserts: empty-DB deploy, zero drift vs schema.prisma
+      # (via prisma migrate diff), idempotent re-run, and a fully-applied history.
+      # Guards AUDIT_REPORT.md BLK-7 against regression.
+      - name: Verify migrations build a database from scratch
+        run: npm run verify:migrations
 
       - name: Empty database migrate deploy
         run: npm run release:migrate

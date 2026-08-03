@@ -80,7 +80,13 @@ Mounted at `/api/v1/auth`.
 | `POST` | `/logout` | Public | Logout acknowledgment |
 | `POST` | `/forgot-password` | Public | Create password reset token |
 | `POST` | `/reset-password` | Public | Complete password reset |
-| `POST` | `/refresh` | Public | Refresh access token |
+| `POST` | `/refresh` | Refresh cookie + CSRF | Refresh access token |
+| `GET` | `/csrf-token` | Public | Issue or recover the signed double-submit token required for cookie-authenticated mutations |
+
+Cookie-authenticated state-changing requests must submit the issued token in
+`X-CSRF-Token`. Requests authenticated with an explicit `Authorization: Bearer`
+header do not require CSRF protection because the browser cannot attach that
+credential implicitly.
 
 ## User API
 

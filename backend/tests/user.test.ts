@@ -236,8 +236,8 @@ describe('Notification lifecycle routes', () => {
 describe('GET /api/v1/users', () => {
     it('returns 200 with users list for Admin', async () => {
         (prisma.user.findMany as jest.Mock).mockResolvedValue([
-            { id: 'user-1', email: 'alice@test.com', first_name: 'Alice', last_name: 'Smith', is_active: true, role: { name: 'Employee' } },
-            { id: 'user-2', email: 'bob@test.com', first_name: 'Bob', last_name: 'Jones', is_active: true, role: { name: 'Manager' } },
+            { id: 'user-1', email: 'alice@test.com', first_name: 'Alice', last_name: 'Smith', is_active: true, mfa_enabled: true, role: { name: 'Employee' } },
+            { id: 'user-2', email: 'bob@test.com', first_name: 'Bob', last_name: 'Jones', is_active: true, mfa_enabled: false, role: { name: 'Manager' } },
         ]);
 
         const res = await request(app)
@@ -247,6 +247,8 @@ describe('GET /api/v1/users', () => {
         expect(res.status).toBe(200);
         expect(Array.isArray(res.body)).toBe(true);
         expect(res.body).toHaveLength(2);
+        expect(res.body[0].mfa_enabled).toBe(true);
+        expect(res.body[1].mfa_enabled).toBe(false);
     });
 
     it('returns 200 with users list for Manager', async () => {

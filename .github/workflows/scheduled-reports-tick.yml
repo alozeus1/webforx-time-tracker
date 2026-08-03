@@ -1,0 +1,131 @@
+name: Scheduled Reports Tick
+
+# WHY THIS EXISTS
+# ----------------
+# Weekly reports fire at Monday 06:00 in each report's own IANA reporting
+# timezone (see docs/scheduled-report-windows.md). Resolving "is this report due
+# yet?" therefore has to happen at a per-report local time, which means the
+# backend must be polled more often than once a day: Monday 06:00 in
+# Pacific/Auckland is Sunday 18:00 UTC, while Monday 06:00 in America/Chicago is
+# Monday 11:00 or 12:00 UTC depending on DST. A single daily tick would simply
+# never observe some timezones' slots, and those reports would never send.
+#
+# The natural home for this is a Vercel cron entry with schedule '0 * * * *'.
+# That is not available to us: Vercel's Hobby plan rejects any cron expression
+# more frequent than once per day, and it does so at DEPLOY time — the backend
+# preview build fails outright rather than the cron merely not running. (Cron
+# *counts* are no longer the constraint; per-project limits were raised to 100
+# on all plans in January 2026. It is the frequency that is restricted.)
+#
+# So the hourly tick lives here instead. If the Vercel project is ever upgraded
+# to Pro, this workflow can be deleted and replaced with:
+#
+#     { "path": "/api/v1/cron/scheduled-reports", "schedule": "0 * * * *" }
+#
+# in backend/vercel.json.
+#
+# WHY HOURLY POLLING IS SAFE
+# ---------------------------
+# The endpoint is idempotent. processDueScheduledReports() only sends a report
+# when isGenerationDue() says the local weekday is Monday and the local time is
+# at or past the configured slot, AND last_sent_at is earlier than the current
+# window's exclusive end. Extra ticks are no-ops. GitHub's scheduled runs drift
+# under platform load and are occasionally skipped entirely; for a weekly report
+# polled hourly that is harmless — a missed tick means the report goes out on a
+# later one, still on the correct Monday, still against the correct window.
+#
+# KNOWN GITHUB ACTIONS CAVEAT
+# ----------------------------
+# GitHub disables scheduled workflows in repositories with no commit activity
+# for 60 days. This repo is actively developed so that is unlikely, but if
+# weekly reports ever stop arriving with no other explanation, check whether
+# this workflow was auto-disabled before debugging the backend.
+#
+# REQUIRED SECRETS
+# ----------------
+#   CRON_SECRET  — must match the backend's CRON_SECRET env var exactly.
+#                  cronRoutes.ts rejects anything else with 401.
+#   API_BASE_URL — optional. Backend API base including /api/v1, e.g.
+#                  https://api.dev.webforxtech.com/api/v1
+#                  Falls back to the production URL below when unset.
+#
+# Set them with:
+#   gh secret set CRON_SECRET --repo alozeus1/webforx-time-tracker
+# Never commit either value.
+
+on:
+  schedule:
+    # Hourly, on the hour (UTC). GitHub does not guarantee punctuality.
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this run was triggered manually (recorded in the run log)'
+        required: false
+        default: 'Manual re-run after resolving a validation gate failure'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never let a delayed run overlap with the next scheduled one. The endpoint is
+  # idempotent, but overlapping runs make the logs much harder to read when
+  # diagnosing a blocked report.
+  group: scheduled-reports-tick
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    name: Poll scheduled reports endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check for required secret
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "::error::CRON_SECRET is not set. See this workflow's header comment for setup instructions."
+            exit 1
+          fi
+
+      - name: Trigger scheduled report processing
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL || 'https://api.dev.webforxtech.com/api/v1' }}
+        run: |
+          set -euo pipefail
+
+          # --fail-with-body is required: without it curl exits 0 on a 5xx and the
+          # tick would report success while reports silently stopped going out.
+          # Body and status are captured separately so a failure still surfaces
+          # the backend's JSON payload in the run log.
+          http_status=0
+          set +e
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 120 \
+            --retry 2 --retry-delay 5 --retry-connrefused \
+            --write-out '\n%{http_code}' \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${API_BASE_URL}/cron/scheduled-reports")
+          curl_exit=$?
+          set -e
+
+          http_status=$(printf '%s' "$response" | tail -n1)
+          body=$(printf '%s' "$response" | sed '$d')
+
+          echo "HTTP ${http_status}"
+          echo "${body}"
+
+          if [ "$curl_exit" -ne 0 ]; then
+            echo "::error::Scheduled report tick failed (curl exit ${curl_exit}, HTTP ${http_status})."
+            exit 1
+          fi
+
+          # A 200 with status=validation_blocked is a CORRECT outcome: a report was
+          # deliberately suppressed because its export window failed a validation
+          # gate, and an alert email has already gone to its recipients. Surface it
+          # as a warning so it is visible in the Actions UI, but do not fail the
+          # run — failing here would train the team to ignore red ticks, and the
+          # real signal is in the alert email and the backend logs.
+          if printf '%s' "$body" | grep -q '"status":"validation_blocked"'; then
+            echo "::warning::One or more scheduled reports were blocked by validation gates and were not sent. See the alert email and backend logs; troubleshooting steps are in docs/scheduled-report-windows.md."
+          fi

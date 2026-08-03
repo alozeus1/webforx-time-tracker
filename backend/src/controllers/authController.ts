@@ -14,6 +14,7 @@ import {
     validatePasswordAgainstPolicy,
 } from '../services/passwordPolicyService';
 import { issueMfaChallengeToken, generateSessionTokens, verifyToken } from '../services/tokenService';
+import { clearCsrfCookies, issueCsrfToken } from '../middlewares/csrf';
 
 export const login = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -111,6 +112,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions);
+        const csrfToken = issueCsrfToken(req, res, { rotateSession: true });
 
         // Password expiry (informational only — never blocks login). Fields are
         // omitted entirely when the org has expiration disabled (the default).
@@ -122,6 +124,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         // and bypass cookie protections entirely.
         res.status(200).json({
             token: accessToken,
+            csrfToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -143,6 +146,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 export const logout = async (_req: Request, res: Response): Promise<void> => {
     res.clearCookie('access_token', { path: '/', httpOnly: true });
     res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh', httpOnly: true });
+    clearCsrfCookies(res);
     res.status(200).json({ message: 'Logged out successfully' });
 };
 
@@ -345,9 +349,10 @@ export const refreshAccessToken = async (req: Request, res: Response): Promise<v
 
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', newRefreshToken, refreshTokenCookieOptions);
+        const csrfToken = issueCsrfToken(req, res);
 
         // Refresh token is in the httpOnly cookie only — not returned in body.
-        res.status(200).json({ token: accessToken });
+        res.status(200).json({ token: accessToken, csrfToken });
     } catch {
         res.status(401).json({ message: 'Invalid or expired refresh token' });
     }
