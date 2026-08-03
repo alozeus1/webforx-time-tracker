@@ -85,7 +85,6 @@ const ScheduledReports: React.FC = () => {
 
     const [form, setForm] = useState({
         frequency: 'weekly',
-        day_of_week: '1',
         recipients: '',
         report_type: 'summary',
         reporting_timezone: detectBrowserTimeZone(),
@@ -139,7 +138,6 @@ const ScheduledReports: React.FC = () => {
         try {
             await api.post('/scheduled-reports', {
                 frequency: form.frequency,
-                day_of_week: form.frequency === 'weekly' ? parseInt(form.day_of_week) : undefined,
                 recipients,
                 report_type: form.report_type,
                 reporting_timezone: form.reporting_timezone,
@@ -153,7 +151,6 @@ const ScheduledReports: React.FC = () => {
             setShowCreate(false);
             setForm({
                 frequency: 'weekly',
-                day_of_week: '1',
                 recipients: '',
                 report_type: 'summary',
                 reporting_timezone: detectBrowserTimeZone(),
@@ -252,16 +249,13 @@ const ScheduledReports: React.FC = () => {
                             </div>
                             {form.frequency === 'weekly' && (
                                 <div>
-                                    <label htmlFor="schedule-day-of-week" className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Day of Week</label>
-                                    <select
-                                        id="schedule-day-of-week"
-                                        name="dayOfWeek"
-                                        className={`${inputClass} mt-1`}
-                                        value={form.day_of_week}
-                                        onChange={e => setForm(p => ({ ...p, day_of_week: e.target.value }))}
-                                    >
-                                        {DAY_NAMES.map((d, i) => <option key={i} value={i}>{d}</option>)}
-                                    </select>
+                                    {/* Not a selector. The export window is a fixed Monday-to-Sunday week, so
+                                        generation must fall on Monday; the API rejects any other day. Offering
+                                        a free choice here previously produced a successful response describing
+                                        a schedule the user had not actually asked for. */}
+                                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Generation Day</span>
+                                    <div className={`${inputClass} mt-1 bg-slate-50 dark:bg-slate-900/40 text-slate-500 dark:text-slate-400 cursor-not-allowed`}>Monday</div>
+                                    <p className="text-[11px] text-slate-400 mt-1">Fixed: the window closes Sunday, so the report runs the following Monday.</p>
                                 </div>
                             )}
                             <div>

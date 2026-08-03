@@ -285,6 +285,75 @@ export const getPreviousCompleteWeek = (now: Date, timeZone: string): ReportWind
     };
 };
 
+/**
+ * The most recent *complete* calendar month relative to `now`, in `timeZone`.
+ *
+ * Monthly reports previously computed their boundaries with
+ * `new Date(y, m - 1, 1)` in server-local time, which is the same class of defect
+ * the weekly window had: a report configured for `Africa/Lagos` running on a UTC
+ * server would place the month boundary an hour off and mis-assign entries logged
+ * in the first or last hour of the month.
+ *
+ * `localDates` covers every day of the month, so the zero-entry gate works
+ * unchanged. The window-integrity gate is weekly by definition (7 days ending
+ * Sunday) and is skipped for monthly windows by the caller.
+ */
+export const getPreviousCompleteMonth = (now: Date, timeZone: string): ReportWindow => {
+    const zone = assertValidTimeZone(timeZone);
+    const nowParts = getZonedParts(now, zone);
+
+    const prevMonthYear = nowParts.month === 1 ? nowParts.year - 1 : nowParts.year;
+    const prevMonth = nowParts.month === 1 ? 12 : nowParts.month - 1;
+
+    const start = zonedTimeToUtc(prevMonthYear, prevMonth, 1, 0, 0, 0, 0, zone);
+    const endExclusive = zonedTimeToUtc(nowParts.year, nowParts.month, 1, 0, 0, 0, 0, zone);
+    const end = new Date(endExclusive.getTime() - 1);
+
+    // Day count comes from civil arithmetic, so leap years and month lengths are
+    // handled without any DST-sensitive division of elapsed milliseconds.
+    const daysInMonth = new Date(Date.UTC(prevMonthYear, prevMonth, 0)).getUTCDate();
+    const localDates: string[] = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        localDates.push(formatLocalDate({ year: prevMonthYear, month: prevMonth, day }));
+    }
+
+    const startLocalDate = localDates[0]!;
+    const endLocalDate = localDates[localDates.length - 1]!;
+
+    return {
+        start,
+        endExclusive,
+        end,
+        startLocalDate,
+        endLocalDate,
+        localDates,
+        timeZone: zone,
+        label: `${startLocalDate} to ${endLocalDate}`,
+    };
+};
+
+/**
+ * Is `now` at or past the monthly generation slot — the 1st of the month at
+ * `generationTime` in `timeZone`?
+ *
+ * Monthly due-ness was previously `now.getDate() === 1` in server-local time,
+ * which fires on the wrong local day for zones far from the server's.
+ */
+export const isMonthlyGenerationDue = (
+    now: Date,
+    timeZone: string,
+    generationTime: string = DEFAULT_GENERATION_TIME,
+): boolean => {
+    const zone = assertValidTimeZone(timeZone);
+    const time = parseGenerationTime(generationTime);
+    if (!time) return false;
+
+    const parts = getZonedParts(now, zone);
+    if (parts.day !== 1) return false;
+
+    return parts.hour * 60 + parts.minute >= time.hour * 60 + time.minute;
+};
+
 /** Parse an "HH:mm" (or "HH:mm:ss") generation time. Returns null when malformed. */
 export const parseGenerationTime = (value: unknown): { hour: number; minute: number } | null => {
     if (typeof value !== 'string') return null;

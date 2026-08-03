@@ -182,6 +182,51 @@ describe('Route registration and availability', () => {
         expect(good.status).toBe(201);
     });
 
+    // Regression (Codex review): a non-Monday day_of_week used to be silently
+    // rewritten to Monday and returned 201, so the response described a schedule the
+    // caller never asked for. The export window is a fixed Monday-to-Sunday week, so
+    // the only honest options are to reject or to expose Monday alone; it now rejects.
+    it('POST /api/v1/scheduled-reports rejects a non-Monday generation day instead of silently rewriting it', async () => {
+        for (const day of [2, 3, 4, 5, 6]) {
+            const res = await request(app)
+                .post('/api/v1/scheduled-reports')
+                .set('Authorization', `Bearer ${managerToken}`)
+                .send({ frequency: 'weekly', day_of_week: day, recipients: ['ops@webforx.com'] });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message || res.body.error).toMatch(/Monday/i);
+        }
+    });
+
+    it('POST /api/v1/scheduled-reports rejects Sunday with the window-close explanation', async () => {
+        const res = await request(app)
+            .post('/api/v1/scheduled-reports')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ frequency: 'weekly', day_of_week: 0, recipients: ['ops@webforx.com'] });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message || res.body.error).toMatch(/closing day of the export window/i);
+    });
+
+    it('POST /api/v1/scheduled-reports accepts an omitted day_of_week and defaults to Monday', async () => {
+        const res = await request(app)
+            .post('/api/v1/scheduled-reports')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ frequency: 'weekly', recipients: ['ops@webforx.com'] });
+
+        expect(res.status).toBe(201);
+    });
+
+    it('POST /api/v1/scheduled-reports rejects an invalid IANA timezone', async () => {
+        const res = await request(app)
+            .post('/api/v1/scheduled-reports')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ frequency: 'weekly', recipients: ['ops@webforx.com'], reporting_timezone: 'CST' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message || res.body.error).toMatch(/IANA/i);
+    });
+
     it('GET /api/v1/webhooks is mounted for admin', async () => {
         const res = await request(app)
             .get('/api/v1/webhooks')
@@ -205,5 +250,50 @@ describe('Route registration and availability', () => {
             .send({ url: 'https://example.com/hook', events: ['timer.stopped'] });
 
         expect(good.status).toBe(201);
+    });
+
+    // Regression (Codex review): a non-Monday day_of_week used to be silently
+    // rewritten to Monday and returned 201, so the response described a schedule the
+    // caller never asked for. The export window is a fixed Monday-to-Sunday week, so
+    // the only honest options are to reject or to expose Monday alone; it now rejects.
+    it('POST /api/v1/scheduled-reports rejects a non-Monday generation day instead of silently rewriting it', async () => {
+        for (const day of [2, 3, 4, 5, 6]) {
+            const res = await request(app)
+                .post('/api/v1/scheduled-reports')
+                .set('Authorization', `Bearer ${managerToken}`)
+                .send({ frequency: 'weekly', day_of_week: day, recipients: ['ops@webforx.com'] });
+
+            expect(res.status).toBe(400);
+            expect(res.body.message || res.body.error).toMatch(/Monday/i);
+        }
+    });
+
+    it('POST /api/v1/scheduled-reports rejects Sunday with the window-close explanation', async () => {
+        const res = await request(app)
+            .post('/api/v1/scheduled-reports')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ frequency: 'weekly', day_of_week: 0, recipients: ['ops@webforx.com'] });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message || res.body.error).toMatch(/closing day of the export window/i);
+    });
+
+    it('POST /api/v1/scheduled-reports accepts an omitted day_of_week and defaults to Monday', async () => {
+        const res = await request(app)
+            .post('/api/v1/scheduled-reports')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ frequency: 'weekly', recipients: ['ops@webforx.com'] });
+
+        expect(res.status).toBe(201);
+    });
+
+    it('POST /api/v1/scheduled-reports rejects an invalid IANA timezone', async () => {
+        const res = await request(app)
+            .post('/api/v1/scheduled-reports')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ frequency: 'weekly', recipients: ['ops@webforx.com'], reporting_timezone: 'CST' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.message || res.body.error).toMatch(/IANA/i);
     });
 });

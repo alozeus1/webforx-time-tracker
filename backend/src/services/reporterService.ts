@@ -8,8 +8,10 @@ import {
     DEFAULT_GENERATION_TIME,
     DEFAULT_REPORTING_TIMEZONE,
     ReportWindow,
+    getPreviousCompleteMonth,
     getPreviousCompleteWeek,
     isGenerationDue,
+    isMonthlyGenerationDue,
     isValidTimeZone,
 } from '../utils/reportWindow';
 import {
@@ -50,6 +52,7 @@ type ScheduledReportRecord = {
     validation_gate_zero_entries?: boolean | null;
     validation_gate_window_integrity?: boolean | null;
     validation_gate_required_days?: unknown;
+    last_validation_alert_window?: Date | string | null;
 };
 
 export type ScheduledReportRunResult = {
@@ -85,8 +88,6 @@ const addDays = (date: Date, days: number): Date => {
     return next;
 };
 
-const startOfPreviousMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth() - 1, 1);
-const startOfCurrentMonth = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), 1);
 const formatDate = (date: Date): string => date.toISOString().slice(0, 10);
 
 const getRecipients = (value: unknown): string[] => {
@@ -116,14 +117,17 @@ const buildReportWindow = (
     frequency: string,
     now: Date,
     timeZone: string,
-): { start: Date; end: Date; label: string; window?: ReportWindow } => {
-    if (frequency === 'monthly') {
-        const start = startOfPreviousMonth(now);
-        const end = startOfCurrentMonth(now);
-        return { start, end, label: `${formatDate(start)} to ${formatDate(addDays(end, -1))}` };
-    }
+): { start: Date; end: Date; label: string; window: ReportWindow } => {
+    // Monthly windows are now timezone-aware too. They previously used
+    // `new Date(y, m - 1, 1)` in server-local time, which is the same defect class
+    // as the old weekly window: a report configured for Africa/Lagos running on a
+    // UTC server placed the month boundary an hour off and mis-assigned entries
+    // logged in the first or last hour of the month, while its UI displayed a
+    // timezone that was never actually applied.
+    const window = frequency === 'monthly'
+        ? getPreviousCompleteMonth(now, timeZone)
+        : getPreviousCompleteWeek(now, timeZone);
 
-    const window = getPreviousCompleteWeek(now, timeZone);
     return { start: window.start, end: window.endExclusive, label: window.label, window };
 };
 
@@ -143,36 +147,80 @@ const resolveGateConfig = (report: ScheduledReportRecord): ValidationGateConfig 
 });
 
 /**
+ * Resolve the administrators who should receive internal operational alerts.
+ *
+ * Deliberately NOT the report's delivery recipients. A scheduled report may be
+ * addressed to clients, payroll contacts, or other external stakeholders; sending
+ * them a gate-failure notice would leak internal diagnostics (report IDs, per-day
+ * entry counts, window internals) outside the organisation while potentially
+ * alerting no administrator at all.
+ */
+const resolveOrganizationAdmins = async (organizationId?: string): Promise<string[]> => {
+    if (!organizationId) return [];
+
+    try {
+        const admins = await prisma.user.findMany({
+            where: {
+                organization_id: organizationId,
+                is_active: true,
+                role: { name: 'Admin' },
+            },
+            select: { email: true },
+        });
+
+        return Array.from(new Set(
+            admins
+                .map((admin) => admin.email?.trim().toLowerCase())
+                .filter((email): email is string => Boolean(email)),
+        ));
+    } catch (error) {
+        console.error(`[ReporterService] Failed to resolve admins for organization ${organizationId}:`, error);
+        return [];
+    }
+};
+
+/**
  * Alerts administrators that a report was suppressed by a validation gate.
  *
- * Deliberately best-effort: a failure to send the alert must not mask the original
- * validation failure, which is already recorded in the run result and the logs.
+ * Best-effort by design: a failure to send the alert must not mask the original
+ * validation failure, which is already in the run result and the logs. It does,
+ * however, report whether it succeeded, so the caller only records the alert as
+ * delivered when it actually was — otherwise the de-duplication marker would
+ * suppress every retry and the blocked report would lose its only notification.
  */
 const notifyAdminsOfValidationFailure = async ({
     reportId,
-    recipients,
+    adminRecipients,
     window,
     outcome,
 }: {
     reportId: string;
-    recipients: string[];
+    adminRecipients: string[];
     window: ReportWindow;
     outcome: ValidationOutcome;
-}): Promise<void> => {
+}): Promise<boolean> => {
     const client = getResendClient();
-    if (!client || recipients.length === 0) {
-        console.warn(`[ReporterService] Cannot alert on validation failure for report ${reportId} (no email provider or recipients).`);
-        return;
+    if (!client || adminRecipients.length === 0) {
+        console.error(
+            `[ReporterService] Report ${reportId} was blocked by a validation gate but NO ADMIN ALERT COULD BE SENT `
+            + `(${!client ? 'RESEND_API_KEY not configured' : 'no active Admin users found for the organization'}). `
+            + 'The failure is recorded in the logs and the cron run result only.',
+        );
+        return false;
     }
 
     const rows = outcome.results
-        .map((result) => `<li><strong>${result.gate}</strong>: ${result.passed ? 'PASS' : `FAIL — ${result.message}`}<br/><code>${escapeHtml(JSON.stringify(result.details))}</code></li>`)
+        .map((result) => `<li><strong>${result.gate}</strong>: ${result.passed ? 'PASS' : `FAIL — ${escapeHtml(result.message ?? '')}`}<br/><code>${escapeHtml(JSON.stringify(result.details))}</code></li>`)
         .join('');
 
     try {
-        await client.emails.send({
+        // Resend signals API-level failures in the resolved value rather than by
+        // rejecting, so the promise resolving is not evidence of delivery. Without
+        // this check a blocked report would be logged as alerted while nobody was
+        // told — the same mistake sendPdfReport already guards against.
+        const { error } = await client.emails.send({
             from: env.emailFrom,
-            to: recipients,
+            to: adminRecipients,
             subject: `[Action required] Scheduled report blocked — ${window.label}`,
             html: `
                 <p>A scheduled report was <strong>not generated</strong> because one or more validation gates failed.</p>
@@ -180,13 +228,23 @@ const notifyAdminsOfValidationFailure = async ({
                    <strong>Export window:</strong> ${escapeHtml(window.label)} (${escapeHtml(window.timeZone)})<br/>
                    <strong>Window UTC range:</strong> ${window.start.toISOString()} to ${window.end.toISOString()}</p>
                 <ul>${rows}</ul>
-                <p>No report was sent. Resolve the underlying data issue and re-run, or adjust the report's
-                   validation gate configuration if the window is legitimately empty on those days.</p>
+                <p>No report was sent, and no report recipient has been notified. Resolve the underlying data
+                   issue and the report will send on the next hourly tick, or adjust the report's validation
+                   gate configuration if the window is legitimately empty on those days.</p>
+                <p>Troubleshooting: <code>docs/scheduled-report-windows.md</code></p>
             `,
         });
-        console.log(`[ReporterService] Validation-failure alert sent for report ${reportId}.`);
+
+        if (error) {
+            console.error(`[ReporterService] Validation alert for report ${reportId} rejected by Resend [${error.name}]: ${error.message}`);
+            return false;
+        }
+
+        console.log(`[ReporterService] Validation-failure alert sent for report ${reportId} to ${adminRecipients.length} admin(s).`);
+        return true;
     } catch (error) {
         console.error(`[ReporterService] Failed to send validation-failure alert for report ${reportId}:`, error);
+        return false;
     }
 };
 
@@ -377,24 +435,22 @@ export const generateAndEmailDailyReport = async (): Promise<void> => {
 };
 
 export const processDueScheduledReports = async (now = new Date()): Promise<ScheduledReportRunResult> => {
-    const today = startOfDay(now);
-    const dayOfMonth = now.getDate();
 
-    // Weekly candidates are no longer filtered by `day_of_week` or `last_sent_at` in
-    // SQL. Both depend on the *reporting timezone* — a report on Pacific/Auckland and
-    // one on America/Chicago become due at different UTC instants, and a server-local
-    // `last_sent_at < startOfDay(now)` guard double-sends for zones far from UTC.
-    // Candidates are fetched broadly and de-duplicated against the resolved window
-    // below, which is exact because each window is a distinct calendar week.
-    const dueFrequencyClauses = [
-        { frequency: 'weekly' },
-        ...(dayOfMonth === 1 ? [{ frequency: 'monthly' }] : []),
-    ];
-
+    // Due-ness is no longer filtered in SQL for either frequency. Weekly reports used
+    // to be matched on `day_of_week` and monthly ones on a server-local
+    // `now.getDate() === 1`; both are wrong once each report carries its own
+    // reporting timezone, because a report on Pacific/Auckland and one on
+    // America/Chicago become due at different UTC instants. The old server-local
+    // `last_sent_at < startOfDay(now)` guard had the same flaw and double-sent for
+    // zones far from UTC.
+    //
+    // Candidates are therefore fetched broadly and filtered per report below, using
+    // the reporting timezone for due-ness and the resolved window for
+    // de-duplication — exact, because each window is a distinct calendar period.
     const reports = await prisma.scheduledReport.findMany({
         where: {
             is_active: true,
-            AND: [{ OR: dueFrequencyClauses }],
+            AND: [{ OR: [{ frequency: 'weekly' }, { frequency: 'monthly' }] }],
         },
         orderBy: { created_at: 'asc' },
     }) as ScheduledReportRecord[];
@@ -414,25 +470,28 @@ export const processDueScheduledReports = async (now = new Date()): Promise<Sche
         const generationTime = report.schedule_generation_time?.trim() || DEFAULT_GENERATION_TIME;
 
         // Weekly reports run on Monday at the configured local time, never on the
-        // window's closing Sunday. Anything not yet at its slot is left for a later
-        // cron tick rather than being generated against an incomplete window.
-        if (report.frequency === 'weekly' && !isGenerationDue(now, timeZone, generationTime)) {
+        // window's closing Sunday. Monthly reports run on the 1st of the month at the
+        // same local slot. Both are evaluated in the reporting timezone; anything not
+        // yet at its slot is left for a later tick rather than being generated against
+        // an incomplete window.
+        const due = report.frequency === 'monthly'
+            ? isMonthlyGenerationDue(now, timeZone, generationTime)
+            : isGenerationDue(now, timeZone, generationTime);
+        if (!due) {
             result.skipped += 1;
             continue;
         }
 
-        // Idempotency. For weekly reports this compares against the window itself:
-        // once `last_sent_at` is at or after the window's exclusive end, that week's
-        // report has already gone out, whatever timezone the scheduler ticked in.
+        const window = buildReportWindow(report.frequency, now, timeZone);
+
+        // Idempotency, compared against the window itself rather than a server-local
+        // "start of today": once `last_sent_at` is at or after the window's exclusive
+        // end, that period's report has already gone out, whatever timezone the
+        // scheduler ticked in.
         const lastSentAt = report.last_sent_at ? new Date(report.last_sent_at) : null;
-        if (lastSentAt) {
-            const alreadySent = report.frequency === 'weekly'
-                ? lastSentAt.getTime() >= getPreviousCompleteWeek(now, timeZone).endExclusive.getTime()
-                : lastSentAt.getTime() >= today.getTime();
-            if (alreadySent) {
-                result.skipped += 1;
-                continue;
-            }
+        if (lastSentAt && lastSentAt.getTime() >= window.window.endExclusive.getTime()) {
+            result.skipped += 1;
+            continue;
         }
 
         const recipients = getRecipients(report.recipients);
@@ -443,28 +502,54 @@ export const processDueScheduledReports = async (now = new Date()): Promise<Sche
         }
 
         try {
-            const window = buildReportWindow(report.frequency, now, timeZone);
-
             // Gates run before any data is rendered. A report that would be built on an
             // incomplete window is suppressed and alerted on, never sent — the report is
             // a compliance artefact and wrong data is worse than no data.
-            if (window.window) {
-                const outcome = await runValidationGates({
-                    window: window.window,
-                    config: resolveGateConfig(report),
-                    organizationId: report.organization_id,
-                    reportId: report.id,
-                });
+            const gateConfig = resolveGateConfig(report);
+            const outcome = await runValidationGates({
+                window: window.window,
+                config: {
+                    ...gateConfig,
+                    // The window-integrity gate asserts "exactly 7 days ending Sunday",
+                    // which is meaningless for a calendar month. Monthly reports still
+                    // get the zero-entry gate.
+                    windowIntegrity: gateConfig.windowIntegrity && report.frequency !== 'monthly',
+                },
+                organizationId: report.organization_id,
+                reportId: report.id,
+            });
 
-                if (!outcome.passed) {
-                    await notifyAdminsOfValidationFailure({
+            if (!outcome.passed) {
+                // One alert per blocked window, not one per tick. The endpoint is polled
+                // hourly and a blocked report stays due for the rest of its generation
+                // day, so without this an admin would receive ~18 identical emails for a
+                // single missing day of data.
+                const alreadyAlerted = report.last_validation_alert_window
+                    && new Date(report.last_validation_alert_window).getTime() === window.window.start.getTime();
+
+                if (alreadyAlerted) {
+                    console.log(`[ReporterService] Report ${report.id} still blocked for window ${window.label}; admins already alerted, suppressing duplicate.`);
+                } else {
+                    const adminRecipients = await resolveOrganizationAdmins(report.organization_id);
+                    const alerted = await notifyAdminsOfValidationFailure({
                         reportId: report.id,
-                        recipients,
+                        adminRecipients,
                         window: window.window,
                         outcome,
                     });
-                    throw new ValidationGateError(outcome.failures.join(' '), outcome, window.window);
+
+                    // Only record the marker when the alert actually went out. Recording
+                    // it on failure would suppress every retry and the blocked report
+                    // would lose its only notification entirely.
+                    if (alerted) {
+                        await prisma.scheduledReport.update({
+                            where: { id: report.id },
+                            data: { last_validation_alert_window: window.window.start },
+                        });
+                    }
                 }
+
+                throw new ValidationGateError(outcome.failures.join(' '), outcome, window.window);
             }
 
             const [entries, defaulters] = await Promise.all([
@@ -485,7 +570,10 @@ export const processDueScheduledReports = async (now = new Date()): Promise<Sche
 
             await prisma.scheduledReport.update({
                 where: { id: report.id },
-                data: { last_sent_at: now },
+                // Clearing the alert marker on success means a future block on a later
+                // window alerts again immediately, rather than being suppressed by a
+                // stale marker from a previously resolved failure.
+                data: { last_sent_at: now, last_validation_alert_window: null },
             });
 
             result.sent += 1;
