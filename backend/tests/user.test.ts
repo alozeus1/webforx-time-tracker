@@ -522,6 +522,42 @@ describe('PUT /api/v1/users/:id', () => {
     });
 });
 
+// ─── deactivateUser ─────────────────────────────────────────────────────────
+
+describe('POST /api/v1/users/:id/deactivate', () => {
+    it('deactivates the user while preserving the retained record', async () => {
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.user.update as jest.Mock).mockResolvedValue({ ...mockUser, is_active: false });
+
+        const res = await request(app)
+            .post('/api/v1/users/user-emp-1/deactivate')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.message).toBe('User deactivated successfully');
+        expect(prisma.user.update).toHaveBeenCalledWith({
+            where: { id: 'user-emp-1', organization_id: 'org-1' },
+            data: { is_active: false },
+        });
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                action: 'user_deactivated',
+                metadata: expect.objectContaining({ target_user_id: 'user-emp-1' }),
+            }),
+        }));
+    });
+
+    it('does not let a user deactivate their own account', async () => {
+        const res = await request(app)
+            .post('/api/v1/users/user-admin-1/deactivate')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/deactivate your own account/i);
+        expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+});
+
 // ─── updateMe ────────────────────────────────────────────────────────────────
 
 describe('PUT /api/v1/users/me', () => {

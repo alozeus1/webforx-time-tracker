@@ -1035,7 +1035,7 @@ export const updateUser = async (req: AuthRequest, res: Response): Promise<void>
     }
 };
 
-export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
+export const deactivateUser = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userIdParam = req.params.id;
         const userId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
@@ -1046,7 +1046,7 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
         }
 
         if (userId === requireUserId(req)) {
-            res.status(400).json({ message: 'Cannot delete your own account' });
+            res.status(400).json({ message: 'Cannot deactivate your own account' });
             return;
         }
 
@@ -1056,7 +1056,8 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
             return;
         }
 
-        // Soft-delete: deactivate + anonymize
+        // Deactivation intentionally preserves the identity, email, and related
+        // business records so reports remain accurate and the account can be restored.
         await prisma.user.update({
             where: { id: userId, organization_id: req.user!.organization_id },
             data: { is_active: false },
@@ -1067,18 +1068,18 @@ export const deleteUser = async (req: AuthRequest, res: Response): Promise<void>
                 data: {
                     user_id: requireUserId(req),
                     organization_id: req.user!.organization_id,
-                    action: 'user_deleted',
+                    action: 'user_deactivated',
                     resource: 'user',
                     metadata: { target_user_id: userId, target_email: target.email },
                 },
             });
         } catch (error) {
-            console.error('Failed to write user deletion audit log:', error);
+            console.error('Failed to write user deactivation audit log:', error);
         }
 
         res.status(200).json({ message: 'User deactivated successfully' });
     } catch (error) {
-        respondWithUserServiceError(res, error, 'Failed to delete user');
+        respondWithUserServiceError(res, error, 'Failed to deactivate user');
     }
 };
 
@@ -1113,8 +1114,6 @@ export const permanentlyDeleteUser = async (req: AuthRequest, res: Response): Pr
             return;
         }
 
-        // Hard delete — manually remove records that lack onDelete: Cascade,
-        // then delete the user. Wrapped in a transaction for atomicity.
         // Hard delete — manually remove records that lack onDelete: Cascade,
         // then delete the user. Wrapped in a transaction for atomicity.
         await prisma.$transaction([
