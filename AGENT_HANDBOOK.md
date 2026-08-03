@@ -350,8 +350,11 @@ working day from every weekly report. Windows are now Monday 00:00:00 to Sunday
 Checks:
 
 1. Confirm `reporting_timezone` on the scheduled report matches where the team works.
-2. Confirm the hourly cron `/api/v1/cron/scheduled-reports` exists in `backend/vercel.json`.
-   A daily tick cannot serve timezones far from UTC.
+2. Confirm the **Scheduled Reports Tick** GitHub Actions workflow is enabled and running
+   hourly. It lives in GH Actions rather than `backend/vercel.json` because Vercel's Hobby
+   plan rejects sub-daily cron expressions at deploy time. A daily tick cannot serve
+   timezones far from UTC. GitHub auto-disables scheduled workflows after 60 days of
+   repository inactivity, and that failure is silent.
 3. If a report did not send, check the logs for `[ReportValidation] FAIL` — the report may
    have been correctly blocked by a validation gate (returns HTTP 200, `status: validation_blocked`).
 

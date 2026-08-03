@@ -51,7 +51,26 @@ Implementation: `backend/src/utils/reportWindow.ts`. No new dependency — all t
 
 **Choosing the wrong zone shifts the window.** A team working in `Africa/Lagos` (UTC+1) configured as `UTC` gets a window running 01:00 Monday to 00:59 Monday-next in local terms — an hour of Monday morning falls into the previous week's report. Set the zone to where the team actually works, not where the server runs.
 
-**Zone also decides when the report fires.** Monday 06:00 in `Pacific/Auckland` is Sunday 18:00 UTC; Monday 06:00 in `America/Los_Angeles` is Monday 13:00 UTC. This is why the scheduled-report cron ticks **hourly** (`/api/v1/cron/scheduled-reports`, `0 * * * *`) rather than once a day: a single daily tick at 23:59 UTC would never observe an Auckland report's Monday-morning slot, and that report would never send.
+**Zone also decides when the report fires.** Monday 06:00 in `Pacific/Auckland` is Sunday 18:00 UTC; Monday 06:00 in `America/Los_Angeles` is Monday 13:00 UTC. This is why `/api/v1/cron/scheduled-reports` is polled **hourly** rather than once a day: a single daily tick at 23:59 UTC would never observe an Auckland report's Monday-morning slot, and that report would never send.
+
+### Where the hourly tick runs, and why it is not a Vercel cron
+
+The hourly poll lives in **GitHub Actions** (`.github/workflows/scheduled-reports-tick.yml`), not in `backend/vercel.json`.
+
+Vercel's Hobby plan rejects any cron expression more frequent than once per day, and it rejects it at **deploy time** — adding `{"path": "/api/v1/cron/scheduled-reports", "schedule": "0 * * * *"}` fails the backend build outright rather than merely not running. (Cron *counts* are not the constraint; per-project limits were raised to 100 on all plans in January 2026. Only frequency is restricted.)
+
+Hourly polling is safe because the endpoint is idempotent: a report is sent only when `isGenerationDue()` reports Monday at or past the local slot **and** `last_sent_at` predates the current window's exclusive end. Extra ticks are no-ops. GitHub's scheduled runs drift under load and are occasionally skipped; for a weekly report polled hourly that is harmless — a missed tick sends on a later one, still the correct Monday, still the correct window.
+
+**If the Vercel project is upgraded to Pro**, delete the workflow and restore the cron entry in `backend/vercel.json`. The endpoint and its semantics are unchanged either way.
+
+Required repository secrets:
+
+| Secret | Purpose |
+|---|---|
+| `CRON_SECRET` | Must match the backend env var exactly; `cronRoutes.ts` returns 401 otherwise |
+| `API_BASE_URL` | Optional. Defaults to `https://api.dev.webforxtech.com/api/v1` |
+
+> **GitHub Actions caveat.** GitHub disables scheduled workflows in repositories with no commit activity for 60 days. If weekly reports stop arriving with no other explanation, check whether this workflow was auto-disabled before debugging the backend.
 
 Exactly-once delivery is preserved by comparing `last_sent_at` against `window.endExclusive` rather than against a server-local "start of today". Once `last_sent_at` is at or after the window's exclusive end, that week has already been delivered, in whatever timezone the scheduler happened to tick.
 
@@ -194,9 +213,10 @@ This should be unreachable through normal configuration — it indicates the win
 
 1. `is_active` must be `true`.
 2. At least one valid recipient must be configured.
-3. The hourly cron `/api/v1/cron/scheduled-reports` must be present in `backend/vercel.json` and `CRON_SECRET` set.
-4. Check the local weekday: `isGenerationDue` only returns true on Monday at or after the slot in the **reporting** timezone.
-5. Check `last_sent_at` — if it is at or after the current window's exclusive end, the week has already been delivered.
+3. The **Scheduled Reports Tick** workflow must be enabled and running hourly. GitHub auto-disables scheduled workflows after 60 days of repository inactivity — check the Actions tab first, since this failure is silent.
+4. `CRON_SECRET` in GitHub repository secrets must match the backend env var exactly; a mismatch shows as a 401 in the workflow run log.
+5. Check the local weekday: `isGenerationDue` only returns true on Monday at or after the slot in the **reporting** timezone.
+6. Check `last_sent_at` — if it is at or after the current window's exclusive end, the week has already been delivered.
 
 ### Reports send twice
 
@@ -211,7 +231,7 @@ Existing reports adopt `reporting_timezone = 'UTC'`. **Set the correct zone per 
 Rollout order:
 
 1. Deploy backend (`prisma migrate deploy` runs via `npm run release:migrate`).
-2. Confirm the hourly cron appears in the Vercel dashboard.
+2. Set the `CRON_SECRET` repository secret and confirm the **Scheduled Reports Tick** workflow runs green — trigger it once manually via `workflow_dispatch`. Without this, no weekly report will ever send.
 3. Update `reporting_timezone` on each scheduled report.
 4. Verify the next Monday run: check the emailed window label spans Monday → Sunday.
 5. Re-run historical weeks before relying on any warning-ladder position derived from the old series.

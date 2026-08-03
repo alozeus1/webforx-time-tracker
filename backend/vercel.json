@@ -26,10 +26,6 @@
       "schedule": "59 23 * * *"
     },
     {
-      "path": "/api/v1/cron/scheduled-reports",
-      "schedule": "0 * * * *"
-    },
-    {
       "path": "/api/v1/cron/reset-demo",
       "schedule": "0 0 * * *"
     }
