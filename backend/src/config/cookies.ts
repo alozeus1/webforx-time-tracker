@@ -20,9 +20,20 @@ export const refreshTokenCookieOptions: CookieOptions = {
 };
 
 export const csrfCookieOptions: CookieOptions = {
-  httpOnly: false,
+  // The SPA receives the signed token in JSON and mirrors it in X-CSRF-Token.
+  // Keeping the cookie HttpOnly prevents script from treating the cookie itself
+  // as the submitted token, which would defeat double-submit protection.
+  httpOnly: true,
   secure: isProduction,
   sameSite: 'lax',
-  maxAge: 15 * 60 * 1000,
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: '/',
+};
+
+export const csrfSessionCookieOptions: CookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: 'lax',
+  maxAge: 7 * 24 * 60 * 60 * 1000,
   path: '/',
 };

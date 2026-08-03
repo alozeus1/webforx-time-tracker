@@ -123,6 +123,10 @@ api.interceptors.request.use(
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
+        const csrfToken = localStorage.getItem('csrf_token');
+        if (csrfToken) {
+            config.headers['X-CSRF-Token'] = csrfToken;
+        }
         return config;
     },
     (error) => {
@@ -169,7 +173,18 @@ api.interceptors.response.use(
                 isRefreshing = true;
 
                 try {
-                    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, { withCredentials: true });
+                    const csrfResponse = await axios.get(`${api.defaults.baseURL}/auth/csrf-token`, { withCredentials: true });
+                    const csrfToken = typeof csrfResponse.data?.csrfToken === 'string'
+                        ? csrfResponse.data.csrfToken.trim()
+                        : '';
+                    if (!csrfToken) {
+                        throw new Error('CSRF token response was invalid');
+                    }
+
+                    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {}, {
+                        withCredentials: true,
+                        headers: { 'X-CSRF-Token': csrfToken },
+                    });
                     const newToken = typeof res.data?.token === 'string' ? res.data.token.trim() : '';
 
                     if (!newToken) {
@@ -177,6 +192,7 @@ api.interceptors.response.use(
                     }
 
                     localStorage.setItem('token', newToken);
+                    localStorage.setItem('csrf_token', res.data?.csrfToken || csrfToken);
                     // New refresh token cookie is set automatically by the server response.
 
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;

@@ -16,10 +16,18 @@ describe('cookie options', () => {
         process.env.FRONTEND_URL = process.env.FRONTEND_URL || 'https://timer.dev.webforxtech.com';
         process.env.ENABLE_BACKGROUND_WORKERS = process.env.ENABLE_BACKGROUND_WORKERS || 'false';
 
-        const { accessTokenCookieOptions, refreshTokenCookieOptions, csrfCookieOptions } = await import('../src/config/cookies');
+        const {
+            accessTokenCookieOptions,
+            refreshTokenCookieOptions,
+            csrfCookieOptions,
+            csrfSessionCookieOptions,
+        } = await import('../src/config/cookies');
 
         expect(accessTokenCookieOptions.sameSite).toBe('lax');
         expect(refreshTokenCookieOptions.sameSite).toBe('lax');
         expect(csrfCookieOptions.sameSite).toBe('lax');
+        expect(csrfCookieOptions.httpOnly).toBe(true);
+        expect(csrfSessionCookieOptions.httpOnly).toBe(true);
+        expect(csrfSessionCookieOptions.secure).toBe(true);
     });
 });

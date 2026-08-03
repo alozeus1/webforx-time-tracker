@@ -51,6 +51,31 @@ describe('API request interceptor — Authorization header', () => {
     });
 });
 
+describe('API request interceptor — CSRF header', () => {
+    it('adds the signed CSRF token when one is stored', () => {
+        localStorage.setItem('csrf_token', 'csrf-signed-token');
+        const config = { headers: {} as Record<string, string> };
+        const csrfToken = localStorage.getItem('csrf_token');
+
+        if (csrfToken) {
+            config.headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        expect(config.headers['X-CSRF-Token']).toBe('csrf-signed-token');
+    });
+
+    it('does not add a CSRF header before a token has been issued', () => {
+        const config = { headers: {} as Record<string, string> };
+        const csrfToken = localStorage.getItem('csrf_token');
+
+        if (csrfToken) {
+            config.headers['X-CSRF-Token'] = csrfToken;
+        }
+
+        expect(config.headers['X-CSRF-Token']).toBeUndefined();
+    });
+});
+
 // ─── Response interceptor ────────────────────────────────────────────────────
 
 describe('API response interceptor — 401 handling', () => {

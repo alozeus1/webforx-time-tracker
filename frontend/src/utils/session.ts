@@ -32,13 +32,16 @@ export const getStoredUserProfile = (): StoredUserProfile | null => {
     }
 };
 
-export const setStoredSession = (token: string, role: string, user?: StoredUserProfile) => {
+export const setStoredSession = (token: string, role: string, user?: StoredUserProfile, csrfToken?: string) => {
     if (typeof window === 'undefined') {
         return;
     }
 
     window.localStorage.setItem('token', token);
     window.localStorage.setItem('user_role', role);
+    if (csrfToken) {
+        window.localStorage.setItem('csrf_token', csrfToken);
+    }
 
     if (user) {
         window.localStorage.setItem('user_profile', JSON.stringify(user));
@@ -60,6 +63,7 @@ export const clearStoredSession = () => {
     window.localStorage.removeItem('user_role');
     window.localStorage.removeItem('user_profile');
     window.localStorage.removeItem('organization_id');
+    window.localStorage.removeItem('csrf_token');
 };
 
 export const hasAnyRole = (roles: string[]) => {

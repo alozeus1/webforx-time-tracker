@@ -229,9 +229,12 @@ export const validateMfaLogin = async (req: AuthRequest, res: Response): Promise
         const { accessTokenCookieOptions, refreshTokenCookieOptions } = await import('../config/cookies');
         res.cookie('access_token', accessToken, accessTokenCookieOptions);
         res.cookie('refresh_token', refreshToken, refreshTokenCookieOptions);
+        const { issueCsrfToken } = await import('../middlewares/csrf');
+        const csrfToken = issueCsrfToken(req, res, { rotateSession: true });
 
         res.status(200).json({
             token: accessToken,
+            csrfToken,
             user: {
                 id: user.id,
                 email: user.email,

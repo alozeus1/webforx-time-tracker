@@ -3,6 +3,7 @@ import { login, logout, forgotPassword, resetPassword, refreshAccessToken, getPa
 import { setupMfa, verifyMfa, disableMfa, validateMfaLogin, getMfaStatus } from '../controllers/mfaController';
 import { googleSignIn } from '../controllers/googleAuthController';
 import { authenticateToken } from '../middlewares/auth';
+import { issueCsrfToken } from '../middlewares/csrf';
 
 const router = Router();
 
@@ -13,6 +14,9 @@ router.post('/logout', logout);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.get('/password-policy', getPasswordPolicy);
+router.get('/csrf-token', (req, res) => {
+    res.status(200).json({ csrfToken: issueCsrfToken(req, res) });
+});
 router.post('/refresh', refreshAccessToken);
 
 router.post('/mfa/validate', validateMfaLogin);

@@ -68,6 +68,11 @@ Request flow:
 4. Frontend stores token in localStorage and sends `Authorization: Bearer <token>` for protected calls.
 5. Backend enforces role-based access via middleware.
 
+Cookie-authenticated mutations use a signed double-submit CSRF token. The SPA
+obtains it from login/MFA/Google responses or `GET /api/v1/auth/csrf-token` and
+sends it as `X-CSRF-Token`. Bearer-authenticated API mutations are exempt because
+the browser does not attach bearer credentials implicitly.
+
 Data persistence:
 
 - PostgreSQL via Prisma.

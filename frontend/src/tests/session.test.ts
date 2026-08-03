@@ -89,6 +89,11 @@ describe('setStoredSession', () => {
         expect(parsed.id).toBe('user-1');
     });
 
+    it('stores the CSRF token returned with an authenticated session', () => {
+        setStoredSession('tok-xyz', 'Employee', mockProfile, 'csrf-signed-token');
+        expect(localStorage.getItem('csrf_token')).toBe('csrf-signed-token');
+    });
+
     it('does not store user_profile when user object is omitted', () => {
         setStoredSession('tok-only', 'Employee');
         expect(localStorage.getItem('user_profile')).toBeNull();
@@ -102,12 +107,14 @@ describe('clearStoredSession', () => {
         localStorage.setItem('token', 'abc');
         localStorage.setItem('user_role', 'Admin');
         localStorage.setItem('user_profile', JSON.stringify(mockProfile));
+        localStorage.setItem('csrf_token', 'csrf-signed-token');
 
         clearStoredSession();
 
         expect(localStorage.getItem('token')).toBeNull();
         expect(localStorage.getItem('user_role')).toBeNull();
         expect(localStorage.getItem('user_profile')).toBeNull();
+        expect(localStorage.getItem('csrf_token')).toBeNull();
     });
 
     it('does not throw when storage is already empty', () => {

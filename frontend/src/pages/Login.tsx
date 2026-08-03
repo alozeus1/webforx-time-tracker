@@ -67,7 +67,7 @@ const Login: React.FC = () => {
                 setMfaRequired(true);
                 return;
             }
-            setStoredSession(response.data.token, response.data.user.role, response.data.user);
+            setStoredSession(response.data.token, response.data.user.role, response.data.user, response.data.csrfToken);
             resetAuthFailureState();
             navigate('/dashboard');
         } catch (error) {
@@ -89,7 +89,7 @@ const Login: React.FC = () => {
                 mfa_challenge_token: mfaChallengeToken,
                 totp_code: totpCode,
             }, { withCredentials: true });
-            setStoredSession(response.data.token, response.data.user.role, response.data.user);
+            setStoredSession(response.data.token, response.data.user.role, response.data.user, response.data.csrfToken);
             resetAuthFailureState();
             navigate('/dashboard');
         } catch (error) {
@@ -103,8 +103,8 @@ const Login: React.FC = () => {
         setLoading(true);
         setErrorMessage(null);
         try {
-            const response = await api.post('/auth/google', { credential: resp.credential });
-            setStoredSession(response.data.token, response.data.user.role, response.data.user);
+            const response = await api.post('/auth/google', { credential: resp.credential }, { withCredentials: true });
+            setStoredSession(response.data.token, response.data.user.role, response.data.user, response.data.csrfToken);
             resetAuthFailureState();
             navigate('/dashboard');
         } catch (error) {

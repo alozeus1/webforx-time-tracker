@@ -36,6 +36,7 @@ import { notificationWorker } from './workers/notificationWorker';
 import { securityHeaders } from './config/security';
 import { correlationId } from './middlewares/correlationId';
 import { requestLogger } from './middlewares/requestLogger';
+import { csrfErrorHandler, csrfProtection } from './middlewares/csrf';
 import prisma from './config/db';
 import { env } from './config/env';
 
@@ -92,6 +93,7 @@ app.use(securityHeaders);
 app.use(correlationId);
 app.use(requestLogger);
 app.use(cookieParser());
+app.use(csrfProtection);
 
 const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -221,6 +223,8 @@ app.get('/api/v1', (_req, res) => {
 app.use('/api/v1', (_req, res) => {
     res.status(404).json({ message: 'API route not found' });
 });
+
+app.use(csrfErrorHandler);
 
 const bootstrap = async () => {
     await prisma.$connect();
