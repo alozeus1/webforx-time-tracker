@@ -172,12 +172,14 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
         last_name?: string;
         email?: string;
         role?: AppRole;
+        team_name?: string | null;
       };
       const createdUser = {
         id: `user-${teamUsers.length + 1}`,
         first_name: payload.first_name || 'New',
         last_name: payload.last_name || 'User',
         email: payload.email || `user-${teamUsers.length + 1}@webforxtech.com`,
+        team_name: payload.team_name ?? null,
         is_active: true,
         role: { name: payload.role || 'Employee' },
       };
