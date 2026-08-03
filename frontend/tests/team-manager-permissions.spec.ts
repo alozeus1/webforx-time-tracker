@@ -54,12 +54,34 @@ test.describe('Team Manager Permissions', () => {
         await expect(passwordInput).toHaveValue('TempPass123!');
 
         await roleSelect.selectOption('Employee');
+        await expect(page.getByLabel('Team / Group')).toHaveValue('');
+
+        const createRequestPromise = page.waitForRequest((request) =>
+            request.url().endsWith('/api/v1/users') && request.method() === 'POST',
+        );
+        const createResponsePromise = page.waitForResponse((response) =>
+            response.url().endsWith('/api/v1/users') && response.request().method() === 'POST',
+        );
         await dialog.getByRole('button', { name: 'Add Member' }).click();
+
+        const createRequest = await createRequestPromise;
+        expect(createRequest.postDataJSON()).toMatchObject({
+            email: 'miles.carter@webforxtech.com',
+            team_name: null,
+        });
+
+        const createResponse = await createResponsePromise;
+        expect(createResponse.status()).toBe(201);
+        await expect(createResponse.json()).resolves.toMatchObject({
+            email: 'miles.carter@webforxtech.com',
+            team_name: null,
+        });
 
         await expect(page.getByText('Team member added successfully').first()).toBeVisible();
 
         const createdMemberActions = page.getByRole('button', { name: /Actions for Miles Carter/ });
         await expect(createdMemberActions).toBeVisible();
+        await expect(page.locator('table tbody tr').filter({ hasText: 'Miles Carter' }).first()).toContainText('Unassigned');
 
         await createdMemberActions.click();
         await page.getByRole('button', { name: 'Edit Member' }).click();

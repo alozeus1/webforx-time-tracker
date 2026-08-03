@@ -340,6 +340,42 @@ describe('POST /api/v1/users', () => {
         expect(res.body.email).toBe('newuser@test.com');
     });
 
+    it('creates an unassigned user when team_name is null', async () => {
+        (prisma.user.create as jest.Mock).mockResolvedValue({
+            id: 'user-unassigned-1',
+            email: 'unassigned@test.com',
+            first_name: 'Unassigned',
+            last_name: 'User',
+            team_name: null,
+            is_active: true,
+            employment_type: 'employee',
+            min_weekly_hours: null,
+            role: { name: 'Employee' },
+        });
+
+        const res = await request(app)
+            .post('/api/v1/users')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                email: 'unassigned@test.com',
+                password: 'securePass123!',
+                first_name: 'Unassigned',
+                last_name: 'User',
+                role: 'Employee',
+                team_name: null,
+            });
+
+        expect(res.status).toBe(201);
+        expect(res.body).toMatchObject({
+            id: 'user-unassigned-1',
+            email: 'unassigned@test.com',
+            team_name: null,
+        });
+        expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ team_name: null }),
+        }));
+    });
+
     it('returns 400 when email already exists', async () => {
         (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
 
