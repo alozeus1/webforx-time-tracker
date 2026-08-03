@@ -174,6 +174,27 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
         role?: AppRole;
         team_name?: string | null;
       };
+      const existingIndex = teamUsers.findIndex((user) =>
+        user.email.toLowerCase() === payload.email?.toLowerCase(),
+      );
+      if (existingIndex >= 0) {
+        const existingUser = teamUsers[existingIndex];
+        if (existingUser.is_active) {
+          return respond(400, { message: 'User with this email already exists' });
+        }
+
+        const reactivatedUser = {
+          ...existingUser,
+          first_name: payload.first_name || existingUser.first_name,
+          last_name: payload.last_name || existingUser.last_name,
+          team_name: payload.team_name ?? null,
+          is_active: true,
+          role: { name: payload.role || existingUser.role.name },
+        };
+        teamUsers = teamUsers.map((user, index) => index === existingIndex ? reactivatedUser : user);
+        return respond(200, { ...reactivatedUser, reactivated: true });
+      }
+
       const createdUser = {
         id: `user-${teamUsers.length + 1}`,
         first_name: payload.first_name || 'New',

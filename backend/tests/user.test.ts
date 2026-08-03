@@ -394,6 +394,67 @@ describe('POST /api/v1/users', () => {
         expect(res.body.message).toMatch(/already exists/i);
     });
 
+    it('reactivates an inactive user with the submitted profile and password', async () => {
+        const inactiveUser = {
+            ...mockUser,
+            id: 'user-inactive-1',
+            email: 'returning@test.com',
+            is_active: false,
+            mfa_enabled: true,
+            mfa_secret: 'old-mfa-secret',
+        };
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(inactiveUser);
+        (prisma.user.update as jest.Mock).mockResolvedValue({
+            id: inactiveUser.id,
+            email: inactiveUser.email,
+            first_name: 'Returning',
+            last_name: 'Member',
+            team_name: null,
+            is_active: true,
+            employment_type: 'employee',
+            min_weekly_hours: null,
+            role: { name: 'Employee' },
+        });
+
+        const res = await request(app)
+            .post('/api/v1/users')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                email: inactiveUser.email,
+                password: 'NewSecurePass123!',
+                first_name: 'Returning',
+                last_name: 'Member',
+                role: 'Employee',
+                team_name: null,
+                employment_type: 'employee',
+            });
+
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+            id: inactiveUser.id,
+            email: inactiveUser.email,
+            is_active: true,
+            team_name: null,
+            reactivated: true,
+        });
+        expect(prisma.user.create).not.toHaveBeenCalled();
+        expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: inactiveUser.id, organization_id: 'org-1' },
+            data: expect.objectContaining({
+                first_name: 'Returning',
+                last_name: 'Member',
+                is_active: true,
+                team_name: null,
+                mfa_enabled: false,
+                mfa_secret: null,
+                password_hash: expect.any(String),
+            }),
+        }));
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ action: 'user_reactivated' }),
+        }));
+    });
+
     it('returns 400 when required fields are missing (schema validation)', async () => {
         const res = await request(app)
             .post('/api/v1/users')

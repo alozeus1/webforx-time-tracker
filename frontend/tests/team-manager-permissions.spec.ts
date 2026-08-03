@@ -113,5 +113,32 @@ test.describe('Team Manager Permissions', () => {
         const inactiveMemberRow = page.locator('table tbody tr').filter({ hasText: 'Mila Carter' }).first();
         await expect(inactiveMemberRow).toBeVisible();
         await expect(inactiveMemberRow).toContainText('Inactive');
+
+        await page.getByRole('button', { name: 'Add Team Member' }).click();
+        const restoreDialog = page.getByRole('dialog', { name: 'Add Team Member' });
+        await restoreDialog.getByLabel('First Name').fill('Mila');
+        await restoreDialog.getByLabel('Last Name').fill('Carter');
+        await restoreDialog.getByLabel('Email').fill('miles.carter@webforxtech.com');
+        await restoreDialog.getByLabel('Temporary Password').fill('NewTempPass123!');
+        await restoreDialog.getByLabel('Role', { exact: true }).selectOption('Employee');
+
+        const restoreResponsePromise = page.waitForResponse((response) =>
+            response.url().endsWith('/api/v1/users') && response.request().method() === 'POST',
+        );
+        await restoreDialog.getByRole('button', { name: 'Add Member' }).click();
+
+        const restoreResponse = await restoreResponsePromise;
+        expect(restoreResponse.status()).toBe(200);
+        await expect(restoreResponse.json()).resolves.toMatchObject({
+            email: 'miles.carter@webforxtech.com',
+            is_active: true,
+            reactivated: true,
+        });
+        await expect(page.getByText('Team member reactivated successfully').first()).toBeVisible();
+
+        await page.locator('select').first().selectOption('active');
+        const restoredMemberRow = page.locator('table tbody tr').filter({ hasText: 'Mila Carter' }).first();
+        await expect(restoredMemberRow).toBeVisible();
+        await expect(restoredMemberRow).toContainText('Active');
     });
 });

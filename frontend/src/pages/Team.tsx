@@ -482,7 +482,7 @@ const Team: React.FC = () => {
 
         try {
             if (modalMode === 'create') {
-                await api.post('/users', {
+                const response = await api.post<UserSummary & { reactivated?: boolean }>('/users', {
                     first_name: form.first_name.trim(),
                     last_name: form.last_name.trim(),
                     email: form.email.trim().toLowerCase(),
@@ -491,7 +491,12 @@ const Team: React.FC = () => {
                     role: form.role,
                     employment_type: form.employment_type,
                 });
-                setFeedback({ message: 'Team member added successfully', tone: 'success' });
+                setFeedback({
+                    message: response.data.reactivated
+                        ? 'Team member reactivated successfully'
+                        : 'Team member added successfully',
+                    tone: 'success',
+                });
             }
 
             if (modalMode === 'edit' && selectedUser) {

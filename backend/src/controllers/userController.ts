@@ -463,7 +463,7 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
         }
 
         const existingUser = await prisma.user.findFirst({ where: { email, organization_id: req.user!.organization_id } });
-        if (existingUser) {
+        if (existingUser?.is_active) {
             res.status(400).json({ message: 'User with this email already exists' });
             return;
         }
@@ -512,38 +512,57 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
         const salt = await bcrypt.genSalt(10);
         const password_hash = await bcrypt.hash(password, salt);
 
-        const newUser = await prisma.user.create({
-            data: {
-                email,
-                password_hash,
-                first_name,
-                last_name,
-                team_name: teamName,
-                role_id: resolvedRoleId,
-                employment_type: employmentType,
-                min_weekly_hours: minWeeklyHours,
-                organization_id: req.user!.organization_id,
-                password_changed_at: new Date(),
-            },
-            select: {
-                id: true,
-                email: true,
-                first_name: true,
-                last_name: true,
-                team_name: true,
-                is_active: true,
-                employment_type: true,
-                min_weekly_hours: true,
-                role: { select: { name: true } },
-            },
-        });
+        const userData = {
+            email,
+            password_hash,
+            first_name,
+            last_name,
+            team_name: teamName,
+            role_id: resolvedRoleId,
+            employment_type: employmentType,
+            min_weekly_hours: minWeeklyHours,
+            organization_id: req.user!.organization_id,
+            is_active: true,
+            password_changed_at: new Date(),
+        };
+        const userSelect = {
+            id: true,
+            email: true,
+            first_name: true,
+            last_name: true,
+            team_name: true,
+            is_active: true,
+            employment_type: true,
+            min_weekly_hours: true,
+            role: { select: { name: true } },
+        };
+
+        // A normal delete is a soft delete so historical time and project data
+        // remain intact. Re-adding that email restores the same identity instead
+        // of creating a second record that would split its history.
+        const newUser = existingUser
+            ? await prisma.user.update({
+                where: { id: existingUser.id, organization_id: req.user!.organization_id },
+                data: {
+                    ...userData,
+                    // Treat the submitted temporary password as a fresh invitation.
+                    // Old MFA enrollment must not lock the restored user out.
+                    mfa_enabled: false,
+                    mfa_secret: null,
+                },
+                select: userSelect,
+            })
+            : await prisma.user.create({
+                data: userData,
+                select: userSelect,
+            });
 
         try {
             await prisma.auditLog.create({
                 data: {
                     user_id: requireUserId(req),
                     organization_id: req.user!.organization_id,
-                    action: 'user_created',
+                    action: existingUser ? 'user_reactivated' : 'user_created',
                     resource: 'user',
                     metadata: {
                         target_user_id: newUser.id,
@@ -563,7 +582,10 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
             loginUrl: `${env.frontendUrl}/login`,
         }).catch((err) => console.error('Failed to send welcome email:', err));
 
-        res.status(201).json(newUser);
+        res.status(existingUser ? 200 : 201).json({
+            ...newUser,
+            ...(existingUser && { reactivated: true }),
+        });
     } catch (error) {
         respondWithUserServiceError(res, error, 'Failed to create user');
     }
