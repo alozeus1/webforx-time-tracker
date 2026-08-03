@@ -208,8 +208,10 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
       return respond(201, createdUser);
     }
 
-    if (/\/users\/[^/]+$/.test(path) && ['PUT', 'DELETE'].includes(method)) {
-      const userId = path.split('/').pop() as string;
+    const isDeactivateRequest = /\/users\/[^/]+\/deactivate$/.test(path) && method === 'POST';
+    if ((/\/users\/[^/]+$/.test(path) && ['PUT', 'DELETE'].includes(method)) || isDeactivateRequest) {
+      const pathParts = path.split('/');
+      const userId = isDeactivateRequest ? pathParts[pathParts.length - 2] : pathParts[pathParts.length - 1];
 
       if (method === 'PUT') {
         const payload = JSON.parse(request.postData() || '{}') as {
@@ -233,7 +235,7 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
         );
       }
 
-      if (method === 'DELETE') {
+      if (method === 'DELETE' || isDeactivateRequest) {
         teamUsers = teamUsers.map((user) =>
           user.id === userId
             ? {

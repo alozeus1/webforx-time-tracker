@@ -94,6 +94,15 @@ Mounted at `/api/v1/users`.
 
 See `backend/src/routes/userRoutes.ts` for exact role restrictions. This group supports current-user details, user listing, creation/update/admin management, imports, and diagnostics.
 
+User lifecycle endpoints:
+
+| Method | Route | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/:id/deactivate` | Manager, Admin | Reversibly block access while retaining the email and historical records |
+| `DELETE` | `/:id/permanent` | Admin | Permanently remove an already-deactivated user and related records |
+
+The legacy `DELETE /:id` route remains a compatibility alias for deactivation. New clients must use the explicit `/deactivate` endpoint.
+
 ## Project API
 
 Mounted at `/api/v1/projects`.

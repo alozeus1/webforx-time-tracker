@@ -4,7 +4,7 @@ import {
     getAllUsers,
     createUser,
     updateUser,
-    deleteUser,
+    deactivateUser,
     permanentlyDeleteUser,
     updateMe,
     getRoles,
@@ -35,7 +35,10 @@ router.post('/:id/mfa/reset', authenticateToken, requireRole(['Admin', 'Manager'
 router.post('/', authenticateToken, requireRole(['Admin', 'Manager']), createUser);
 router.post('/import', authenticateToken, requireRole(['Admin', 'Manager']), importUsers);
 router.put('/:id', authenticateToken, requireRole(['Admin', 'Manager']), updateUser);
-router.delete('/:id', authenticateToken, requireRole(['Admin', 'Manager']), deleteUser);
+router.post('/:id/deactivate', authenticateToken, requireRole(['Admin', 'Manager']), deactivateUser);
+// Backward-compatible alias for older clients. New clients must use the explicit
+// deactivate endpoint so this recoverable action is not confused with hard deletion.
+router.delete('/:id', authenticateToken, requireRole(['Admin', 'Manager']), deactivateUser);
 router.delete('/:id/permanent', authenticateToken, requireRole(['Admin']), permanentlyDeleteUser);
 
 export default router;
