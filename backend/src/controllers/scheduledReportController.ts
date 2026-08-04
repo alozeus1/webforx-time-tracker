@@ -22,6 +22,32 @@ import { ALL_WEEK_DAYS, normalizeRequiredDays } from '../services/reportValidati
  */
 const WEEKLY_GENERATION_DAY = 1; // Monday
 
+/**
+ * Validate a requested weekly generation day.
+ *
+ * Previously any 1-6 value was silently rewritten to Monday, so a caller who asked
+ * for Wednesday received a 201 describing a schedule they had not requested. Silent
+ * normalisation of a value the client explicitly set is worse than a clear
+ * rejection: it makes the API's response a lie. `undefined`/`null` is still
+ * accepted and defaulted, since that is the caller expressing no preference.
+ *
+ * Returns an error message when the value must be rejected, otherwise null.
+ */
+const rejectNonMondayGenerationDay = (day: number | null): string | null => {
+    if (day === null || Number.isNaN(day)) return null;
+
+    if (!Number.isInteger(day) || day < 0 || day > 6) {
+        return 'day_of_week must be an integer between 0 (Sunday) and 6 (Saturday)';
+    }
+    if (day === SUNDAY) {
+        return 'Weekly reports cannot be generated on Sunday — Sunday is the closing day of the export window, so the week would not be complete at generation time. Weekly reports run on Monday (day_of_week = 1).';
+    }
+    if (day !== WEEKLY_GENERATION_DAY) {
+        return `Weekly reports are generated on Monday (day_of_week = 1) because the export window is a fixed Monday-to-Sunday week. Received ${day}. Omit day_of_week to accept the default.`;
+    }
+    return null;
+};
+
 type WindowConfig = {
     reporting_timezone: string;
     export_window_start: string;
@@ -46,7 +72,13 @@ const parseWindowConfig = (
     const rawTimezone = body.reporting_timezone;
     if (rawTimezone !== undefined) {
         if (!isValidTimeZone(rawTimezone)) {
-            return { error: 'reporting_timezone must be a valid IANA timezone identifier (e.g. "America/Chicago")' };
+            return {
+                error: 'reporting_timezone must be a canonical IANA timezone identifier in Area/Location form '
+                    + '(e.g. "America/Chicago", "Africa/Lagos"), or "UTC". Abbreviations such as "EST", "CST" '
+                    + 'and "MST" are rejected: they resolve to fixed-offset zones that do not observe daylight '
+                    + 'saving (EST resolves to America/Panama), which would silently shift every window boundary '
+                    + 'by an hour for part of the year.',
+            };
         }
         data.reporting_timezone = String(rawTimezone).trim();
     } else if (!partial) {
@@ -192,21 +224,11 @@ export const createScheduledReport = async (req: AuthRequest, res: Response): Pr
 
         let parsedDayOfWeek = day_of_week !== undefined ? Number(day_of_week) : null;
         if (frequency === 'weekly') {
-            if (parsedDayOfWeek !== null && (!Number.isInteger(parsedDayOfWeek) || parsedDayOfWeek < 0 || parsedDayOfWeek > 6)) {
-                sendApiError(res, 400, 'VALIDATION_ERROR', 'day_of_week must be between 0 and 6');
+            const rejection = rejectNonMondayGenerationDay(parsedDayOfWeek);
+            if (rejection) {
+                sendApiError(res, 400, 'VALIDATION_ERROR', rejection);
                 return;
             }
-            if (parsedDayOfWeek === SUNDAY) {
-                sendApiError(
-                    res,
-                    400,
-                    'VALIDATION_ERROR',
-                    'Weekly reports cannot be generated on Sunday — Sunday is the closing day of the export window and the week would not be complete. Weekly reports run on Monday.',
-                );
-                return;
-            }
-            // The export window is a fixed Monday-to-Sunday week, so generation is
-            // pinned to Monday regardless of what the caller asked for.
             parsedDayOfWeek = WEEKLY_GENERATION_DAY;
         }
 
@@ -252,18 +274,9 @@ export const updateScheduledReport = async (req: AuthRequest, res: Response): Pr
             data.frequency = req.body.frequency;
         }
         if (req.body.day_of_week !== undefined) {
-            const day = Number(req.body.day_of_week);
-            if (!Number.isInteger(day) || day < 0 || day > 6) {
-                sendApiError(res, 400, 'VALIDATION_ERROR', 'day_of_week must be between 0 and 6');
-                return;
-            }
-            if (day === SUNDAY) {
-                sendApiError(
-                    res,
-                    400,
-                    'VALIDATION_ERROR',
-                    'Weekly reports cannot be generated on Sunday — Sunday is the closing day of the export window and the week would not be complete. Weekly reports run on Monday.',
-                );
+            const rejection = rejectNonMondayGenerationDay(Number(req.body.day_of_week));
+            if (rejection) {
+                sendApiError(res, 400, 'VALIDATION_ERROR', rejection);
                 return;
             }
             data.day_of_week = WEEKLY_GENERATION_DAY;

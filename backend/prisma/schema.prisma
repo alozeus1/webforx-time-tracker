@@ -635,6 +635,12 @@ model ScheduledReport {
   // org-wide entry. Defaults to all seven days; narrow it for organisations that
   // legitimately do not log at weekends rather than disabling the gate outright.
   validation_gate_required_days    Json    @default("[0, 1, 2, 3, 4, 5, 6]")
+  // Start of the export window an admin was last alerted about. The scheduled-report
+  // endpoint is polled hourly and a blocked report stays due for the rest of its
+  // generation day, so without this marker one missing day of data would emit an
+  // identical alert every hour. Compared against the current window's start, so a
+  // genuinely new blocked window still alerts exactly once.
+  last_validation_alert_window     DateTime?
 
   user User @relation(fields: [user_id], references: [id])
 

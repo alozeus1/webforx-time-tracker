@@ -24,13 +24,18 @@ Because these reports drive warning ladders and termination decisions, the fix i
 
 ## How the window works now
 
-| Property | Value |
-|---|---|
-| Window start | Monday `00:00:00.000` in the reporting timezone |
-| Window end | Sunday `23:59:59.999` in the reporting timezone |
-| Span | Exactly 7 calendar days |
-| Generation | Monday at `schedule_generation_time` (default `06:00`), same timezone |
-| Coverage | The **previous complete week** — the generation day is never inside its own window |
+| Property | Weekly | Monthly |
+|---|---|---|
+| Window start | Monday `00:00:00.000` local | 1st of month `00:00:00.000` local |
+| Window end | Sunday `23:59:59.999` local | Last day of month `23:59:59.999` local |
+| Span | Exactly 7 calendar days | Whole calendar month (28–31 days) |
+| Generation | Monday at `schedule_generation_time` (default `06:00`) | 1st of the month at the same slot |
+| Coverage | Previous **complete** week | Previous **complete** month |
+| Gates | Zero-entry + window-integrity | Zero-entry only |
+
+The generation day is never inside its own window, for either frequency. Monthly windows are timezone-aware too: they previously used server-local `new Date(y, m - 1, 1)`, which is the same defect class as the old weekly window — a report configured for `Africa/Lagos` running on a UTC server placed the month boundary an hour off and mis-assigned entries logged in the first or last hour of the month, while its UI displayed a timezone that was never actually applied.
+
+The window-integrity gate asserts "exactly 7 days ending Sunday", which is meaningless for a calendar month, so it is skipped for monthly reports. The zero-entry gate applies to both.
 
 Example, `America/Chicago`, generation Monday 2026-08-03 06:00 CDT:
 
@@ -47,7 +52,9 @@ Implementation: `backend/src/utils/reportWindow.ts`. No new dependency — all t
 
 ## Timezone selection and its impact
 
-`reporting_timezone` is an IANA identifier (for example `America/Chicago`, `Africa/Lagos`, `Pacific/Auckland`) stored per scheduled report. Everything is a wall-clock time in that zone: window boundaries, the generation slot, and the day-bucketing used by the zero-entry gate.
+`reporting_timezone` is an IANA identifier in `Area/Location` form (for example `America/Chicago`, `Africa/Lagos`, `Pacific/Auckland`), or `UTC`, stored per scheduled report.
+
+**Abbreviations are rejected.** ICU resolves `EST`, `CST`, `MST` and friends, but not to what you would expect: `EST` becomes `America/Panama` and `MST` becomes `America/Phoenix`, neither of which observes daylight saving. A report set to `EST` meaning US Eastern would have every boundary an hour out for half the year — silently, and only in summer. `Etc/*` is rejected for the same reason plus a sign inversion (`Etc/GMT+5` means UTC−5). Validation is by shape and resolvability rather than an allowlist from `Intl.supportedValuesOf`, because that list is ICU-version-dependent — the backend runtime lists `Asia/Calcutta` and `Europe/Kiev` while browsers offer `Asia/Kolkata` and `Europe/Kyiv`, so an allowlist would reject values the UI had just presented. Everything is a wall-clock time in that zone: window boundaries, the generation slot, and the day-bucketing used by the zero-entry gate.
 
 **Choosing the wrong zone shifts the window.** A team working in `Africa/Lagos` (UTC+1) configured as `UTC` gets a window running 01:00 Monday to 00:59 Monday-next in local terms — an hour of Monday morning falls into the previous week's report. Set the zone to where the team actually works, not where the server runs.
 
@@ -92,8 +99,9 @@ Sunday `23:59:59` closes every export window. Generating on Sunday means generat
 Enforcement is layered:
 
 - The API rejects `day_of_week = 0` for weekly reports with an explanatory 400.
-- Weekly reports are pinned to Monday (`day_of_week` is normalised to `1`) regardless of what the caller sends.
-- `isGenerationDue()` returns `false` unless the local weekday is Monday and the local time is at or past the configured slot.
+- It also rejects any other non-Monday value rather than silently rewriting it. Earlier behaviour normalised 1–6 to Monday and returned `201`, so the response described a schedule the caller never asked for. Omitting `day_of_week` accepts the Monday default; that is the supported way to express "no preference".
+- The UI shows Monday as a fixed, non-editable value rather than a free choice, so it cannot offer a day the API will reject.
+- `isGenerationDue()` returns `false` unless the local weekday is Monday and the local time is at or past the configured slot. `isMonthlyGenerationDue()` does the same for the 1st of the month.
 - `findGenerationDayConflict()` flags any generation day that collides with the window's closing day.
 
 The default `06:00` gives six hours after midnight for late entries and approvals to land before the week is read.
@@ -129,11 +137,12 @@ Had this gate existed, it would have caught the original defect on its first run
 
 ### What happens on failure
 
-1. Generation halts. **No report is sent.**
+1. Generation halts. **No report is sent, and no report recipient is notified.**
 2. Both gate outcomes are logged with full structured context — per-day entry counts, window boundaries in local time and UTC, timezone, and day span.
-3. An alert email goes to the report's recipients explaining which gate failed and why.
-4. `last_sent_at` is **not** updated, so the report retries on the next tick once the data issue is resolved.
-5. The run result counts the report as `blocked`, distinct from `failed`.
+3. An alert email goes to the organisation's **Admin-role users** — deliberately *not* the report's delivery recipients. A scheduled report may be addressed to clients, payroll contacts, or other external stakeholders, and the alert carries internal diagnostics (report IDs, per-day entry counts, window internals). If no active Admin exists, or `RESEND_API_KEY` is unset, the failure is logged loudly and the run result still reports it — but nobody is emailed, so watch the workflow logs.
+4. The alert is sent **once per blocked window**, not once per tick. `last_validation_alert_window` records the window start that was last alerted about; the endpoint is polled hourly and a blocked report stays due for the rest of its generation day, so without this a single missing day would emit roughly 18 identical emails. A genuinely new blocked window alerts again. The marker is recorded **only when the alert actually sent** — including checking Resend's returned `error`, which signals API-level failures without rejecting the promise — so a failed alert retries rather than being silently suppressed forever.
+5. `last_sent_at` is **not** updated, so the report retries on the next tick once the data issue is resolved. A successful send clears the alert marker.
+6. The run result counts the report as `blocked`, distinct from `failed`.
 
 `blocked` returns HTTP **200** with `status: "validation_blocked"`, not 500. A blocked report is the gate working correctly; returning 500 would make the cron platform retry and send operators chasing a phantom infrastructure fault instead of the data problem.
 
@@ -149,6 +158,7 @@ Had this gate existed, it would have caught the original defect on its first run
 | `validation_gate_zero_entries` | boolean | `true` | Gate 1 |
 | `validation_gate_window_integrity` | boolean | `true` | Gate 2 |
 | `validation_gate_required_days` | int[] | `[0,1,2,3,4,5,6]` | `0` = Sunday … `6` = Saturday |
+| `last_validation_alert_window` | datetime | `null` | Internal. Window start last alerted about; prevents duplicate alerts |
 
 ### Valid configuration
 
@@ -171,7 +181,9 @@ Had this gate existed, it would have caught the original defect on its first run
 | Configuration | Rejected because |
 |---|---|
 | `"day_of_week": 0` | Sunday closes the window; weekly reports run Monday |
-| `"reporting_timezone": "CST"` | Not an IANA identifier — use `America/Chicago` |
+| `"day_of_week": 3` | Any non-Monday value is rejected, not silently rewritten. Omit the field to accept the default |
+| `"reporting_timezone": "CST"` | Abbreviation. ICU resolves it, but `EST` maps to `America/Panama` (no DST) — use `America/Chicago` |
+| `"reporting_timezone": "Etc/GMT+5"` | Fixed-offset and sign-inverted (`GMT+5` means UTC**−**5) |
 | `"schedule_generation_time": "6:00"` | Must be zero-padded 24-hour `HH:mm` |
 | `"schedule_generation_time": "24:00"` | Out of range |
 | `"export_window_end": "saturday 23:59:59"` | Window boundaries are fixed |

@@ -120,11 +120,53 @@ const getFormatter = (timeZone: string): Intl.DateTimeFormat => {
     return formatter;
 };
 
-/** Returns true when the string is an IANA zone this runtime can resolve. */
+/**
+ * Returns true only for an `Area/Location` IANA zone that this runtime can resolve,
+ * or `UTC`.
+ *
+ * Two things are deliberately rejected that a bare `try { new Intl.DateTimeFormat }`
+ * would let through.
+ *
+ * 1. Legacy abbreviations. ICU resolves them, to places that actively mislead:
+ *
+ *        EST -> America/Panama    (does NOT observe DST)
+ *        MST -> America/Phoenix   (does NOT observe DST)
+ *        CST -> America/Chicago
+ *
+ *    Someone entering `EST` almost certainly means US Eastern. They would instead get
+ *    a fixed -05:00 zone, so every window boundary and generation time would be an
+ *    hour out for roughly half the year — silently, and only in summer. That is
+ *    exactly the one-hour-shift defect this module exists to prevent. Requiring an
+ *    `Area/Location` slash rejects these, along with deprecated single-word aliases
+ *    like `Japan` and `Singapore`, and steers the caller to `America/New_York`.
+ *
+ * 2. The `Etc/*` family. `Etc/GMT+5` means UTC**-**5 — the sign is inverted by the
+ *    POSIX convention. These are fixed-offset and never observe DST, so they carry
+ *    the same hazard as the abbreviations with an extra trap on top.
+ *
+ * Validation is by *shape plus resolvability*, deliberately NOT an allowlist built
+ * from `Intl.supportedValuesOf('timeZone')`. That list is ICU-version-dependent: this
+ * runtime's copy contains `Asia/Calcutta`, `Asia/Katmandu` and `Europe/Kiev` but not
+ * the modern preferred spellings `Asia/Kolkata`, `Asia/Kathmandu` or `Europe/Kyiv`,
+ * and omits `America/Argentina/Buenos_Aires` entirely. Since the frontend populates
+ * its dropdown from the *browser's* list, an allowlist here would reject values the
+ * UI had just offered, and the exact set would drift with each Node upgrade.
+ * Resolvability is stable across versions; both spellings resolve fine.
+ *
+ * `UTC` is allowed explicitly: it is the documented default, unambiguous, and has no
+ * slash.
+ */
 export const isValidTimeZone = (timeZone: unknown): timeZone is string => {
-    if (typeof timeZone !== 'string' || !timeZone.trim()) return false;
+    if (typeof timeZone !== 'string') return false;
+    const trimmed = timeZone.trim();
+    if (!trimmed) return false;
+    if (trimmed === DEFAULT_REPORTING_TIMEZONE) return true;
+
+    if (!trimmed.includes('/')) return false;
+    if (trimmed.startsWith('Etc/')) return false;
+
     try {
-        getFormatter(timeZone.trim());
+        getFormatter(trimmed);
         return true;
     } catch {
         return false;
@@ -283,6 +325,75 @@ export const getPreviousCompleteWeek = (now: Date, timeZone: string): ReportWind
         timeZone: zone,
         label: `${startLocalDate} to ${endLocalDate}`,
     };
+};
+
+/**
+ * The most recent *complete* calendar month relative to `now`, in `timeZone`.
+ *
+ * Monthly reports previously computed their boundaries with
+ * `new Date(y, m - 1, 1)` in server-local time, which is the same class of defect
+ * the weekly window had: a report configured for `Africa/Lagos` running on a UTC
+ * server would place the month boundary an hour off and mis-assign entries logged
+ * in the first or last hour of the month.
+ *
+ * `localDates` covers every day of the month, so the zero-entry gate works
+ * unchanged. The window-integrity gate is weekly by definition (7 days ending
+ * Sunday) and is skipped for monthly windows by the caller.
+ */
+export const getPreviousCompleteMonth = (now: Date, timeZone: string): ReportWindow => {
+    const zone = assertValidTimeZone(timeZone);
+    const nowParts = getZonedParts(now, zone);
+
+    const prevMonthYear = nowParts.month === 1 ? nowParts.year - 1 : nowParts.year;
+    const prevMonth = nowParts.month === 1 ? 12 : nowParts.month - 1;
+
+    const start = zonedTimeToUtc(prevMonthYear, prevMonth, 1, 0, 0, 0, 0, zone);
+    const endExclusive = zonedTimeToUtc(nowParts.year, nowParts.month, 1, 0, 0, 0, 0, zone);
+    const end = new Date(endExclusive.getTime() - 1);
+
+    // Day count comes from civil arithmetic, so leap years and month lengths are
+    // handled without any DST-sensitive division of elapsed milliseconds.
+    const daysInMonth = new Date(Date.UTC(prevMonthYear, prevMonth, 0)).getUTCDate();
+    const localDates: string[] = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        localDates.push(formatLocalDate({ year: prevMonthYear, month: prevMonth, day }));
+    }
+
+    const startLocalDate = localDates[0]!;
+    const endLocalDate = localDates[localDates.length - 1]!;
+
+    return {
+        start,
+        endExclusive,
+        end,
+        startLocalDate,
+        endLocalDate,
+        localDates,
+        timeZone: zone,
+        label: `${startLocalDate} to ${endLocalDate}`,
+    };
+};
+
+/**
+ * Is `now` at or past the monthly generation slot — the 1st of the month at
+ * `generationTime` in `timeZone`?
+ *
+ * Monthly due-ness was previously `now.getDate() === 1` in server-local time,
+ * which fires on the wrong local day for zones far from the server's.
+ */
+export const isMonthlyGenerationDue = (
+    now: Date,
+    timeZone: string,
+    generationTime: string = DEFAULT_GENERATION_TIME,
+): boolean => {
+    const zone = assertValidTimeZone(timeZone);
+    const time = parseGenerationTime(generationTime);
+    if (!time) return false;
+
+    const parts = getZonedParts(now, zone);
+    if (parts.day !== 1) return false;
+
+    return parts.hour * 60 + parts.minute >= time.hour * 60 + time.minute;
 };
 
 /** Parse an "HH:mm" (or "HH:mm:ss") generation time. Returns null when malformed. */

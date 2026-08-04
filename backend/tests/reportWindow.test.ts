@@ -12,9 +12,11 @@ import {
     InvalidTimeZoneError,
     findGenerationDayConflict,
     getNextGenerationRun,
+    getPreviousCompleteMonth,
     getPreviousCompleteWeek,
     getZonedParts,
     isGenerationDue,
+    isMonthlyGenerationDue,
     isValidTimeZone,
     parseGenerationTime,
     toLocalDateString,
@@ -114,6 +116,63 @@ describe('getPreviousCompleteWeek', () => {
             expect(isValidTimeZone('America/Chicago')).toBe(true);
             expect(isValidTimeZone('')).toBe(false);
             expect(isValidTimeZone(null)).toBe(false);
+        });
+
+        it('rejects legacy abbreviations that ICU would otherwise accept', () => {
+            // ICU resolves these, so a plain try/catch around Intl.DateTimeFormat would
+            // let them through. They must not be accepted — see the next test for why.
+            for (const abbreviation of ['EST', 'CST', 'MST', 'HST', 'GMT', 'EST5EDT', 'CST6CDT']) {
+                expect(new Intl.DateTimeFormat('en-US', { timeZone: abbreviation })).toBeDefined();
+                expect(isValidTimeZone(abbreviation)).toBe(false);
+            }
+            // Deprecated single-word aliases are rejected for the same reason.
+            expect(isValidTimeZone('Japan')).toBe(false);
+            expect(isValidTimeZone('Singapore')).toBe(false);
+            // Etc/* is fixed-offset AND sign-inverted: Etc/GMT+5 means UTC-5.
+            expect(isValidTimeZone('Etc/GMT+5')).toBe(false);
+            expect(isValidTimeZone('Etc/UTC')).toBe(false);
+        });
+
+        it('accepts both old and new canonicalisations, because ICU versions disagree', () => {
+            // Validation is shape + resolvability, NOT an allowlist from
+            // Intl.supportedValuesOf('timeZone'). That list is ICU-version-dependent:
+            // the CI runtime lists Asia/Calcutta / Europe/Kiev but not the modern
+            // Asia/Kolkata / Europe/Kyiv, while browsers list the modern spellings.
+            // An allowlist would therefore reject values the UI had just offered.
+            for (const zone of [
+                'Asia/Kolkata', 'Asia/Calcutta',
+                'Asia/Kathmandu', 'Asia/Katmandu',
+                'Europe/Kyiv', 'Europe/Kiev',
+                'America/Argentina/Buenos_Aires',
+            ]) {
+                expect(isValidTimeZone(zone)).toBe(true);
+            }
+        });
+
+        it('documents WHY abbreviations are rejected: EST is not US Eastern', () => {
+            // ICU maps EST to America/Panama, a fixed -05:00 zone with no DST. Someone
+            // entering "EST" meaning US Eastern would get boundaries an hour out for
+            // roughly half the year — exactly the silent one-hour shift this module exists
+            // to prevent.
+            expect(new Intl.DateTimeFormat('en-US', { timeZone: 'EST' }).resolvedOptions().timeZone)
+                .toBe('America/Panama');
+
+            const fmt = (zone: string, instant: Date) => new Intl.DateTimeFormat('en-US', {
+                timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+            }).format(instant);
+
+            const january = new Date('2026-01-15T17:00:00.000Z');
+            const july = new Date('2026-07-15T17:00:00.000Z');
+
+            expect(fmt('EST', january)).toBe(fmt('EST', july)); // no DST — same wall time
+            expect(fmt('America/New_York', january)).not.toBe(fmt('America/New_York', july));
+        });
+
+        it('accepts UTC, the documented default, even though it is not in the canonical list', () => {
+            expect(isValidTimeZone('UTC')).toBe(true);
+            expect(isValidTimeZone(' UTC ')).toBe(true);
+            expect(getPreviousCompleteWeek(new Date('2026-08-03T06:00:00.000Z'), 'UTC').label)
+                .toBe('2026-07-27 to 2026-08-02');
         });
     });
 
@@ -257,5 +316,64 @@ describe('generation scheduling', () => {
         const window = getPreviousCompleteWeek(new Date('2026-08-03T11:00:00.000Z'), 'UTC');
         expect(findGenerationDayConflict(0, window, 'UTC')).toMatch(/Sunday/);
         expect(findGenerationDayConflict(1, window, 'UTC')).toBeNull();
+    });
+});
+
+
+describe('getPreviousCompleteMonth', () => {
+    // Regression (Codex review): monthly windows used `new Date(y, m - 1, 1)` in
+    // SERVER-local time — the same defect class as the old weekly window. A report
+    // configured for a non-UTC zone displayed that timezone but never applied it,
+    // mis-assigning entries logged in the first or last hour of the month.
+    it('builds the previous calendar month in UTC', () => {
+        const window = getPreviousCompleteMonth(new Date('2026-04-01T06:00:00.000Z'), 'UTC');
+        expect(window.label).toBe('2026-03-01 to 2026-03-31');
+        expect(window.localDates).toHaveLength(31);
+        expect(window.start.toISOString()).toBe('2026-03-01T00:00:00.000Z');
+        expect(window.endExclusive.toISOString()).toBe('2026-04-01T00:00:00.000Z');
+        expect(window.end.getTime()).toBe(window.endExclusive.getTime() - 1);
+    });
+
+    it('shifts the month boundary for a non-UTC zone', () => {
+        const window = getPreviousCompleteMonth(new Date('2026-04-01T05:00:00.000Z'), 'Africa/Lagos');
+        // UTC+1: local 1 March 00:00 is 28 February 23:00 UTC.
+        expect(window.start.toISOString()).toBe('2026-02-28T23:00:00.000Z');
+        expect(window.endExclusive.toISOString()).toBe('2026-03-31T23:00:00.000Z');
+        expect(window.label).toBe('2026-03-01 to 2026-03-31');
+    });
+
+    it('computes boundaries per-instant across a DST transition inside the month', () => {
+        // US spring forward is 8 March 2026, mid-window: the month opens in CST
+        // (UTC-6) and closes in CDT (UTC-5). A fixed-offset implementation would put
+        // one of these an hour out.
+        const window = getPreviousCompleteMonth(new Date('2026-04-01T11:00:00.000Z'), 'America/Chicago');
+        expect(window.start.toISOString()).toBe('2026-03-01T06:00:00.000Z');
+        expect(window.endExclusive.toISOString()).toBe('2026-04-01T05:00:00.000Z');
+        expect(window.localDates).toHaveLength(31);
+    });
+
+    it('handles month lengths, leap years and the year boundary', () => {
+        expect(getPreviousCompleteMonth(new Date('2028-03-01T06:00:00.000Z'), 'UTC').localDates).toHaveLength(29);
+        expect(getPreviousCompleteMonth(new Date('2028-03-01T06:00:00.000Z'), 'UTC').localDates).toContain('2028-02-29');
+        expect(getPreviousCompleteMonth(new Date('2026-03-01T06:00:00.000Z'), 'UTC').localDates).toHaveLength(28);
+        expect(getPreviousCompleteMonth(new Date('2027-01-01T06:00:00.000Z'), 'UTC').label)
+            .toBe('2026-12-01 to 2026-12-31');
+        expect(getPreviousCompleteMonth(new Date('2026-05-01T06:00:00.000Z'), 'UTC').localDates).toHaveLength(30);
+    });
+});
+
+describe('isMonthlyGenerationDue', () => {
+    it('is due only on the 1st, at or after the local slot', () => {
+        expect(isMonthlyGenerationDue(new Date('2026-04-01T06:00:00.000Z'), 'UTC', '06:00')).toBe(true);
+        expect(isMonthlyGenerationDue(new Date('2026-04-01T05:59:00.000Z'), 'UTC', '06:00')).toBe(false);
+        expect(isMonthlyGenerationDue(new Date('2026-04-02T06:00:00.000Z'), 'UTC', '06:00')).toBe(false);
+        expect(isMonthlyGenerationDue(new Date('2026-04-30T06:00:00.000Z'), 'UTC', '06:00')).toBe(false);
+    });
+
+    it('resolves the 1st in the reporting timezone, not the server\'s', () => {
+        // 31 March 18:00 UTC is already 1 April 06:00 in Pacific/Auckland.
+        const instant = new Date('2026-03-31T18:00:00.000Z');
+        expect(isMonthlyGenerationDue(instant, 'Pacific/Auckland', '06:00')).toBe(true);
+        expect(isMonthlyGenerationDue(instant, 'UTC', '06:00')).toBe(false);
     });
 });
