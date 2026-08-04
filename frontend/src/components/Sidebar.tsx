@@ -4,7 +4,7 @@ import {
     LayoutDashboard, Clock, Calendar, FileText, BarChart2,
     Users, Settings, Box, ShieldCheck, X, LogOut, HelpCircle,
     Sun, Moon, Receipt, FolderCog, Globe, CalendarClock, Sparkles,
-    ChevronLeft, ChevronRight, CalendarDays,
+    ChevronLeft, ChevronRight, CalendarDays, MapPin,
 } from 'lucide-react';
 import './Sidebar.css';
 import { clearStoredSession, getStoredUserProfile, hasAnyRole } from '../utils/session';
@@ -44,6 +44,7 @@ const NAV_GROUPS: NavGroup[] = [
             { name: 'Timeline', path: '/timeline', icon: <Calendar size={20} /> },
             { name: 'Timesheet', path: '/timesheet', icon: <FileText size={20} /> },
             { name: 'Leave & PTO', path: '/leave', icon: <CalendarDays size={20} /> },
+            { name: 'Schedule', path: '/schedule', icon: <CalendarClock size={20} /> },
             { name: 'Reports', path: '/reports', icon: <BarChart2 size={20} /> },
         ],
     },
@@ -51,6 +52,7 @@ const NAV_GROUPS: NavGroup[] = [
         label: 'BILLING',
         items: [
             { name: 'Invoices', path: '/invoices', icon: <Receipt size={20} />, allowedRoles: ['Manager', 'Admin'] },
+            { name: 'Expenses', path: '/expenses', icon: <FileText size={20} /> },
             { name: 'Templates', path: '/templates', icon: <FolderCog size={20} />, allowedRoles: ['Manager', 'Admin'] },
             { name: 'Scheduled Reports', path: '/scheduled-reports', icon: <CalendarClock size={20} />, allowedRoles: ['Manager', 'Admin'] },
         ],
@@ -60,6 +62,7 @@ const NAV_GROUPS: NavGroup[] = [
         items: [
             { name: 'Team', path: '/team', icon: <Users size={20} />, allowedRoles: ['Manager', 'Admin'] },
             { name: 'Admin', path: '/admin', icon: <ShieldCheck size={20} />, allowedRoles: ['Admin'] },
+            { name: 'Geofencing', path: '/geofencing', icon: <MapPin size={20} />, allowedRoles: ['Admin'] },
             { name: 'Webhooks', path: '/webhooks', icon: <Globe size={20} />, allowedRoles: ['Admin'] },
             { name: 'Integrations', path: '/integrations', icon: <Box size={20} /> },
             { name: 'Settings', path: '/settings', icon: <Settings size={20} /> },

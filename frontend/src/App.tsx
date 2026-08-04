@@ -27,6 +27,11 @@ import Demo from './pages/Demo';
 import Leave from './pages/Leave';
 import { getStoredRole, getStoredToken } from './utils/session';
 
+const Schedule = React.lazy(() => import('./pages/Schedule'));
+const Expenses = React.lazy(() => import('./pages/Expenses'));
+const Geofencing = React.lazy(() => import('./pages/Geofencing'));
+const lazyPage = (page: React.ReactNode) => <React.Suspense fallback={<div className="flex-1 p-8 text-sm text-slate-500">Loading…</div>}>{page}</React.Suspense>;
+
 // Auth Guard
 const ProtectedRoute = ({
   children,
@@ -93,6 +98,9 @@ const App: React.FC = () => {
           <Route path="/integrations/taiga" element={<Integrations />} />
           <Route path="/integrations/mattermost" element={<Integrations />} />
           <Route path="/leave" element={<Leave />} />
+          <Route path="/schedule" element={lazyPage(<Schedule />)} />
+          <Route path="/expenses" element={lazyPage(<Expenses />)} />
+          <Route path="/geofencing" element={<ProtectedRoute allowedRoles={['Admin']}>{lazyPage(<Geofencing />)}</ProtectedRoute>} />
         </Route>
       </Routes>
     </BrowserRouter>

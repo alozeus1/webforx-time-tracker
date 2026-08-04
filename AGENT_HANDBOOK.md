@@ -178,6 +178,9 @@ Frontend routes:
 - `/admin` (Admin)
 - `/settings`
 - `/profile`
+- `/schedule`
+- `/expenses`
+- `/geofencing` (Admin)
 - `/integrations`
 - `/integrations/taiga`
 - `/integrations/mattermost`
@@ -195,6 +198,9 @@ Backend route groups (`/api/v1`):
 - `/admin`
 - `/cron`
 - `/health`
+- `/schedules`
+- `/expenses`
+- `/geofences`
 
 See exact mapping in `docs/app-route.md` and `backend/src/routes/*.ts`.
 

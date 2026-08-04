@@ -19,6 +19,9 @@ jest.mock('../src/config/db', () => ({
         timeEntry: {
             findMany: jest.fn(),
         },
+        expense: {
+            findMany: jest.fn(),
+        },
         invoiceLineItem: {
             createMany: jest.fn(),
         },
@@ -66,6 +69,7 @@ beforeEach(() => {
     jest.clearAllMocks();
 
     (prisma.invoice.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.expense.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.projectTemplate.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.scheduledReport.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.webhookSubscription.findMany as jest.Mock).mockResolvedValue([]);
@@ -131,6 +135,19 @@ describe('Route registration and availability', () => {
 
         expect(res.status).toBe(201);
         expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('POST /api/v1/invoices accepts approved billable expense IDs', async () => {
+        (prisma.expense.findMany as jest.Mock).mockResolvedValue([{ id: 'expense-1', description: 'Client travel', amount: 75 }]);
+        const res = await request(app)
+            .post('/api/v1/invoices')
+            .set('Authorization', `Bearer ${managerToken}`)
+            .send({ client_name: 'Acme Corp', expense_ids: ['expense-1'] });
+
+        expect(res.status).toBe(201);
+        expect(prisma.expense.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: expect.objectContaining({ organization_id: TEST_ORG_ID, status: 'approved', is_billable: true }),
+        }));
     });
 
     it('GET /api/v1/templates is mounted', async () => {

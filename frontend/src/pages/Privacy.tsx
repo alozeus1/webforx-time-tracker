@@ -33,7 +33,7 @@ const Privacy: React.FC = () => {
         <article className="public-page-card">
           <p className="public-page-kicker">Legal</p>
           <h1>Privacy Policy</h1>
-          <p className="public-page-last-updated">Last updated: March 28, 2026</p>
+          <p className="public-page-last-updated">Last updated: August 3, 2026</p>
 
           <section>
             <h2>Overview</h2>
@@ -49,6 +49,8 @@ const Privacy: React.FC = () => {
             <ul>
               <li>Account profile details such as name, work email, and assigned role.</li>
               <li>Time entries, active timer sessions, and project/task associations.</li>
+              <li>Work schedules, expense records, and receipt attachments submitted through the workspace.</li>
+              <li>Clock-in coordinates and location accuracy when an organization enables geofence enforcement. Location is requested only when starting a timer under that policy.</li>
               <li>Workspace configuration and integration settings managed by admins.</li>
               <li>Security and audit logs required for monitoring, troubleshooting, and compliance.</li>
             </ul>
@@ -68,7 +70,8 @@ const Privacy: React.FC = () => {
             <p>
               Records are retained based on organizational policy and operational requirements. Web Forx Time Tracker
               applies authentication controls, encrypted transport, and audit visibility to reduce unauthorized access
-              risk. Workspace admins are responsible for reviewing user access on a recurring basis.
+              risk. Receipt objects are stored privately and accessed through short-lived signed links. Workspace admins
+              are responsible for reviewing user access, geofence policy, and retention requirements on a recurring basis.
             </p>
           </section>
 

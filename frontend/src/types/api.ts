@@ -447,6 +447,63 @@ export interface InvoiceSummary {
     line_items: InvoiceLineItem[];
 }
 
+export interface ScheduleEntrySummary {
+    id: string;
+    title: string;
+    entry_type: 'shift' | 'availability' | 'unavailable';
+    start_time: string;
+    end_time: string;
+    notes?: string | null;
+    color?: string | null;
+    user_id: string;
+    project_id?: string | null;
+    assignee: Pick<UserSummary, 'id' | 'first_name' | 'last_name' | 'email' | 'team_name'>;
+    project?: ProjectReference | null;
+}
+
+export interface ExpenseAttachmentSummary {
+    id: string;
+    file_name: string;
+    content_type: string;
+    size_bytes: number;
+    created_at: string;
+}
+
+export interface ExpenseSummary {
+    id: string;
+    user_id: string;
+    project_id?: string | null;
+    description: string;
+    category: string;
+    amount: number;
+    currency: string;
+    incurred_on: string;
+    is_billable: boolean;
+    status: 'pending' | 'approved' | 'rejected';
+    reviewer_note?: string | null;
+    created_at: string;
+    owner: Pick<UserSummary, 'id' | 'first_name' | 'last_name' | 'email'>;
+    project?: ProjectReference | null;
+    attachments: ExpenseAttachmentSummary[];
+    invoice_line_item?: { id: string; invoice_id: string } | null;
+}
+
+export interface GeofencePolicySummary {
+    enabled: boolean;
+    enforce_on_clock_in: boolean;
+    max_accuracy_meters: number;
+}
+
+export interface GeofenceZoneSummary {
+    id: string;
+    name: string;
+    rule_type: 'allow' | 'deny';
+    latitude: number;
+    longitude: number;
+    radius_meters: number;
+    is_active: boolean;
+}
+
 export interface ProjectTemplateSummary {
     id: string;
     name: string;

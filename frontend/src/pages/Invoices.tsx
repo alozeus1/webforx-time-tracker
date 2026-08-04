@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { BadgeCheck, CheckCircle, DollarSign, Download, FileText, Plus, Send, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
-import type { InvoiceSummary, ProjectSummary } from '../types/api';
+import type { ExpenseSummary, InvoiceSummary, ProjectSummary } from '../types/api';
 
 const STATUS_STYLES: Record<string, string> = {
     draft: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
@@ -12,6 +12,7 @@ const STATUS_STYLES: Record<string, string> = {
 const Invoices: React.FC = () => {
     const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [eligibleExpenses, setEligibleExpenses] = useState<ExpenseSummary[]>([]);
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
     const [statusFilter, setStatusFilter] = useState('all');
@@ -30,6 +31,7 @@ const Invoices: React.FC = () => {
         notes: '',
         due_date: '',
         line_items: [{ description: '', hours: '', rate: '' }],
+        expense_ids: [] as string[],
     });
     const [autopilotForm, setAutopilotForm] = useState({
         client_name: '',
@@ -52,11 +54,13 @@ const Invoices: React.FC = () => {
 
     useEffect(() => {
         const init = async () => {
-            const [, projRes] = await Promise.all([
+            const [, projRes, expenseRes] = await Promise.all([
                 fetchInvoices(),
                 api.get<ProjectSummary[]>('/projects').catch(() => ({ data: [] as ProjectSummary[] })),
+                api.get<{ expenses: ExpenseSummary[] }>('/expenses', { params: { status: 'approved', billable: 'true', uninvoiced: 'true' } }).catch(() => ({ data: { expenses: [] as ExpenseSummary[] } })),
             ]);
             setProjects(projRes.data || []);
+            setEligibleExpenses(expenseRes.data.expenses || []);
         };
         void init();
     }, [fetchInvoices]);
@@ -71,8 +75,8 @@ const Invoices: React.FC = () => {
                     hours: parseFloat(li.hours),
                     rate: parseFloat(li.rate),
                 }));
-            if (!form.client_name.trim() || lineItems.length === 0) {
-                setFeedback({ message: 'Client name and at least one line item required', tone: 'error' });
+            if (!form.client_name.trim() || (lineItems.length === 0 && form.expense_ids.length === 0)) {
+                setFeedback({ message: 'Client name and at least one line item or approved expense required', tone: 'error' });
                 return;
             }
             await api.post('/invoices', {
@@ -82,10 +86,12 @@ const Invoices: React.FC = () => {
                 notes: form.notes || undefined,
                 due_date: form.due_date || undefined,
                 line_items: lineItems,
+                expense_ids: form.expense_ids,
             });
             setFeedback({ message: 'Invoice created', tone: 'success' });
             setShowCreate(false);
-            setForm({ client_name: '', project_id: '', tax_rate: '0', notes: '', due_date: '', line_items: [{ description: '', hours: '', rate: '' }] });
+            setForm({ client_name: '', project_id: '', tax_rate: '0', notes: '', due_date: '', line_items: [{ description: '', hours: '', rate: '' }], expense_ids: [] });
+            setEligibleExpenses((current) => current.filter((expense) => !form.expense_ids.includes(expense.id)));
             void fetchInvoices();
         } catch (error) {
             setFeedback({ message: getApiErrorMessage(error, 'Failed to create invoice'), tone: 'error' });
@@ -398,6 +404,29 @@ const Invoices: React.FC = () => {
                                 onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                             />
                         </div>
+                        {eligibleExpenses.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Approved billable expenses</p>
+                                <div className="grid gap-2 md:grid-cols-2">
+                                    {eligibleExpenses.map((expense) => (
+                                        <label key={expense.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
+                                            <input
+                                                type="checkbox"
+                                                className="mt-1"
+                                                checked={form.expense_ids.includes(expense.id)}
+                                                onChange={(event) => setForm((current) => ({
+                                                    ...current,
+                                                    expense_ids: event.target.checked
+                                                        ? [...current.expense_ids, expense.id]
+                                                        : current.expense_ids.filter((id) => id !== expense.id),
+                                                }))}
+                                            />
+                                            <span><span className="block font-semibold text-slate-800 dark:text-slate-200">{expense.description}</span><span className="text-xs text-slate-500">{expense.currency} {Number(expense.amount).toFixed(2)} · {expense.project?.name || 'No project'}</span></span>
+                                        </label>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Line Items</p>
                             {form.line_items.map((li, idx) => (
