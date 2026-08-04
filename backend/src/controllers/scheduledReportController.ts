@@ -72,7 +72,13 @@ const parseWindowConfig = (
     const rawTimezone = body.reporting_timezone;
     if (rawTimezone !== undefined) {
         if (!isValidTimeZone(rawTimezone)) {
-            return { error: 'reporting_timezone must be a valid IANA timezone identifier (e.g. "America/Chicago")' };
+            return {
+                error: 'reporting_timezone must be a canonical IANA timezone identifier in Area/Location form '
+                    + '(e.g. "America/Chicago", "Africa/Lagos"), or "UTC". Abbreviations such as "EST", "CST" '
+                    + 'and "MST" are rejected: they resolve to fixed-offset zones that do not observe daylight '
+                    + 'saving (EST resolves to America/Panama), which would silently shift every window boundary '
+                    + 'by an hour for part of the year.',
+            };
         }
         data.reporting_timezone = String(rawTimezone).trim();
     } else if (!partial) {

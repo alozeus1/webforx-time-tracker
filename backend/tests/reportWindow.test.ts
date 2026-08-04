@@ -117,6 +117,63 @@ describe('getPreviousCompleteWeek', () => {
             expect(isValidTimeZone('')).toBe(false);
             expect(isValidTimeZone(null)).toBe(false);
         });
+
+        it('rejects legacy abbreviations that ICU would otherwise accept', () => {
+            // ICU resolves these, so a plain try/catch around Intl.DateTimeFormat would
+            // let them through. They must not be accepted — see the next test for why.
+            for (const abbreviation of ['EST', 'CST', 'MST', 'HST', 'GMT', 'EST5EDT', 'CST6CDT']) {
+                expect(new Intl.DateTimeFormat('en-US', { timeZone: abbreviation })).toBeDefined();
+                expect(isValidTimeZone(abbreviation)).toBe(false);
+            }
+            // Deprecated single-word aliases are rejected for the same reason.
+            expect(isValidTimeZone('Japan')).toBe(false);
+            expect(isValidTimeZone('Singapore')).toBe(false);
+            // Etc/* is fixed-offset AND sign-inverted: Etc/GMT+5 means UTC-5.
+            expect(isValidTimeZone('Etc/GMT+5')).toBe(false);
+            expect(isValidTimeZone('Etc/UTC')).toBe(false);
+        });
+
+        it('accepts both old and new canonicalisations, because ICU versions disagree', () => {
+            // Validation is shape + resolvability, NOT an allowlist from
+            // Intl.supportedValuesOf('timeZone'). That list is ICU-version-dependent:
+            // the CI runtime lists Asia/Calcutta / Europe/Kiev but not the modern
+            // Asia/Kolkata / Europe/Kyiv, while browsers list the modern spellings.
+            // An allowlist would therefore reject values the UI had just offered.
+            for (const zone of [
+                'Asia/Kolkata', 'Asia/Calcutta',
+                'Asia/Kathmandu', 'Asia/Katmandu',
+                'Europe/Kyiv', 'Europe/Kiev',
+                'America/Argentina/Buenos_Aires',
+            ]) {
+                expect(isValidTimeZone(zone)).toBe(true);
+            }
+        });
+
+        it('documents WHY abbreviations are rejected: EST is not US Eastern', () => {
+            // ICU maps EST to America/Panama, a fixed -05:00 zone with no DST. Someone
+            // entering "EST" meaning US Eastern would get boundaries an hour out for
+            // roughly half the year — exactly the silent one-hour shift this module exists
+            // to prevent.
+            expect(new Intl.DateTimeFormat('en-US', { timeZone: 'EST' }).resolvedOptions().timeZone)
+                .toBe('America/Panama');
+
+            const fmt = (zone: string, instant: Date) => new Intl.DateTimeFormat('en-US', {
+                timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+            }).format(instant);
+
+            const january = new Date('2026-01-15T17:00:00.000Z');
+            const july = new Date('2026-07-15T17:00:00.000Z');
+
+            expect(fmt('EST', january)).toBe(fmt('EST', july)); // no DST — same wall time
+            expect(fmt('America/New_York', january)).not.toBe(fmt('America/New_York', july));
+        });
+
+        it('accepts UTC, the documented default, even though it is not in the canonical list', () => {
+            expect(isValidTimeZone('UTC')).toBe(true);
+            expect(isValidTimeZone(' UTC ')).toBe(true);
+            expect(getPreviousCompleteWeek(new Date('2026-08-03T06:00:00.000Z'), 'UTC').label)
+                .toBe('2026-07-27 to 2026-08-02');
+        });
     });
 
     describe('DST transitions', () => {

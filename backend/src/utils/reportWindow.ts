@@ -120,11 +120,53 @@ const getFormatter = (timeZone: string): Intl.DateTimeFormat => {
     return formatter;
 };
 
-/** Returns true when the string is an IANA zone this runtime can resolve. */
+/**
+ * Returns true only for an `Area/Location` IANA zone that this runtime can resolve,
+ * or `UTC`.
+ *
+ * Two things are deliberately rejected that a bare `try { new Intl.DateTimeFormat }`
+ * would let through.
+ *
+ * 1. Legacy abbreviations. ICU resolves them, to places that actively mislead:
+ *
+ *        EST -> America/Panama    (does NOT observe DST)
+ *        MST -> America/Phoenix   (does NOT observe DST)
+ *        CST -> America/Chicago
+ *
+ *    Someone entering `EST` almost certainly means US Eastern. They would instead get
+ *    a fixed -05:00 zone, so every window boundary and generation time would be an
+ *    hour out for roughly half the year — silently, and only in summer. That is
+ *    exactly the one-hour-shift defect this module exists to prevent. Requiring an
+ *    `Area/Location` slash rejects these, along with deprecated single-word aliases
+ *    like `Japan` and `Singapore`, and steers the caller to `America/New_York`.
+ *
+ * 2. The `Etc/*` family. `Etc/GMT+5` means UTC**-**5 — the sign is inverted by the
+ *    POSIX convention. These are fixed-offset and never observe DST, so they carry
+ *    the same hazard as the abbreviations with an extra trap on top.
+ *
+ * Validation is by *shape plus resolvability*, deliberately NOT an allowlist built
+ * from `Intl.supportedValuesOf('timeZone')`. That list is ICU-version-dependent: this
+ * runtime's copy contains `Asia/Calcutta`, `Asia/Katmandu` and `Europe/Kiev` but not
+ * the modern preferred spellings `Asia/Kolkata`, `Asia/Kathmandu` or `Europe/Kyiv`,
+ * and omits `America/Argentina/Buenos_Aires` entirely. Since the frontend populates
+ * its dropdown from the *browser's* list, an allowlist here would reject values the
+ * UI had just offered, and the exact set would drift with each Node upgrade.
+ * Resolvability is stable across versions; both spellings resolve fine.
+ *
+ * `UTC` is allowed explicitly: it is the documented default, unambiguous, and has no
+ * slash.
+ */
 export const isValidTimeZone = (timeZone: unknown): timeZone is string => {
-    if (typeof timeZone !== 'string' || !timeZone.trim()) return false;
+    if (typeof timeZone !== 'string') return false;
+    const trimmed = timeZone.trim();
+    if (!trimmed) return false;
+    if (trimmed === DEFAULT_REPORTING_TIMEZONE) return true;
+
+    if (!trimmed.includes('/')) return false;
+    if (trimmed.startsWith('Etc/')) return false;
+
     try {
-        getFormatter(timeZone.trim());
+        getFormatter(trimmed);
         return true;
     } catch {
         return false;

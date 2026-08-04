@@ -52,7 +52,9 @@ Implementation: `backend/src/utils/reportWindow.ts`. No new dependency — all t
 
 ## Timezone selection and its impact
 
-`reporting_timezone` is an IANA identifier (for example `America/Chicago`, `Africa/Lagos`, `Pacific/Auckland`) stored per scheduled report. Everything is a wall-clock time in that zone: window boundaries, the generation slot, and the day-bucketing used by the zero-entry gate.
+`reporting_timezone` is an IANA identifier in `Area/Location` form (for example `America/Chicago`, `Africa/Lagos`, `Pacific/Auckland`), or `UTC`, stored per scheduled report.
+
+**Abbreviations are rejected.** ICU resolves `EST`, `CST`, `MST` and friends, but not to what you would expect: `EST` becomes `America/Panama` and `MST` becomes `America/Phoenix`, neither of which observes daylight saving. A report set to `EST` meaning US Eastern would have every boundary an hour out for half the year — silently, and only in summer. `Etc/*` is rejected for the same reason plus a sign inversion (`Etc/GMT+5` means UTC−5). Validation is by shape and resolvability rather than an allowlist from `Intl.supportedValuesOf`, because that list is ICU-version-dependent — the backend runtime lists `Asia/Calcutta` and `Europe/Kiev` while browsers offer `Asia/Kolkata` and `Europe/Kyiv`, so an allowlist would reject values the UI had just presented. Everything is a wall-clock time in that zone: window boundaries, the generation slot, and the day-bucketing used by the zero-entry gate.
 
 **Choosing the wrong zone shifts the window.** A team working in `Africa/Lagos` (UTC+1) configured as `UTC` gets a window running 01:00 Monday to 00:59 Monday-next in local terms — an hour of Monday morning falls into the previous week's report. Set the zone to where the team actually works, not where the server runs.
 
@@ -180,7 +182,8 @@ Had this gate existed, it would have caught the original defect on its first run
 |---|---|
 | `"day_of_week": 0` | Sunday closes the window; weekly reports run Monday |
 | `"day_of_week": 3` | Any non-Monday value is rejected, not silently rewritten. Omit the field to accept the default |
-| `"reporting_timezone": "CST"` | Not an IANA identifier — use `America/Chicago` |
+| `"reporting_timezone": "CST"` | Abbreviation. ICU resolves it, but `EST` maps to `America/Panama` (no DST) — use `America/Chicago` |
+| `"reporting_timezone": "Etc/GMT+5"` | Fixed-offset and sign-inverted (`GMT+5` means UTC**−**5) |
 | `"schedule_generation_time": "6:00"` | Must be zero-padded 24-hour `HH:mm` |
 | `"schedule_generation_time": "24:00"` | Out of range |
 | `"export_window_end": "saturday 23:59:59"` | Window boundaries are fixed |
