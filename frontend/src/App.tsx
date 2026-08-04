@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
 import ForgotPassword from './pages/ForgotPassword';
@@ -30,7 +31,16 @@ import { getStoredRole, getStoredToken } from './utils/session';
 const Schedule = React.lazy(() => import('./pages/Schedule'));
 const Expenses = React.lazy(() => import('./pages/Expenses'));
 const Geofencing = React.lazy(() => import('./pages/Geofencing'));
-const lazyPage = (page: React.ReactNode) => <React.Suspense fallback={<div className="flex-1 p-8 text-sm text-slate-500">Loading…</div>}>{page}</React.Suspense>;
+// Every routed page is wrapped in an error boundary as well as Suspense. Without the
+// boundary, a render-time throw anywhere in a page unmounts the whole React tree and the
+// user gets a blank white screen with no indication of what happened — which is exactly
+// how the /schedule CSP failure presented. Scoping the boundary per page keeps the nav
+// and shell usable when one section breaks.
+const lazyPage = (page: React.ReactNode) => (
+  <ErrorBoundary>
+    <React.Suspense fallback={<div className="flex-1 p-8 text-sm text-slate-500">Loading…</div>}>{page}</React.Suspense>
+  </ErrorBoundary>
+);
 
 // Auth Guard
 const ProtectedRoute = ({
@@ -66,6 +76,10 @@ const RootRedirect: React.FC = () => {
 const App: React.FC = () => {
   return (
     <BrowserRouter>
+      {/* Outer net: catches throws in eagerly-imported pages and in the Layout shell
+          itself, so no route can produce a blank screen. Per-page boundaries inside
+          lazyPage handle the lazy routes more granularly. */}
+      <ErrorBoundary title="The application hit an unexpected error">
       <Routes>
         {/* Public routes */}
         <Route path="/" element={<RootRedirect />} />
@@ -103,6 +117,7 @@ const App: React.FC = () => {
           <Route path="/geofencing" element={<ProtectedRoute allowedRoles={['Admin']}>{lazyPage(<Geofencing />)}</ProtectedRoute>} />
         </Route>
       </Routes>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 };
