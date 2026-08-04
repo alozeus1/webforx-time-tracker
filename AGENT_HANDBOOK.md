@@ -366,6 +366,34 @@ Checks:
 
 Full reference: `docs/scheduled-report-windows.md`.
 
+### A page renders blank in production but works locally
+
+Fixed for `/schedule` on 2026-08-04; the pattern will recur.
+
+`frontend/vercel.json` sets a strict CSP that the Vite dev server does **not** apply, so
+CSP-caused failures are invisible locally and in CI and only appear in production.
+
+`/schedule` was blank for every user because `style-src 'self'` blocked FullCalendar v6's
+runtime style injection. FullCalendar ships no CSS files — it creates a `<style>` element
+and calls `sheet.insertRule(...)`. Under that policy the element is allowed into the DOM
+but not applied, so `styleEl.sheet` is `null`, and FullCalendar's `injectStyles` reads
+`sheet.cssRules.length` without a guard:
+
+```
+TypeError: Cannot read properties of null (reading 'cssRules')
+```
+
+Checks:
+
+1. Compare the served policy with what the library needs:
+   `curl -sI https://timer.dev.webforxtech.com/<route> | grep -i content-security-policy`
+2. `style-src` must keep `'unsafe-inline'` for as long as any dependency injects styles at
+   runtime. `frontend/src/tests/contentSecurityPolicy.test.ts` fails CI if it is removed —
+   read that file's header before changing the policy.
+3. All routed pages are wrapped in `ErrorBoundary`, so a render throw now shows an error
+   card rather than a blank page. If you get a blank page again, the boundary was bypassed
+   (an error thrown outside render, e.g. in an event handler or async callback).
+
 ### Cron endpoints return unauthorized
 
 Checks:
