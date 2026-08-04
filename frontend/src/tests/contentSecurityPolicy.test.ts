@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+// Loaded through Vite's `?raw` loader rather than node:fs. `tsconfig.app.json` type-checks
+// everything under src/ with `"types": ["vite/client"]` and no Node types, so importing
+// node:fs here compiles under vitest but breaks `tsc -b`, which is what the production
+// build runs. `vite/client` declares `*?raw`, so this needs no tsconfig change.
+import vercelConfigRaw from '../../vercel.json?raw';
 
 /**
  * Guards the CSP that the /schedule page depends on.
@@ -37,8 +40,7 @@ import { resolve } from 'node:path';
  */
 
 const readCsp = (): string => {
-    const raw = readFileSync(resolve(__dirname, '../../vercel.json'), 'utf8');
-    const config = JSON.parse(raw) as {
+    const config = JSON.parse(vercelConfigRaw) as {
         headers?: Array<{ headers?: Array<{ key: string; value: string }> }>;
     };
 
