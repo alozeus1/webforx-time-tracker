@@ -76,6 +76,9 @@ export const env = {
     executiveReportTemplateEnabled: process.env.EXECUTIVE_REPORT_TEMPLATE_ENABLED?.trim().toLowerCase() !== 'false',
     reportCompanyLogoPath: process.env.REPORT_COMPANY_LOGO_PATH?.trim() || '',
     reportTimerAppLogoPath: process.env.REPORT_TIMER_APP_LOGO_PATH?.trim() || '',
+    expenseReceiptBucket: process.env.EXPENSE_RECEIPT_BUCKET?.trim() || '',
+    expenseReceiptRegion: process.env.EXPENSE_RECEIPT_REGION?.trim() || process.env.AWS_REGION?.trim() || 'us-east-1',
+    expenseReceiptEndpoint: process.env.EXPENSE_RECEIPT_ENDPOINT?.trim() || '',
     // Enhanced activity detection — treats "tab hidden but heartbeat arriving" as NOT idle.
     // Set to true in production to fix false idle detection when users work outside the browser tab.
     // When false (default), behavior is identical to the previous release.

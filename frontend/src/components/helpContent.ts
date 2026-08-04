@@ -308,7 +308,7 @@ export const knowledgeBase: Record<string, KBEntry> = {
         ],
     },
     team_management_help: {
-        answer: 'Team Management is where Managers and Admins manage people.\n\nSearch the roster, add or edit members, set each member\'s employment type, change access roles (Admin only), activate/deactivate accounts, import CSV users, and export the directory. The Access Diagnostics panel on the right helps you investigate sign-in and password-reset issues for a selected user.',
+        answer: 'Team Management is where Managers and Admins manage people.\n\nSearch the roster, add or edit members, set each member\'s employment type, change access roles (Admin only), activate/deactivate accounts, import CSV users, and export the directory. Deactivation blocks access but retains the member\'s email, time history, and memberships so the account can be restored. Only Admins can permanently delete an already-deactivated member; permanent deletion wipes their related data and cannot be undone. The Access Diagnostics panel on the right helps you investigate sign-in and password-reset issues for a selected user.',
         keywords: ['team management', 'manage users', 'team page', 'user management', 'member management'],
         adminOnly: true,
         followUp: [

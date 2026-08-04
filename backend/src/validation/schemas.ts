@@ -73,7 +73,8 @@ export const createUserSchema = z.object({
   role: z.string().optional(),
   role_id: z.string().uuid().optional(),
   password: z.string().min(12, 'Password must be at least 12 characters'),
-  team_name: z.string().optional(),
+  // `null` is the persisted representation for the Team form's "Unassigned" option.
+  team_name: z.string().nullable().optional(),
   hourly_rate: z.number().nonnegative().optional(),
   // Worker classification — independent of access role. Drives min weekly hours.
   employment_type: z.enum(['employee', 'intern', 'contractor']).optional(),

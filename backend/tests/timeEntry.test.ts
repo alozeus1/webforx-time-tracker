@@ -49,6 +49,12 @@ jest.mock('../src/config/db', () => ({
         organization: {
             findUnique: jest.fn(),
         },
+        geofenceZone: {
+            findMany: jest.fn(),
+        },
+        timerLocationEvent: {
+            create: jest.fn(),
+        },
         payrollPeriod: {
             findFirst: jest.fn(),
         },
@@ -125,6 +131,8 @@ beforeEach(() => {
     (prisma.notification.create as jest.Mock).mockResolvedValue({});
     (prisma.notification.createMany as jest.Mock).mockResolvedValue({ count: 0 });
     (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
+    (prisma.geofenceZone.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.timerLocationEvent.create as jest.Mock).mockResolvedValue({});
     (prisma.payrollPeriod.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.project.findFirst as jest.Mock).mockResolvedValue({ id: 'proj-1' });
     (prisma.tag.findMany as jest.Mock).mockResolvedValue([]);
@@ -215,6 +223,36 @@ describe('POST /api/v1/timers/start', () => {
             where: { id: 'foreign-project', organization_id: TEST_ORG_ID, is_active: true },
             select: { id: true },
         });
+        expect(prisma.activeTimer.create).not.toHaveBeenCalled();
+    });
+
+    it('allows clock-in inside an enabled allow zone and records the decision', async () => {
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.activeTimer.create as jest.Mock).mockResolvedValue(mockActiveTimer);
+        (prisma.organization.findUnique as jest.Mock).mockResolvedValue({ settings: { geofencing: { enabled: true, enforce_on_clock_in: true, max_accuracy_meters: 500 } } });
+        (prisma.geofenceZone.findMany as jest.Mock).mockResolvedValue([{ id: 'zone-1', name: 'Office', rule_type: 'allow', latitude: 29.7604, longitude: -95.3698, radius_meters: 500 }]);
+
+        const res = await request(app)
+            .post('/api/v1/timers/start')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({ project_id: 'proj-1', task_description: 'On-site work', location: { latitude: 29.7604, longitude: -95.3698, accuracy_meters: 25 } });
+
+        expect(res.status).toBe(201);
+        expect(prisma.timerLocationEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ decision: 'allowed', zone_id: 'zone-1' }) }));
+    });
+
+    it('rejects clock-in outside enabled allow zones without creating a timer', async () => {
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(null);
+        (prisma.organization.findUnique as jest.Mock).mockResolvedValue({ settings: { geofencing: { enabled: true, enforce_on_clock_in: true, max_accuracy_meters: 500 } } });
+        (prisma.geofenceZone.findMany as jest.Mock).mockResolvedValue([{ id: 'zone-1', name: 'Office', rule_type: 'allow', latitude: 29.7604, longitude: -95.3698, radius_meters: 100 }]);
+
+        const res = await request(app)
+            .post('/api/v1/timers/start')
+            .set('Authorization', `Bearer ${employeeToken}`)
+            .send({ project_id: 'proj-1', task_description: 'Remote attempt', location: { latitude: 30.2672, longitude: -97.7431, accuracy_meters: 25 } });
+
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe('GEOFENCE_RESTRICTED');
         expect(prisma.activeTimer.create).not.toHaveBeenCalled();
     });
 

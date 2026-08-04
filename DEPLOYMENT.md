@@ -36,6 +36,14 @@ REPORT_TIMER_APP_LOGO_PATH="<OPTIONAL_ABSOLUTE_TIMER_APP_LOGO_PATH>"
 GOOGLE_CLIENT_ID="<GOOGLE_OAUTH_CLIENT_ID>"
 GOOGLE_CLIENT_SECRET="<GOOGLE_OAUTH_CLIENT_SECRET>"
 GOOGLE_REDIRECT_URI="http://localhost:5005/api/v1/calendar/callback"
+# Optional private receipt storage. Expenses remain usable without these values,
+# but receipt upload/view controls are disabled.
+EXPENSE_RECEIPT_BUCKET="<PRIVATE_S3_BUCKET>"
+EXPENSE_RECEIPT_REGION="us-east-1"
+# Optional for S3-compatible providers such as MinIO or R2.
+EXPENSE_RECEIPT_ENDPOINT=""
+# The AWS SDK also needs standard scoped credentials when workload identity is unavailable:
+# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and optionally AWS_SESSION_TOKEN.
 ```
 Update `frontend/.env` if your backend isn't running on localhost:5005:
 ```
@@ -51,6 +59,7 @@ VITE_HIDDEN_CONNECTED_GRACE_MINUTES=10
 If `INTEGRATION_SECRET` is omitted, the backend temporarily reuses `JWT_SECRET` only in non-production.
 In production, `INTEGRATION_SECRET` is required.
 For Google Calendar, add `http://localhost:5005/api/v1/calendar/callback` as an authorized redirect URI in Google Cloud Console.
+For receipt uploads, keep the bucket private, grant the backend principal only the required object permissions under the `expenses/` prefix, and allow browser `PUT` requests from the configured frontend origins in the bucket CORS policy.
 
 For a sanitized engineering handoff that does not include production access, see [docs/engineering-handoff.md](/Users/ocheme/Desktop/WebForx/Projects/time-tracker/docs/engineering-handoff.md).
 
@@ -175,6 +184,9 @@ vercel env add REPORT_TIMER_APP_LOGO_PATH production
 vercel env add GOOGLE_CLIENT_ID production
 vercel env add GOOGLE_CLIENT_SECRET production
 vercel env add GOOGLE_REDIRECT_URI production
+vercel env add EXPENSE_RECEIPT_BUCKET production
+vercel env add EXPENSE_RECEIPT_REGION production
+# Set EXPENSE_RECEIPT_ENDPOINT only for an S3-compatible non-AWS provider.
 ```
 
 Deploy backend:

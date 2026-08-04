@@ -482,7 +482,7 @@ const Team: React.FC = () => {
 
         try {
             if (modalMode === 'create') {
-                await api.post('/users', {
+                const response = await api.post<UserSummary & { reactivated?: boolean }>('/users', {
                     first_name: form.first_name.trim(),
                     last_name: form.last_name.trim(),
                     email: form.email.trim().toLowerCase(),
@@ -491,7 +491,12 @@ const Team: React.FC = () => {
                     role: form.role,
                     employment_type: form.employment_type,
                 });
-                setFeedback({ message: 'Team member added successfully', tone: 'success' });
+                setFeedback({
+                    message: response.data.reactivated
+                        ? 'Team member reactivated successfully'
+                        : 'Team member added successfully',
+                    tone: 'success',
+                });
             }
 
             if (modalMode === 'edit' && selectedUser) {
@@ -548,14 +553,16 @@ const Team: React.FC = () => {
 
     const handleDeactivateUser = async (user: UserSummary) => {
         if (!canManageTeam) return;
-        if (!window.confirm(`Deactivate ${user.first_name} ${user.last_name}? They will lose access to the app immediately.`)) return;
+        if (!window.confirm(
+            `Deactivate ${user.first_name} ${user.last_name}?\n\nThey will lose access immediately, but their email, time history, and memberships will be retained. You can reactivate them later.`
+        )) return;
 
         setSaving(true);
         setFeedback(null);
         setMenuOpenFor(null);
 
         try {
-            await api.delete(`/users/${user.id}`);
+            await api.post(`/users/${user.id}/deactivate`);
             setTeam((previous) => previous.map((member) => (
                 member.id === user.id
                     ? { ...member, is_active: false }
@@ -578,7 +585,7 @@ const Team: React.FC = () => {
             return;
         }
         const confirmed = window.confirm(
-            `Permanently delete ${user.first_name} ${user.last_name}?\n\nThis will wipe all their data (time entries, invoices, project memberships) and cannot be undone.`
+            `Permanently delete ${user.first_name} ${user.last_name}?\n\nThis is not deactivation. It will permanently wipe their account, time entries, invoices, and project memberships. This cannot be undone.`
         );
         if (!confirmed) return;
 

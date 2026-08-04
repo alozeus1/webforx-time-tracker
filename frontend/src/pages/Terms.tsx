@@ -33,7 +33,7 @@ const Terms: React.FC = () => {
         <article className="public-page-card">
           <p className="public-page-kicker">Legal</p>
           <h1>Terms of Service</h1>
-          <p className="public-page-last-updated">Last updated: March 28, 2026</p>
+          <p className="public-page-last-updated">Last updated: August 3, 2026</p>
 
           <section>
             <h2>Use of the Service</h2>
@@ -56,7 +56,7 @@ const Terms: React.FC = () => {
           <section>
             <h2>Data and Content Ownership</h2>
             <p>
-              Time entries, project mappings, and team records remain owned by the customer organization.
+              Time entries, project mappings, schedules, expenses, receipts, location verification records, and team records remain owned by the customer organization.
               Web Forx may process this data only as needed to operate, secure, and improve the service.
             </p>
           </section>

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CalendarX, Lock, CheckSquare, Square, Trash2, Tag, FolderOpen } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
+import { getTimerLocationPayload } from '../utils/timerLocation';
 import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
 import { getStoredUserProfile } from '../utils/session';
@@ -668,11 +669,13 @@ const Timeline: React.FC = () => {
                                                     title="Resume Task (Starts a new timer with these details)"
                                                     onClick={async () => {
                                                         try {
+                                                            const locationPayload = await getTimerLocationPayload();
                                                             await api.post('/timers/start', {
                                                                 project_id: entry.project?.id || undefined,
                                                                 task_description: entry.task_description,
                                                                 is_billable: (entry as unknown as Record<string, unknown>).is_billable,
-                                                                tag_ids: (entry as unknown as Record<string, unknown>).tags ? ((entry as unknown as Record<string, unknown>).tags as {tag_id: string}[]).map(t => t.tag_id) : []
+                                                                tag_ids: (entry as unknown as Record<string, unknown>).tags ? ((entry as unknown as Record<string, unknown>).tags as {tag_id: string}[]).map(t => t.tag_id) : [],
+                                                                ...locationPayload,
                                                             });
                                                             emitTimeEntryChanged();
                                                             navigate('/timer');

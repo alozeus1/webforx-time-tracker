@@ -340,6 +340,42 @@ describe('POST /api/v1/users', () => {
         expect(res.body.email).toBe('newuser@test.com');
     });
 
+    it('creates an unassigned user when team_name is null', async () => {
+        (prisma.user.create as jest.Mock).mockResolvedValue({
+            id: 'user-unassigned-1',
+            email: 'unassigned@test.com',
+            first_name: 'Unassigned',
+            last_name: 'User',
+            team_name: null,
+            is_active: true,
+            employment_type: 'employee',
+            min_weekly_hours: null,
+            role: { name: 'Employee' },
+        });
+
+        const res = await request(app)
+            .post('/api/v1/users')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                email: 'unassigned@test.com',
+                password: 'securePass123!',
+                first_name: 'Unassigned',
+                last_name: 'User',
+                role: 'Employee',
+                team_name: null,
+            });
+
+        expect(res.status).toBe(201);
+        expect(res.body).toMatchObject({
+            id: 'user-unassigned-1',
+            email: 'unassigned@test.com',
+            team_name: null,
+        });
+        expect(prisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ team_name: null }),
+        }));
+    });
+
     it('returns 400 when email already exists', async () => {
         (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
 
@@ -356,6 +392,67 @@ describe('POST /api/v1/users', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/already exists/i);
+    });
+
+    it('reactivates an inactive user with the submitted profile and password', async () => {
+        const inactiveUser = {
+            ...mockUser,
+            id: 'user-inactive-1',
+            email: 'returning@test.com',
+            is_active: false,
+            mfa_enabled: true,
+            mfa_secret: 'old-mfa-secret',
+        };
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(inactiveUser);
+        (prisma.user.update as jest.Mock).mockResolvedValue({
+            id: inactiveUser.id,
+            email: inactiveUser.email,
+            first_name: 'Returning',
+            last_name: 'Member',
+            team_name: null,
+            is_active: true,
+            employment_type: 'employee',
+            min_weekly_hours: null,
+            role: { name: 'Employee' },
+        });
+
+        const res = await request(app)
+            .post('/api/v1/users')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({
+                email: inactiveUser.email,
+                password: 'NewSecurePass123!',
+                first_name: 'Returning',
+                last_name: 'Member',
+                role: 'Employee',
+                team_name: null,
+                employment_type: 'employee',
+            });
+
+        expect(res.status).toBe(200);
+        expect(res.body).toMatchObject({
+            id: inactiveUser.id,
+            email: inactiveUser.email,
+            is_active: true,
+            team_name: null,
+            reactivated: true,
+        });
+        expect(prisma.user.create).not.toHaveBeenCalled();
+        expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
+            where: { id: inactiveUser.id, organization_id: 'org-1' },
+            data: expect.objectContaining({
+                first_name: 'Returning',
+                last_name: 'Member',
+                is_active: true,
+                team_name: null,
+                mfa_enabled: false,
+                mfa_secret: null,
+                password_hash: expect.any(String),
+            }),
+        }));
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({ action: 'user_reactivated' }),
+        }));
     });
 
     it('returns 400 when required fields are missing (schema validation)', async () => {
@@ -422,6 +519,42 @@ describe('PUT /api/v1/users/:id', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/no valid fields/i);
+    });
+});
+
+// ─── deactivateUser ─────────────────────────────────────────────────────────
+
+describe('POST /api/v1/users/:id/deactivate', () => {
+    it('deactivates the user while preserving the retained record', async () => {
+        (prisma.user.findFirst as jest.Mock).mockResolvedValue(mockUser);
+        (prisma.user.update as jest.Mock).mockResolvedValue({ ...mockUser, is_active: false });
+
+        const res = await request(app)
+            .post('/api/v1/users/user-emp-1/deactivate')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.message).toBe('User deactivated successfully');
+        expect(prisma.user.update).toHaveBeenCalledWith({
+            where: { id: 'user-emp-1', organization_id: 'org-1' },
+            data: { is_active: false },
+        });
+        expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+            data: expect.objectContaining({
+                action: 'user_deactivated',
+                metadata: expect.objectContaining({ target_user_id: 'user-emp-1' }),
+            }),
+        }));
+    });
+
+    it('does not let a user deactivate their own account', async () => {
+        const res = await request(app)
+            .post('/api/v1/users/user-admin-1/deactivate')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/deactivate your own account/i);
+        expect(prisma.user.update).not.toHaveBeenCalled();
     });
 });
 

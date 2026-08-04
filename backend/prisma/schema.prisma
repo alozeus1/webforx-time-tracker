@@ -21,80 +21,90 @@ model Organization {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
-  users             User[]
-  roles             Role[]
-  teams             Team[]
-  projects          Project[]
-  time_entries      TimeEntry[]
-  active_timers     ActiveTimer[]
+  users                     User[]
+  roles                     Role[]
+  teams                     Team[]
+  projects                  Project[]
+  time_entries              TimeEntry[]
+  active_timers             ActiveTimer[]
   timer_correction_requests TimerCorrectionRequest[]
-  notifications     Notification[]
-  audit_logs        AuditLog[]
-  auth_events       AuthEvent[]
-  integrations      Integration[]
-  webhooks          WebhookSubscription[]
-  templates         ProjectTemplate[]
-  scheduled_reports ScheduledReport[]
-  invoices          Invoice[]
-  tags              Tag[]
-  timer_policies    TimerPolicyConfig[]
-  report_caches     ReportCache[]
-  access_requests   AccessRequest[]
-  payroll_periods   PayrollPeriod[]
-  branding_config   BrandingConfig?
-  leave_requests    LeaveRequest[]
+  notifications             Notification[]
+  audit_logs                AuditLog[]
+  auth_events               AuthEvent[]
+  integrations              Integration[]
+  webhooks                  WebhookSubscription[]
+  templates                 ProjectTemplate[]
+  scheduled_reports         ScheduledReport[]
+  invoices                  Invoice[]
+  tags                      Tag[]
+  timer_policies            TimerPolicyConfig[]
+  report_caches             ReportCache[]
+  access_requests           AccessRequest[]
+  payroll_periods           PayrollPeriod[]
+  branding_config           BrandingConfig?
+  leave_requests            LeaveRequest[]
+  schedule_entries          ScheduleEntry[]
+  expenses                  Expense[]
+  expense_attachments       ExpenseAttachment[]
+  geofence_zones            GeofenceZone[]
+  timer_location_events     TimerLocationEvent[]
 
   @@index([status, created_at])
 }
 
 model User {
-  id            String   @id @default(uuid())
-  email         String
-  password_hash String
-  first_name    String
-  last_name     String
-  team_name     String?
-  role          Role     @relation(fields: [role_id], references: [id])
-  role_id       String
-  organization_id String
-  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  is_active     Boolean  @default(true)
-  hourly_rate   Decimal? @default(0.00) @db.Decimal(10, 2)
-  oidc_provider String?
-  oidc_issuer   String?
-  oidc_subject  String?
+  id                  String       @id @default(uuid())
+  email               String
+  password_hash       String
+  first_name          String
+  last_name           String
+  team_name           String?
+  role                Role         @relation(fields: [role_id], references: [id])
+  role_id             String
+  organization_id     String
+  organization        Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  is_active           Boolean      @default(true)
+  hourly_rate         Decimal?     @default(0.00) @db.Decimal(10, 2)
+  oidc_provider       String?
+  oidc_issuer         String?
+  oidc_subject        String?
   last_login_provider String?
-  mfa_secret    String?
-  mfa_enabled   Boolean  @default(false)
+  mfa_secret          String?
+  mfa_enabled         Boolean      @default(false)
   password_changed_at DateTime?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
 
   weekly_hour_limit Int?
 
   // Worker classification — independent of the access `role` above.
   // Drives the minimum-weekly-hours compliance target. Nullable by design:
   // existing users are intentionally NOT backfilled (left unclassified).
-  employment_type   String?   // 'employee' | 'intern' | 'contractor'
-  min_weekly_hours  Int?      // per-user override of the org default target
+  employment_type  String? // 'employee' | 'intern' | 'contractor'
+  min_weekly_hours Int? // per-user override of the org default target
 
-  project_members       ProjectMember[]
-  time_entries          TimeEntry[]
-  active_timers         ActiveTimer[]
-  notifications         Notification[]
-  audit_logs            AuditLog[]
+  project_members           ProjectMember[]
+  time_entries              TimeEntry[]
+  active_timers             ActiveTimer[]
+  notifications             Notification[]
+  audit_logs                AuditLog[]
   timer_correction_requests TimerCorrectionRequest[]
-  auth_events           AuthEvent[]
-  calendar_connection   CalendarConnection?
-  password_reset_tokens PasswordResetToken[]
-  mfa_challenges        MfaChallenge[]
-  invoices              Invoice[]
-  project_templates     ProjectTemplate[]
-  scheduled_reports     ScheduledReport[]
-  locked_payroll_periods PayrollPeriod[] @relation("PayrollPeriodLocker")
+  auth_events               AuthEvent[]
+  calendar_connection       CalendarConnection?
+  password_reset_tokens     PasswordResetToken[]
+  mfa_challenges            MfaChallenge[]
+  invoices                  Invoice[]
+  project_templates         ProjectTemplate[]
+  scheduled_reports         ScheduledReport[]
+  locked_payroll_periods    PayrollPeriod[]          @relation("PayrollPeriodLocker")
   leave_requests            LeaveRequest[]
-  reviewed_leave_requests   LeaveRequest[] @relation("LeaveReviewer")
-  leave_history_actions     LeaveRequestHistory[] @relation("LeaveHistoryActor")
+  reviewed_leave_requests   LeaveRequest[]           @relation("LeaveReviewer")
+  leave_history_actions     LeaveRequestHistory[]    @relation("LeaveHistoryActor")
+  assigned_schedule_entries ScheduleEntry[]          @relation("ScheduleAssignee")
+  created_schedule_entries  ScheduleEntry[]          @relation("ScheduleCreator")
+  expenses                  Expense[]                @relation("ExpenseOwner")
+  approved_expenses         Expense[]                @relation("ExpenseApprover")
+  timer_location_events     TimerLocationEvent[]
 
   @@unique([email, organization_id])
   @@index([organization_id, is_active])
@@ -104,10 +114,10 @@ model User {
 }
 
 model Role {
-  id          String @id @default(uuid())
-  name        String
-  permissions Json   @default("[]")
-  users       User[]
+  id              String        @id @default(uuid())
+  name            String
+  permissions     Json          @default("[]")
+  users           User[]
   organization_id String?
   organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
@@ -116,35 +126,37 @@ model Role {
 }
 
 model Team {
-  id              String   @id @default(uuid())
+  id              String       @id @default(uuid())
   name            String
   description     String?
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  is_active       Boolean  @default(true)
-  created_at      DateTime @default(now())
-  updated_at      DateTime @updatedAt
+  is_active       Boolean      @default(true)
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
 
   @@unique([organization_id, name])
   @@index([organization_id, is_active, name])
 }
 
 model Project {
-  id            String   @id @default(uuid())
-  name          String
-  description   String?
-  logo_url      String?
+  id              String       @id @default(uuid())
+  name            String
+  description     String?
+  logo_url        String?
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  is_active     Boolean  @default(true)
-  budget_hours  Int?
-  budget_amount Decimal? @db.Decimal(10, 2)
-  created_at    DateTime @default(now())
+  is_active       Boolean      @default(true)
+  budget_hours    Int?
+  budget_amount   Decimal?     @db.Decimal(10, 2)
+  created_at      DateTime     @default(now())
 
-  members       ProjectMember[]
-  time_entries  TimeEntry[]
-  active_timers ActiveTimer[]
-  invoices      Invoice[]
+  members          ProjectMember[]
+  time_entries     TimeEntry[]
+  active_timers    ActiveTimer[]
+  invoices         Invoice[]
+  schedule_entries ScheduleEntry[]
+  expenses         Expense[]
 
   @@unique([name, organization_id])
   @@index([organization_id, is_active])
@@ -162,7 +174,7 @@ model ProjectMember {
 }
 
 model TimeEntry {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   user_id          String
   project_id       String?
   organization_id  String
@@ -173,12 +185,12 @@ model TimeEntry {
   duration         Int
   entry_type       String // "timer", "manual", "ai_suggested", "calendar_sync"
   notes            String?
-  is_billable      Boolean  @default(true)
-  status           String   @default("pending") // "pending", "approved", "rejected"
+  is_billable      Boolean      @default(true)
+  status           String       @default("pending") // "pending", "approved", "rejected"
   stop_reason      String?
-  auto_stopped     Boolean  @default(false)
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  auto_stopped     Boolean      @default(false)
+  created_at       DateTime     @default(now())
+  updated_at       DateTime     @updatedAt
 
   user               User              @relation(fields: [user_id], references: [id])
   project            Project?          @relation(fields: [project_id], references: [id])
@@ -191,26 +203,26 @@ model TimeEntry {
 }
 
 model ActiveTimer {
-  id               String    @id @default(uuid())
-  user_id          String    @unique
-  project_id       String?
-  organization_id  String
-  organization     Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  task_description String
-  start_time       DateTime
-  persisted_state  Json      @default("{}")
-  last_active_ping DateTime? @default(now())
-  last_heartbeat_at DateTime? @default(now())
+  id                      String       @id @default(uuid())
+  user_id                 String       @unique
+  project_id              String?
+  organization_id         String
+  organization            Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  task_description        String
+  start_time              DateTime
+  persisted_state         Json         @default("{}")
+  last_active_ping        DateTime?    @default(now())
+  last_heartbeat_at       DateTime?    @default(now())
   last_client_activity_at DateTime?
-  client_visibility String?
-  client_has_focus Boolean?
-  heartbeat_state  Json      @default("{}")
-  heartbeat_miss_count Int    @default(0)
-  is_paused              Boolean   @default(false)
-  pause_reason           String?
-  paused_at              DateTime?
-  idle_warning_shown_at  DateTime?
-  paused_duration_seconds Int       @default(0)
+  client_visibility       String?
+  client_has_focus        Boolean?
+  heartbeat_state         Json         @default("{}")
+  heartbeat_miss_count    Int          @default(0)
+  is_paused               Boolean      @default(false)
+  pause_reason            String?
+  paused_at               DateTime?
+  idle_warning_shown_at   DateTime?
+  paused_duration_seconds Int          @default(0)
 
   user    User     @relation(fields: [user_id], references: [id])
   project Project? @relation(fields: [project_id], references: [id])
@@ -219,7 +231,7 @@ model ActiveTimer {
 }
 
 model TimerCorrectionRequest {
-  id                         String   @id @default(uuid())
+  id                         String       @id @default(uuid())
   user_id                    String
   organization_id            String
   organization               Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
@@ -229,12 +241,12 @@ model TimerCorrectionRequest {
   requested_duration_seconds Int
   reason                     String
   work_note                  String?
-  status                     String   @default("PENDING")
+  status                     String       @default("PENDING")
   reviewed_by                String?
   reviewed_at                DateTime?
   reviewer_note              String?
-  created_at                 DateTime @default(now())
-  updated_at                 DateTime @updatedAt
+  created_at                 DateTime     @default(now())
+  updated_at                 DateTime     @updatedAt
 
   user User @relation(fields: [user_id], references: [id])
 
@@ -242,39 +254,39 @@ model TimerCorrectionRequest {
 }
 
 model TimerPolicyConfig {
-  id                                String   @id @default(uuid())
-  scope_type                        String   @default("ORGANIZATION") // "GLOBAL" | "ORGANIZATION"
-  scope_id                          String?
-  organization_id                   String?
-  organization                      Organization? @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  heartbeat_interval_seconds         Int      @default(180)
-  missed_heartbeat_warning_threshold Int      @default(3)
-  missed_heartbeat_pause_threshold   Int      @default(4)
-  idle_warning_after_minutes         Int      @default(5)
-  idle_pause_after_minutes           Int      @default(10)
-  max_session_duration_hours         Decimal  @default(8.0) @db.Decimal(4, 2)
-  allow_resume_after_idle_pause      Boolean  @default(true)
-  require_note_on_resume_after_minutes Int    @default(30)
-  created_by                        String?
-  updated_by                        String?
-  created_at                        DateTime @default(now())
-  updated_at                        DateTime @updatedAt
+  id                                   String        @id @default(uuid())
+  scope_type                           String        @default("ORGANIZATION") // "GLOBAL" | "ORGANIZATION"
+  scope_id                             String?
+  organization_id                      String?
+  organization                         Organization? @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  heartbeat_interval_seconds           Int           @default(180)
+  missed_heartbeat_warning_threshold   Int           @default(3)
+  missed_heartbeat_pause_threshold     Int           @default(4)
+  idle_warning_after_minutes           Int           @default(5)
+  idle_pause_after_minutes             Int           @default(10)
+  max_session_duration_hours           Decimal       @default(8.0) @db.Decimal(4, 2)
+  allow_resume_after_idle_pause        Boolean       @default(true)
+  require_note_on_resume_after_minutes Int           @default(30)
+  created_by                           String?
+  updated_by                           String?
+  created_at                           DateTime      @default(now())
+  updated_at                           DateTime      @updatedAt
 
   @@unique([scope_type, scope_id])
   @@index([organization_id])
 }
 
 model Notification {
-  id         String   @id @default(uuid())
-  user_id    String
+  id              String       @id @default(uuid())
+  user_id         String
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  message    String
-  type       String // "reminder" or "alert"
-  is_read    Boolean  @default(false)
-  read_at    DateTime?
-  deleted_at DateTime?
-  created_at DateTime @default(now())
+  message         String
+  type            String // "reminder" or "alert"
+  is_read         Boolean      @default(false)
+  read_at         DateTime?
+  deleted_at      DateTime?
+  created_at      DateTime     @default(now())
 
   user User @relation(fields: [user_id], references: [id])
 
@@ -282,14 +294,14 @@ model Notification {
 }
 
 model AuditLog {
-  id         String   @id @default(uuid())
-  user_id    String
+  id              String       @id @default(uuid())
+  user_id         String
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  action     String
-  resource   String
-  metadata   Json     @default("{}")
-  created_at DateTime @default(now())
+  action          String
+  resource        String
+  metadata        Json         @default("{}")
+  created_at      DateTime     @default(now())
 
   user User @relation(fields: [user_id], references: [id])
 
@@ -298,18 +310,18 @@ model AuditLog {
 }
 
 model AuthEvent {
-  id         String   @id @default(uuid())
-  user_id    String?
-  email      String?
+  id              String        @id @default(uuid())
+  user_id         String?
+  email           String?
   organization_id String?
   organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
-  event_type String
-  outcome    String
-  reason     String?
-  ip_address String?
-  user_agent String?
-  metadata   Json     @default("{}")
-  created_at DateTime @default(now())
+  event_type      String
+  outcome         String
+  reason          String?
+  ip_address      String?
+  user_agent      String?
+  metadata        Json          @default("{}")
+  created_at      DateTime      @default(now())
 
   user User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
 
@@ -320,10 +332,10 @@ model AuthEvent {
 }
 
 model Integration {
-  id        String  @id @default(uuid())
-  type      String  // "taiga" or "mattermost"
-  config    String  // Encrypted JSON
-  is_active Boolean @default(true)
+  id              String       @id @default(uuid())
+  type            String // "taiga" or "mattermost"
+  config          String // Encrypted JSON
+  is_active       Boolean      @default(true)
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
 
@@ -369,25 +381,25 @@ model MfaChallenge {
 }
 
 model ReportCache {
-  id           String   @id @default(uuid())
-  report_type  String
-  parameters   Json
-  data         Json
+  id              String       @id @default(uuid())
+  report_type     String
+  parameters      Json
+  data            Json
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  generated_at DateTime @default(now())
-  expires_at   DateTime
+  generated_at    DateTime     @default(now())
+  expires_at      DateTime
 
   @@index([organization_id, report_type, generated_at])
 }
 
 model Tag {
-  id         String   @id @default(uuid())
-  name       String
-  color      String   @default("#6366f1")
+  id              String       @id @default(uuid())
+  name            String
+  color           String       @default("#6366f1")
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  created_at DateTime @default(now())
+  created_at      DateTime     @default(now())
 
   time_entries TimeEntryTag[]
 
@@ -406,24 +418,24 @@ model TimeEntryTag {
 }
 
 model Invoice {
-  id             String    @id @default(uuid())
-  invoice_number String    @unique
-  client_name    String
-  client_email   String?
-  project_id     String?
-  user_id        String
+  id              String       @id @default(uuid())
+  invoice_number  String       @unique
+  client_name     String
+  client_email    String?
+  project_id      String?
+  user_id         String
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  status         String    @default("draft") // draft, sent, paid
-  subtotal       Decimal   @db.Decimal(10, 2)
-  tax_rate       Decimal?  @db.Decimal(5, 2)
-  total          Decimal   @db.Decimal(10, 2)
-  notes          String?
-  due_date       DateTime?
-  issued_at      DateTime?
-  paid_at        DateTime?
-  created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
+  status          String       @default("draft") // draft, sent, paid
+  subtotal        Decimal      @db.Decimal(10, 2)
+  tax_rate        Decimal?     @db.Decimal(5, 2)
+  total           Decimal      @db.Decimal(10, 2)
+  notes           String?
+  due_date        DateTime?
+  issued_at       DateTime?
+  paid_at         DateTime?
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
 
   project    Project?          @relation(fields: [project_id], references: [id])
   creator    User              @relation(fields: [user_id], references: [id])
@@ -436,6 +448,7 @@ model InvoiceLineItem {
   id            String  @id @default(uuid())
   invoice_id    String
   time_entry_id String?
+  expense_id    String? @unique
   description   String
   hours         Decimal @db.Decimal(10, 2)
   rate          Decimal @db.Decimal(10, 2)
@@ -443,20 +456,132 @@ model InvoiceLineItem {
 
   invoice    Invoice    @relation(fields: [invoice_id], references: [id], onDelete: Cascade)
   time_entry TimeEntry? @relation(fields: [time_entry_id], references: [id])
+  expense    Expense?   @relation(fields: [expense_id], references: [id])
+}
+
+model ScheduleEntry {
+  id              String   @id @default(uuid())
+  organization_id String
+  user_id         String
+  project_id      String?
+  created_by      String?
+  title           String
+  entry_type      String   @default("shift") // shift, availability, unavailable
+  start_time      DateTime
+  end_time        DateTime
+  notes           String?
+  color           String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  assignee     User         @relation("ScheduleAssignee", fields: [user_id], references: [id], onDelete: Cascade)
+  creator      User?        @relation("ScheduleCreator", fields: [created_by], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [project_id], references: [id], onDelete: SetNull)
+
+  @@index([organization_id, start_time, end_time])
+  @@index([organization_id, user_id, start_time])
+}
+
+model Expense {
+  id              String    @id @default(uuid())
+  organization_id String
+  user_id         String
+  project_id      String?
+  description     String
+  category        String
+  amount          Decimal   @db.Decimal(10, 2)
+  currency        String    @default("USD")
+  incurred_on     DateTime
+  is_billable     Boolean   @default(false)
+  status          String    @default("pending") // pending, approved, rejected
+  reviewed_by     String?
+  reviewed_at     DateTime?
+  reviewer_note   String?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  organization      Organization        @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  owner             User                @relation("ExpenseOwner", fields: [user_id], references: [id], onDelete: Cascade)
+  approver          User?               @relation("ExpenseApprover", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  project           Project?            @relation(fields: [project_id], references: [id], onDelete: SetNull)
+  attachments       ExpenseAttachment[]
+  invoice_line_item InvoiceLineItem?
+
+  @@index([organization_id, status, incurred_on])
+  @@index([organization_id, user_id, incurred_on])
+  @@index([organization_id, project_id, is_billable])
+}
+
+model ExpenseAttachment {
+  id              String   @id @default(uuid())
+  organization_id String
+  expense_id      String
+  object_key      String
+  file_name       String
+  content_type    String
+  size_bytes      Int
+  created_at      DateTime @default(now())
+
+  organization Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  expense      Expense      @relation(fields: [expense_id], references: [id], onDelete: Cascade)
+
+  @@unique([organization_id, object_key])
+  @@index([organization_id, expense_id])
+}
+
+model GeofenceZone {
+  id              String   @id @default(uuid())
+  organization_id String
+  name            String
+  rule_type       String   @default("allow") // allow, deny
+  latitude        Float
+  longitude       Float
+  radius_meters   Int
+  is_active       Boolean  @default(true)
+  created_by      String
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  organization    Organization         @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  location_events TimerLocationEvent[]
+
+  @@index([organization_id, is_active, rule_type])
+}
+
+model TimerLocationEvent {
+  id              String   @id @default(uuid())
+  organization_id String
+  user_id         String
+  active_timer_id String?
+  zone_id         String?
+  event_type      String   @default("clock_in")
+  decision        String // allowed, denied
+  latitude        Float
+  longitude       Float
+  accuracy_meters Float?
+  recorded_at     DateTime @default(now())
+
+  organization Organization  @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  zone         GeofenceZone? @relation(fields: [zone_id], references: [id], onDelete: SetNull)
+
+  @@index([organization_id, user_id, recorded_at])
+  @@index([organization_id, decision, recorded_at])
 }
 
 model ProjectTemplate {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   name             String
   description      String?
-  default_billable Boolean  @default(true)
+  default_billable Boolean      @default(true)
   budget_hours     Int?
-  budget_amount    Decimal? @db.Decimal(10, 2)
-  tag_ids          Json     @default("[]")
+  budget_amount    Decimal?     @db.Decimal(10, 2)
+  tag_ids          Json         @default("[]")
   created_by       String
   organization_id  String
   organization     Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  created_at       DateTime @default(now())
+  created_at       DateTime     @default(now())
 
   creator User @relation(fields: [created_by], references: [id])
 
@@ -465,57 +590,57 @@ model ProjectTemplate {
 }
 
 model WebhookSubscription {
-  id         String   @id @default(uuid())
-  url        String
-  events     Json     @default("[]")
-  secret     String
-  is_active  Boolean  @default(true)
+  id              String       @id @default(uuid())
+  url             String
+  events          Json         @default("[]")
+  secret          String
+  is_active       Boolean      @default(true)
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  created_at DateTime @default(now())
+  created_at      DateTime     @default(now())
 
   @@index([organization_id, is_active])
 }
 
 model ScheduledReport {
-  id           String    @id @default(uuid())
-  user_id      String
+  id              String       @id @default(uuid())
+  user_id         String
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  frequency    String // weekly, monthly
-  day_of_week  Int?
-  recipients   Json      @default("[]")
-  report_type  String    @default("summary")
-  is_active    Boolean   @default(true)
-  last_sent_at DateTime?
-  created_at   DateTime  @default(now())
+  frequency       String // weekly, monthly
+  day_of_week     Int?
+  recipients      Json         @default("[]")
+  report_type     String       @default("summary")
+  is_active       Boolean      @default(true)
+  last_sent_at    DateTime?
+  created_at      DateTime     @default(now())
 
   // ── Export window & scheduling (timezone-aware) ──────────────────────────
   // IANA zone the export window and generation time are evaluated in. All window
   // boundaries are wall-clock times in this zone, never UTC — running the window
   // in server-local time is what previously dropped a working day from every report.
-  reporting_timezone       String  @default("UTC")
+  reporting_timezone       String @default("UTC")
   // Window boundaries are stored explicitly so the contract is visible in data.
   // Currently fixed to a full Monday-to-Sunday week.
-  export_window_start      String  @default("monday 00:00:00")
-  export_window_end        String  @default("sunday 23:59:59")
+  export_window_start      String @default("monday 00:00:00")
+  export_window_end        String @default("sunday 23:59:59")
   // 24-hour "HH:mm" in reporting_timezone. Must fall on Monday, after the window closes.
-  schedule_generation_time String  @default("06:00")
+  schedule_generation_time String @default("06:00")
 
   // ── Pre-generation validation gates ──────────────────────────────────────
-  validation_gates_enabled          Boolean @default(true)
-  validation_gate_zero_entries      Boolean @default(true)
-  validation_gate_window_integrity  Boolean @default(true)
+  validation_gates_enabled         Boolean @default(true)
+  validation_gate_zero_entries     Boolean @default(true)
+  validation_gate_window_integrity Boolean @default(true)
   // Weekday indices (0 = Sunday .. 6 = Saturday) that must contain at least one
   // org-wide entry. Defaults to all seven days; narrow it for organisations that
   // legitimately do not log at weekends rather than disabling the gate outright.
-  validation_gate_required_days     Json    @default("[0, 1, 2, 3, 4, 5, 6]")
+  validation_gate_required_days    Json    @default("[0, 1, 2, 3, 4, 5, 6]")
   // Start of the export window an admin was last alerted about. The scheduled-report
   // endpoint is polled hourly and a blocked report stays due for the rest of its
   // generation day, so without this marker one missing day of data would emit an
   // identical alert every hour. Compared against the current window's start, so a
   // genuinely new blocked window still alerts exactly once.
-  last_validation_alert_window      DateTime?
+  last_validation_alert_window     DateTime?
 
   user User @relation(fields: [user_id], references: [id])
 
@@ -523,77 +648,77 @@ model ScheduledReport {
 }
 
 model PayrollPeriod {
-  id              String    @id @default(uuid())
+  id              String       @id @default(uuid())
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  period_type     String    // "weekly" | "biweekly" | "semimonthly" | "custom"
+  period_type     String // "weekly" | "biweekly" | "semimonthly" | "custom"
   start_date      DateTime
   end_date        DateTime
-  status          String    @default("open") // "open" | "locked"
+  status          String       @default("open") // "open" | "locked"
   locked_at       DateTime?
   locked_by       String?
-  locker          User?     @relation("PayrollPeriodLocker", fields: [locked_by], references: [id])
+  locker          User?        @relation("PayrollPeriodLocker", fields: [locked_by], references: [id])
   unlocked_at     DateTime?
   unlocked_by     String?
   notes           String?
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
 
   @@unique([organization_id, start_date, end_date])
   @@index([organization_id, status, start_date])
 }
 
 model BrandingConfig {
-  id                 String   @id @default(uuid())
-  organization_id    String   @unique
+  id                 String       @id @default(uuid())
+  organization_id    String       @unique
   organization       Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   app_name           String?
   logo_url           String?
   favicon_url        String?
-  primary_color      String   @default("#4F46E5")
-  secondary_color    String   @default("#7C3AED")
+  primary_color      String       @default("#4F46E5")
+  secondary_color    String       @default("#7C3AED")
   custom_domain      String?
   email_from_name    String?
   email_from_address String?
-  created_at         DateTime @default(now())
-  updated_at         DateTime @updatedAt
+  created_at         DateTime     @default(now())
+  updated_at         DateTime     @updatedAt
 }
 
 model AccessRequest {
-  id         String   @id @default(uuid())
-  full_name  String
-  work_email String
-  company    String
-  team_size  String
-  details    String?
-  status     String   @default("pending")
+  id              String        @id @default(uuid())
+  full_name       String
+  work_email      String
+  company         String
+  team_size       String
+  details         String?
+  status          String        @default("pending")
   organization_id String?
   organization    Organization? @relation(fields: [organization_id], references: [id], onDelete: SetNull)
-  created_at DateTime @default(now())
-  updated_at DateTime @updatedAt
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @updatedAt
 
   @@index([organization_id, status, created_at])
 }
 
 model LeaveRequest {
-  id              String    @id @default(uuid())
+  id              String       @id @default(uuid())
   user_id         String
   organization_id String
   organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  leave_type      String    // "annual" | "sick" | "unpaid" | "public_holiday" | "other"
+  leave_type      String // "annual" | "sick" | "unpaid" | "public_holiday" | "other"
   start_date      DateTime
   end_date        DateTime
-  days            Decimal   @db.Decimal(4, 1) // supports half-days (e.g. 0.5)
+  days            Decimal      @db.Decimal(4, 1) // supports half-days (e.g. 0.5)
   reason          String?
-  status          String    @default("pending") // "pending" | "approved" | "rejected"
+  status          String       @default("pending") // "pending" | "approved" | "rejected"
   reviewed_by     String?
   reviewed_at     DateTime?
   reviewer_note   String?
-  created_at      DateTime  @default(now())
-  updated_at      DateTime  @updatedAt
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @updatedAt
 
-  user     User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  reviewer User? @relation("LeaveReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  user     User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer User?                 @relation("LeaveReviewer", fields: [reviewed_by], references: [id], onDelete: SetNull)
   history  LeaveRequestHistory[]
 
   @@index([organization_id, user_id, start_date])
@@ -601,14 +726,14 @@ model LeaveRequest {
 }
 
 model LeaveRequestHistory {
-  id               String   @id @default(uuid())
+  id               String       @id @default(uuid())
   leave_request_id String
   leave_request    LeaveRequest @relation(fields: [leave_request_id], references: [id], onDelete: Cascade)
-  status           String   // "submitted" | "approved" | "rejected" | "cancelled"
+  status           String // "submitted" | "approved" | "rejected" | "cancelled"
   actor_id         String
-  actor            User     @relation("LeaveHistoryActor", fields: [actor_id], references: [id], onDelete: Cascade)
+  actor            User         @relation("LeaveHistoryActor", fields: [actor_id], references: [id], onDelete: Cascade)
   comment          String?
-  created_at       DateTime @default(now())
+  created_at       DateTime     @default(now())
 
   @@index([leave_request_id, created_at])
 }

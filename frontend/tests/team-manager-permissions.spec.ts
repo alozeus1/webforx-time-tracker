@@ -54,12 +54,34 @@ test.describe('Team Manager Permissions', () => {
         await expect(passwordInput).toHaveValue('TempPass123!');
 
         await roleSelect.selectOption('Employee');
+        await expect(page.getByLabel('Team / Group')).toHaveValue('');
+
+        const createRequestPromise = page.waitForRequest((request) =>
+            request.url().endsWith('/api/v1/users') && request.method() === 'POST',
+        );
+        const createResponsePromise = page.waitForResponse((response) =>
+            response.url().endsWith('/api/v1/users') && response.request().method() === 'POST',
+        );
         await dialog.getByRole('button', { name: 'Add Member' }).click();
+
+        const createRequest = await createRequestPromise;
+        expect(createRequest.postDataJSON()).toMatchObject({
+            email: 'miles.carter@webforxtech.com',
+            team_name: null,
+        });
+
+        const createResponse = await createResponsePromise;
+        expect(createResponse.status()).toBe(201);
+        await expect(createResponse.json()).resolves.toMatchObject({
+            email: 'miles.carter@webforxtech.com',
+            team_name: null,
+        });
 
         await expect(page.getByText('Team member added successfully').first()).toBeVisible();
 
         const createdMemberActions = page.getByRole('button', { name: /Actions for Miles Carter/ });
         await expect(createdMemberActions).toBeVisible();
+        await expect(page.locator('table tbody tr').filter({ hasText: 'Miles Carter' }).first()).toContainText('Unassigned');
 
         await createdMemberActions.click();
         await page.getByRole('button', { name: 'Edit Member' }).click();
@@ -78,9 +100,16 @@ test.describe('Team Manager Permissions', () => {
         await expect(updatedMemberRow).toBeVisible();
         await expect(updatedMemberRow).toContainText('Manager');
 
-        page.once('dialog', (dialogEvent) => dialogEvent.accept());
+        page.once('dialog', async (dialogEvent) => {
+            expect(dialogEvent.message()).toContain('email, time history, and memberships will be retained');
+            await dialogEvent.accept();
+        });
+        const deactivateRequestPromise = page.waitForRequest((request) =>
+            request.url().endsWith('/api/v1/users/user-3/deactivate') && request.method() === 'POST',
+        );
         await page.getByRole('button', { name: /Actions for Mila Carter/ }).click();
         await page.getByRole('button', { name: 'Deactivate' }).click();
+        await deactivateRequestPromise;
 
         await expect(page.getByText('Mila Carter has been deactivated').first()).toBeVisible();
         await expect(page.locator('table tbody tr').filter({ hasText: 'Mila Carter' })).toHaveCount(0);
@@ -91,5 +120,32 @@ test.describe('Team Manager Permissions', () => {
         const inactiveMemberRow = page.locator('table tbody tr').filter({ hasText: 'Mila Carter' }).first();
         await expect(inactiveMemberRow).toBeVisible();
         await expect(inactiveMemberRow).toContainText('Inactive');
+
+        await page.getByRole('button', { name: 'Add Team Member' }).click();
+        const restoreDialog = page.getByRole('dialog', { name: 'Add Team Member' });
+        await restoreDialog.getByLabel('First Name').fill('Mila');
+        await restoreDialog.getByLabel('Last Name').fill('Carter');
+        await restoreDialog.getByLabel('Email').fill('miles.carter@webforxtech.com');
+        await restoreDialog.getByLabel('Temporary Password').fill('NewTempPass123!');
+        await restoreDialog.getByLabel('Role', { exact: true }).selectOption('Employee');
+
+        const restoreResponsePromise = page.waitForResponse((response) =>
+            response.url().endsWith('/api/v1/users') && response.request().method() === 'POST',
+        );
+        await restoreDialog.getByRole('button', { name: 'Add Member' }).click();
+
+        const restoreResponse = await restoreResponsePromise;
+        expect(restoreResponse.status()).toBe(200);
+        await expect(restoreResponse.json()).resolves.toMatchObject({
+            email: 'miles.carter@webforxtech.com',
+            is_active: true,
+            reactivated: true,
+        });
+        await expect(page.getByText('Team member reactivated successfully').first()).toBeVisible();
+
+        await page.locator('select').first().selectOption('active');
+        const restoredMemberRow = page.locator('table tbody tr').filter({ hasText: 'Mila Carter' }).first();
+        await expect(restoredMemberRow).toBeVisible();
+        await expect(restoredMemberRow).toContainText('Active');
     });
 });

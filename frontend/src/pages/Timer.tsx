@@ -13,6 +13,7 @@ import type {
 } from '../types/api';
 import { emitTimeEntryChanged, TIME_ENTRY_CHANGED_EVENT } from '../utils/timeEntryEvents';
 import { TIMER_IDLE_WARNING_EVENT, TIMER_IDLE_RESUMED_EVENT, TIMER_PAUSED_EVENT, TIMER_IDLE_COUNTDOWN_EVENT } from '../hooks/useActiveTimerHeartbeat';
+import { getTimerLocationPayload } from '../utils/timerLocation';
 
 const getElapsedSeconds = (
     startTime: string,
@@ -361,11 +362,13 @@ const Timer: React.FC = () => {
         setSubmitting(true);
 
         try {
+            const locationPayload = await getTimerLocationPayload();
             const response = await api.post<ActiveTimerSummary>('/timers/start', {
                 project_id: selectedProject || undefined,
                 task_description: task.trim(),
                 is_billable: isBillable,
                 tag_ids: selectedTagIds,
+                ...locationPayload,
             });
 
             syncFromActiveTimer(response.data);
