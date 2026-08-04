@@ -11,6 +11,7 @@ import { assertComplianceAllowsDelete, assertComplianceAllowsEdit, notifyWtdIfNe
 import { applyRounding } from '../services/roundingService';
 import { assertProjectBelongsToOrganization, assertTagsBelongToOrganization, normalizeIdList } from '../services/tenantOwnershipService';
 import { verifyToken } from '../services/tokenService';
+import { evaluateClockInGeofence, normalizeTimerLocation } from '../services/geofenceService';
 
 type GuardrailActiveTimer = {
     id: string;
@@ -159,6 +160,7 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
         const is_billable = req.body?.is_billable !== false;
         const tag_ids = normalizeIdList(req.body?.tag_ids);
         const user_id = requireUserId(req);
+        const location = normalizeTimerLocation(req.body ?? {});
 
         if (!task_description) {
             res.status(400).json({ message: 'Task description is required to start a timer' });
@@ -170,6 +172,29 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
         });
         if (existingTimer) {
             res.status(400).json({ message: 'A timer is already running for this user' });
+            return;
+        }
+
+        const geofence = await evaluateClockInGeofence(req.user!.organization_id, location);
+        if (!geofence.allowed) {
+            if (location) {
+                try {
+                    await prisma.timerLocationEvent.create({
+                        data: {
+                            organization_id: req.user!.organization_id,
+                            user_id,
+                            zone_id: geofence.zoneId,
+                            decision: 'denied',
+                            latitude: location.latitude,
+                            longitude: location.longitude,
+                            accuracy_meters: location.accuracy_meters,
+                        },
+                    });
+                } catch (eventError) {
+                    console.error('Failed to record denied timer location event:', eventError);
+                }
+            }
+            res.status(403).json({ code: 'GEOFENCE_RESTRICTED', message: geofence.reason });
             return;
         }
 
@@ -186,6 +211,25 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
                 persisted_state: { is_billable, tag_ids },
             },
         });
+
+        if (geofence.policy.enabled && location) {
+            try {
+                await prisma.timerLocationEvent.create({
+                    data: {
+                        organization_id: req.user!.organization_id,
+                        user_id,
+                        active_timer_id: newTimer.id,
+                        zone_id: geofence.zoneId,
+                        decision: 'allowed',
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                        accuracy_meters: location.accuracy_meters,
+                    },
+                });
+            } catch (eventError) {
+                console.error('Failed to record allowed timer location event:', eventError);
+            }
+        }
 
         try {
             await prisma.auditLog.create({

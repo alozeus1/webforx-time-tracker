@@ -30,6 +30,9 @@ These routes render inside the main authenticated layout.
 | `/timeline` | Chronological time entry view, edits, duplicates, and resume-task actions |
 | `/timesheet` | Weekly summary and approval queue where authorized |
 | `/reports` | Analytics, exports, and approval review where authorized |
+| `/leave` | Leave and PTO requests |
+| `/schedule` | Personal schedule; Manager/Admin can plan team shifts and availability |
+| `/expenses` | Expense submission, receipt attachments, and review workflow |
 | `/settings` | User preferences |
 | `/profile` | User account profile |
 | `/integrations` | Integration settings hub |
@@ -51,6 +54,7 @@ These routes render inside the main authenticated layout.
 | --- | --- | --- |
 | `/admin` | Current code: Admin, Manager. MVP spec: Admin only. | Users, projects, integrations, notifications, audit/auth logs |
 | `/webhooks` | Admin | Webhook subscription management |
+| `/geofencing` | Admin | Configure optional allow/deny clock-in location zones |
 
 Note: `/admin` currently allows `Manager` in `frontend/src/App.tsx`. Treat that as an explicit product decision before transfer.
 
@@ -202,6 +206,9 @@ Protected by `CRON_SECRET` in production.
 | `/api/v1/invoices` | Invoice workflows |
 | `/api/v1/templates` | Project template workflows |
 | `/api/v1/scheduled-reports` | Scheduled report workflows |
+| `/api/v1/schedules` | Tenant-scoped shift and availability planning |
+| `/api/v1/expenses` | Expenses, approvals, receipt signing, and invoice eligibility |
+| `/api/v1/geofences` | Geofence policy and geographic zone administration |
 
 ## Deployment Notes
 

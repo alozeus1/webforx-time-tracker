@@ -339,8 +339,17 @@ Background worker
 
 # 13. Future Features (Post-MVP)
 
+## Implemented Extensions
+
+Workforce scheduling provides employee schedule visibility and Manager/Admin shift and availability planning without modifying timer records.
+
+Expense management supports billable and non-billable expenses, optional private receipt attachments, Manager/Admin review, and approved-expense invoice line items.
+
+Optional clock-in geofencing supports administrator-defined physical allow and deny zones. Enforcement is disabled by default and uses backend-verified coordinates rather than changeable browser time-zone settings.
+
+## Remaining Future Features
+
 AI time suggestions  
 Project budgeting  
-Client invoicing  
 Productivity analytics  
 Mobile native app

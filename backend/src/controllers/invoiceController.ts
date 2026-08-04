@@ -8,6 +8,7 @@ import { assertProjectBelongsToOrganization } from '../services/tenantOwnershipS
 
 interface NormalizedLineItem {
     time_entry_id?: string;
+    expense_id?: string;
     description: string;
     hours: number;
     rate: number;
@@ -25,6 +26,31 @@ const parseNumber = (value: unknown): number | null => {
     }
 
     return null;
+};
+
+const buildLineItemsFromExpenses = async (expenseIds: string[], organizationId: string): Promise<NormalizedLineItem[] | null> => {
+    if (expenseIds.length === 0) return [];
+    const uniqueIds = Array.from(new Set(expenseIds));
+    const expenses = await prisma.expense.findMany({
+        where: {
+            id: { in: uniqueIds },
+            organization_id: organizationId,
+            status: 'approved',
+            is_billable: true,
+            invoice_line_item: null,
+        },
+    });
+    if (expenses.length !== uniqueIds.length) return null;
+    return expenses.map((expense) => {
+        const amount = Number(expense.amount.toString());
+        return {
+            expense_id: expense.id,
+            description: `Expense: ${expense.description}`,
+            hours: 1,
+            rate: amount,
+            amount,
+        };
+    });
 };
 
 const sendTenantOwnershipError = (res: Response, error: unknown): boolean => {
@@ -150,6 +176,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
             due_date,
             tax_rate,
             time_entry_ids,
+            expense_ids,
             line_items,
         } = req.body ?? {};
 
@@ -165,13 +192,29 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
             return;
         }
 
-        let normalizedLineItems = normalizeManualLineItems(line_items);
-        if (!normalizedLineItems) {
-            const timeEntryIds = Array.isArray(time_entry_ids)
-                ? time_entry_ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
-                : [];
+        const normalizedLineItems = normalizeManualLineItems(line_items) || [];
+        const timeEntryIds = Array.isArray(time_entry_ids)
+            ? time_entry_ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+            : [];
+        const expenseIds = Array.isArray(expense_ids)
+            ? expense_ids.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+            : [];
 
-            normalizedLineItems = await buildLineItemsFromEntries(timeEntryIds, req.user!.organization_id);
+        if (timeEntryIds.length > 0) {
+            const timeItems = await buildLineItemsFromEntries(timeEntryIds, req.user!.organization_id);
+            if (!timeItems || timeItems.length !== new Set(timeEntryIds).size) {
+                sendApiError(res, 400, 'VALIDATION_ERROR', 'One or more billable time entries are invalid');
+                return;
+            }
+            normalizedLineItems.push(...timeItems);
+        }
+        if (expenseIds.length > 0) {
+            const expenseItems = await buildLineItemsFromExpenses(expenseIds, req.user!.organization_id);
+            if (!expenseItems) {
+                sendApiError(res, 400, 'VALIDATION_ERROR', 'Expenses must be approved, billable, uninvoiced, and belong to this organization');
+                return;
+            }
+            normalizedLineItems.push(...expenseItems);
         }
 
         if (!normalizedLineItems || normalizedLineItems.length === 0) {
@@ -217,6 +260,7 @@ export const createInvoice = async (req: AuthRequest, res: Response): Promise<vo
                 data: normalizedLineItems.map((lineItem) => ({
                     invoice_id: createdInvoice.id,
                     time_entry_id: lineItem.time_entry_id,
+                    expense_id: lineItem.expense_id,
                     description: lineItem.description,
                     hours: lineItem.hours,
                     rate: lineItem.rate,
