@@ -5,7 +5,32 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Prisma majors are not drop-in here: backend/src/config/db.ts imports from
+      # '@prisma/client/index' and configures the legacy `datasources` option, both of
+      # which need revisiting on a new major. Do that upgrade deliberately
+      # (https://pris.ly/d/major-version-upgrade) and delete these two entries — leaving
+      # them in place still lets minor and patch releases through.
+      - dependency-name: prisma
+        update-types: [version-update:semver-major]
+      - dependency-name: '@prisma/client'
+        update-types: [version-update:semver-major]
     groups:
+      # MUST stay above the dependency-type groups: Dependabot assigns a dependency to the
+      # first group whose rules match it.
+      #
+      # The Prisma CLI (`prisma`) is a devDependency and the client (`@prisma/client`) is a
+      # production one, so the two groups below would split them across separate PRs. Prisma
+      # requires both on the same version, and a split bump breaks the build at
+      # `postinstall: prisma generate` with
+      #     Cannot find module '@prisma/client/generator-build/index.js'
+      # because the older CLI looks for a generator path the newer client no longer ships.
+      # That is exactly how PR #20 (client -> 7.9.1, CLI left at 5.22.0) broke the backend
+      # deployment. Keeping them in one group means they always move together.
+      backend-prisma:
+        patterns:
+          - prisma
+          - '@prisma/client'
       backend-production-dependencies:
         dependency-type: production
       backend-development-dependencies:
