@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries } from '../controllers/timeEntryController';
+import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, getActiveTimer, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries } from '../controllers/timeEntryController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -16,6 +16,8 @@ router.post('/pause', pauseTimer);
 router.post('/resume', resumeTimer);
 router.post('/manual', manualEntry);
 router.get('/me', getMyEntries);
+// Polled every couple of minutes by the client heartbeat; deliberately lean — see getActiveTimer.
+router.get('/active', getActiveTimer);
 router.post('/ping', pingTimer);
 router.get('/corrections', getMyCorrectionRequests);
 router.post('/corrections', createCorrectionRequest);

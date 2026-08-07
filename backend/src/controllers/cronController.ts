@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { checkBurnout } from '../workers/burnoutTracker';
 import { checkIdleTimers } from '../workers/idleTracker';
 import { generateAndEmailDailyReport, processDueScheduledReports } from '../services/reporterService';
+import { runRetentionCleanup } from '../services/retentionService';
 import prisma from '../config/db';
 
 export const runIdleChecks = async (_req: Request, res: Response): Promise<void> => {
@@ -12,6 +13,25 @@ export const runIdleChecks = async (_req: Request, res: Response): Promise<void>
     } catch (error) {
         console.error('[Cron] Error during idle checks:', error);
         res.status(500).json({ status: 'error', message: 'Failed to run idle checks' });
+    }
+};
+
+export const runRetention = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        console.log('[Cron] Running data retention cleanup...');
+        const result = await runRetentionCleanup();
+
+        // A per-table failure is recorded as -1 by the service. Surfacing it as a
+        // partial_failure keeps a half-completed sweep from reading as a clean run.
+        const hasFailures = Object.values(result.deleted).some((count) => count < 0);
+
+        res.status(hasFailures ? 500 : 200).json({
+            status: hasFailures ? 'partial_failure' : 'success',
+            ...result,
+        });
+    } catch (error) {
+        console.error('[Cron] Error during retention cleanup:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run retention cleanup' });
     }
 };
 

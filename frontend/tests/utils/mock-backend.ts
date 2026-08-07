@@ -353,6 +353,21 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
       return respond(200, { budgets: [] });
     }
 
+    // Lean endpoint polled by the heartbeat hook — returns the active timer only.
+    if (path.endsWith('/timers/active')) {
+      return respond(200, {
+        activeTimer: timerRunning
+          ? {
+            id: 'timer-active',
+            user_id: roleToUser(configuredRole).id,
+            project_id: mockProjects[0].id,
+            task_description: timerTaskDescription,
+            start_time: new Date(Date.now() - 15 * 60_000).toISOString(),
+          }
+          : null,
+      });
+    }
+
     if (path.endsWith('/timers/me')) {
       const activeTimer = timerRunning
         ? {
