@@ -28,7 +28,23 @@ const resolveMinutes = (value: string | undefined, fallback: number) => {
 };
 
 export const HEARTBEAT_INTERVAL_MS = resolveMinutes(import.meta.env.VITE_HEARTBEAT_INTERVAL_MINUTES, 3) * 60_000;
-export const ACTIVE_TIMER_REFRESH_MS = 120_000;
+/**
+ * How often the client re-syncs active-timer state.
+ *
+ * This is a billing-sensitive knob, not just a freshness one: every poll wakes the
+ * database compute, which is charged by the hour, so a shorter interval keeps the
+ * compute from ever auto-suspending. Env-tunable so it can be adjusted without a
+ * code change if timer state ever needs to feel fresher.
+ */
+export const ACTIVE_TIMER_REFRESH_MS = resolveMinutes(import.meta.env.VITE_ACTIVE_TIMER_REFRESH_MINUTES, 5) * 60_000;
+/**
+ * With no timer running, the sync exists only to notice a timer started on another
+ * device — it drives no guardrails and nothing is ticking on screen. Polling that case
+ * at the full rate kept the database awake around the clock, so it runs every Nth tick
+ * instead (5 min × 3 = 15 min). Starting a timer here, in another tab, or returning to
+ * the tab all re-sync immediately through their own handlers.
+ */
+export const IDLE_REFRESH_TICKS = 3;
 /** Sampling window for in-tab activity events (pointer, key, scroll). */
 export const ACTIVITY_SAMPLE_MS = 15_000;
 /** Threshold after which the user is considered idle *within the tab*. */
@@ -406,10 +422,20 @@ export const useActiveTimerHeartbeat = () => {
         window.addEventListener('wfx:timer-force-heartbeat', onForceHeartbeat);
         document.addEventListener('visibilitychange', onVisibility);
 
+        let idleRefreshTicks = 0;
         const refreshInterval = window.setInterval(() => {
-            // In enhanced mode, always sync timer state regardless of visibility.
-            // In legacy mode, skip refresh when tab is hidden.
-            if (!ENHANCED && !isDocumentVisible()) return;
+            // Legacy mode: skip refresh when the tab is hidden.
+            // Enhanced mode: keep syncing while hidden ONLY when a timer is actually
+            // running — that poll is what drives server-side auto-pause/auto-stop.
+            if (!isDocumentVisible() && (!ENHANCED || !hasActiveTimerRef.current)) return;
+
+            // Throttle the idle case; see IDLE_REFRESH_TICKS.
+            if (!hasActiveTimerRef.current) {
+                idleRefreshTicks += 1;
+                if (idleRefreshTicks < IDLE_REFRESH_TICKS) return;
+            }
+
+            idleRefreshTicks = 0;
             void syncActiveTimer();
         }, ACTIVE_TIMER_REFRESH_MS);
 
