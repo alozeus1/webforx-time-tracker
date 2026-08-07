@@ -60,7 +60,7 @@ describe('useActiveTimerHeartbeat', () => {
         render(<HeartbeatHarness />);
 
         await waitFor(() => {
-            expect(mockedApi.get).toHaveBeenCalledWith('/timers/me');
+            expect(mockedApi.get).toHaveBeenCalledWith('/timers/active');
         });
 
         window.dispatchEvent(new MouseEvent('mousemove'));
@@ -86,7 +86,7 @@ describe('useActiveTimerHeartbeat', () => {
         render(<HeartbeatHarness />);
 
         await waitFor(() => {
-            expect(mockedApi.get).toHaveBeenCalledWith('/timers/me');
+            expect(mockedApi.get).toHaveBeenCalledWith('/timers/active');
         });
 
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A' }));
@@ -119,7 +119,7 @@ describe('useActiveTimerHeartbeat', () => {
             render(<HeartbeatHarness />);
             await Promise.resolve();
         });
-        expect(mockedApi.get).toHaveBeenCalledWith('/timers/me');
+        expect(mockedApi.get).toHaveBeenCalledWith('/timers/active');
         await act(async () => {
             await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 30_000);
         });

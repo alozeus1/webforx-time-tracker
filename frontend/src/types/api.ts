@@ -148,6 +148,11 @@ export interface TimerEntriesResponse {
     activeTimer?: ActiveTimerSummary | null;
 }
 
+/** Response of GET /timers/active — the lean endpoint used by the heartbeat poller. */
+export interface ActiveTimerResponse {
+    activeTimer?: ActiveTimerSummary | null;
+}
+
 export interface TimerCorrectionRequestSummary {
     id: string;
     user_id: string;

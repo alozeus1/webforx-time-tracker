@@ -813,6 +813,46 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
     }
 };
 
+/**
+ * Lean active-timer lookup for the client heartbeat poller.
+ *
+ * The poller runs every ACTIVE_TIMER_REFRESH_MS for every user with the app open, and
+ * reads nothing but `activeTimer`. Serving it from `/me` meant shipping 50 fully
+ * hydrated time entries — each joined to its project and tags — plus a COUNT over the
+ * user's whole history out of the database every two minutes, then discarding all of it
+ * client-side. That was the single largest source of database egress, and the constant
+ * traffic also kept the compute from ever idling long enough to auto-suspend.
+ *
+ * Guardrail enforcement is intentionally retained: the poll is what drives server-side
+ * auto-pause/auto-stop, so dropping it here would silently break idle handling.
+ */
+export const getActiveTimer = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const where = { user_id, organization_id: req.user!.organization_id };
+        const include = { project: { select: { id: true, name: true } } };
+
+        let activeTimer = await prisma.activeTimer.findFirst({ where, include });
+
+        if (activeTimer) {
+            const guardrailResult = await enforceTimerGuardrails({
+                timer: activeTimer,
+                now: new Date(),
+                organizationId: req.user!.organization_id,
+            });
+
+            if (guardrailResult !== 'none') {
+                activeTimer = await prisma.activeTimer.findFirst({ where, include });
+            }
+        }
+
+        res.status(200).json({ activeTimer });
+    } catch (error) {
+        console.error('Failed to fetch active timer:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const getMyEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);

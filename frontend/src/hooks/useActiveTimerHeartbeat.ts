@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import api from '../services/api';
-import type { TimerEntriesResponse } from '../types/api';
+import type { ActiveTimerResponse } from '../types/api';
 import { getStoredToken } from '../utils/session';
 import { TIME_ENTRY_CHANGED_EVENT, TIME_ENTRY_CHANGED_STORAGE_KEY, emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
@@ -112,7 +112,10 @@ export const useActiveTimerHeartbeat = () => {
 
         syncInFlightRef.current = (async () => {
             try {
-                const response = await api.get<TimerEntriesResponse>('/timers/me');
+                // Deliberately /timers/active, not /timers/me: this runs on a timer for every
+                // user with the app open and only reads activeTimer. /timers/me would ship 50
+                // hydrated time entries and a COUNT on every poll, all of it discarded below.
+                const response = await api.get<ActiveTimerResponse>('/timers/active');
                 hasActiveTimerRef.current = Boolean(response.data.activeTimer?.start_time);
                 activeTimerIdRef.current = response.data.activeTimer?.id || null;
                 activeTimerStartedAtRef.current = response.data.activeTimer?.start_time
