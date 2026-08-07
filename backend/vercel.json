@@ -28,6 +28,10 @@
     {
       "path": "/api/v1/cron/reset-demo",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/v1/cron/retention",
+      "schedule": "30 3 * * 0"
     }
   ]
 }

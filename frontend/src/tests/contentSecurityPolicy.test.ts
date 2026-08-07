@@ -90,6 +90,17 @@ describe('production Content-Security-Policy', () => {
         expect(directive(csp, 'form-action')).toEqual(["'self'"]);
     });
 
+    it('permits the Google Identity Services origins that SSO needs', () => {
+        // index.html loads https://accounts.google.com/gsi/client, and GIS then opens an
+        // iframe and calls back to the same origin. Under `script-src 'self'` the script
+        // never loads, so window.google is undefined, the sign-in button silently never
+        // renders, and there is no error anywhere in the UI to explain it.
+        // frame-src must be explicit: default-src 'self' would otherwise block the iframe.
+        expect(directive(csp, 'script-src')).toContain('https://accounts.google.com/gsi/client');
+        expect(directive(csp, 'frame-src')).toContain('https://accounts.google.com/gsi/');
+        expect(directive(csp, 'connect-src')).toContain('https://accounts.google.com/gsi/');
+    });
+
     it('allows the API origin it needs and nothing wildcard', () => {
         const connectSrc = directive(csp, 'connect-src');
         expect(connectSrc).toContain("'self'");

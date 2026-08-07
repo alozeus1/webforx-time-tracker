@@ -44,6 +44,13 @@ export const env = {
     jwtSecret,
     integrationSecret: resolveIntegrationSecret(),
     cronSecret: process.env.CRON_SECRET?.trim() || '',
+    // Operational logs and ephemera older than this are purged by the retention cron.
+    // Business records (time entries, invoices, expenses, leave, payroll) are never
+    // touched by retention — see services/retentionService.ts.
+    dataRetentionDays: (() => {
+        const parsed = Number.parseInt(process.env.DATA_RETENTION_DAYS?.trim() || '', 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 90;
+    })(),
     corsOrigin: process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173',
     frontendUrl: process.env.FRONTEND_URL?.trim() || process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173',
     enableBackgroundWorkers: process.env.ENABLE_BACKGROUND_WORKERS !== 'false',
