@@ -134,7 +134,7 @@ export const knowledgeBase: Record<string, KBEntry> = {
         ],
     },
     export_csv: {
-        answer: 'To export your time data:\n\n1. Go to the Reports page.\n2. Click the "Export CSV" button.\n3. The file will download automatically with all your tracked entries.\n\nManagers and Admins can export data for all team members.',
+        answer: 'To export your time data:\n\n1. Go to the Reports page.\n2. Apply any user, team, or project filters you need.\n3. Click "Export CSV".\n4. Choose a preset timeframe or enter custom start and end dates.\n5. Review the dates and click "Download CSV".\n\nThe export includes entries from the approved date range and keeps the current report filters. Managers and Admins can export data for all team members.',
         keywords: ['export csv', 'download csv', 'export report', 'download hours'],
         followUp: [{ label: 'Main menu', key: 'menu' }],
     },

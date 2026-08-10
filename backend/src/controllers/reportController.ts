@@ -17,6 +17,64 @@ const formatHoursMetric = (hours: number) => {
 
 const secondsToHours = (seconds: number) => Number((seconds / 3600).toFixed(2));
 
+const CSV_FORMULA_PREFIX = /^[\t\r\n ]*[=+\-@]/;
+
+const escapeCsvCell = (value: unknown): string => {
+    const text = value == null ? '' : String(value);
+    const safeText = CSV_FORMULA_PREFIX.test(text) ? `'${text}` : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+};
+
+const normalizeExportTimeZone = (value: unknown): string | null => {
+    if (typeof value !== 'string' || !value.trim()) {
+        return 'UTC';
+    }
+
+    const timeZone = value.trim();
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+        return timeZone;
+    } catch {
+        return null;
+    }
+};
+
+const formatDateInTimeZone = (date: Date, timeZone: string): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+};
+
+const parseExplicitExportWindow = (startAtValue: unknown, endAtValue: unknown) => {
+    const hasStart = typeof startAtValue === 'string' && startAtValue.trim().length > 0;
+    const hasEnd = typeof endAtValue === 'string' && endAtValue.trim().length > 0;
+
+    if (!hasStart && !hasEnd) {
+        return { window: null, error: null };
+    }
+
+    if (!hasStart || !hasEnd) {
+        return { window: null, error: 'Both startAt and endAt are required for a custom export timeframe.' };
+    }
+
+    const startAt = new Date(startAtValue as string);
+    const endAt = new Date(endAtValue as string);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+        return { window: null, error: 'The export timeframe contains an invalid date.' };
+    }
+
+    if (endAt.getTime() <= startAt.getTime()) {
+        return { window: null, error: 'The export end date must be after the start date.' };
+    }
+
+    return { window: { startAt, endAt }, error: null };
+};
+
 const normalizeReportRangeStart = (range: unknown) => {
     const now = new Date();
     const startDate = new Date();
@@ -82,7 +140,25 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
-        const { whereClause } = buildReportWhereClause({ req, includeDateRange: true });
+        const explicitWindow = parseExplicitExportWindow(req.query.startAt, req.query.endAt);
+        if (explicitWindow.error) {
+            res.status(400).json({ message: explicitWindow.error });
+            return;
+        }
+
+        const exportTimeZone = normalizeExportTimeZone(req.query.timeZone);
+        if (!exportTimeZone) {
+            res.status(400).json({ message: 'The export timezone is invalid.' });
+            return;
+        }
+
+        const { whereClause } = buildReportWhereClause({ req, includeDateRange: !explicitWindow.window });
+        if (explicitWindow.window) {
+            whereClause.start_time = {
+                gte: explicitWindow.window.startAt,
+                lt: explicitWindow.window.endAt,
+            };
+        }
 
         const entries = await prisma.timeEntry.findMany({
             where: whereClause,
@@ -93,16 +169,25 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             orderBy: { start_time: 'desc' }
         });
 
-        // Generate CSV content
-        let csvContent = 'Date,Employee,Email,Team,Project,Task,Duration (Hours),Status,Billable Amount ($)\n';
+        const rows: unknown[][] = [[
+            'Date',
+            'Employee',
+            'Email',
+            'Team',
+            'Project',
+            'Task',
+            'Duration (Hours)',
+            'Status',
+            'Billable Amount ($)',
+        ]];
 
         entries.forEach(entry => {
-            const date = new Date(entry.start_time).toLocaleDateString();
-            const name = `"${entry.user.first_name} ${entry.user.last_name}"`;
+            const date = formatDateInTimeZone(new Date(entry.start_time), exportTimeZone);
+            const name = `${entry.user.first_name} ${entry.user.last_name}`;
             const email = entry.user.email;
-            const team = `"${entry.user.team_name || 'Unassigned'}"`;
-            const project = `"${entry.project?.name || 'Unassigned'}"`;
-            const task = `"${entry.task_description}"`;
+            const team = entry.user.team_name || 'Unassigned';
+            const project = entry.project?.name || 'Unassigned';
+            const task = entry.task_description;
             const hours = (entry.duration / 3600).toFixed(2);
             const status = entry.status;
 
@@ -110,10 +195,13 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
             const billable = (parseFloat(hours) * rate).toFixed(2);
 
-            csvContent += `${date},${name},${email},${team},${project},${task},${hours},${status},${billable}\n`;
+            rows.push([date, name, email, team, project, task, hours, status, billable]);
         });
 
-        res.setHeader('Content-Type', 'text/csv');
+        // UTF-8 BOM keeps names and task descriptions readable when opened in Excel.
+        const csvContent = `\uFEFF${rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n')}\r\n`;
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename="timesheet_export.csv"');
         res.status(200).send(csvContent);
 
