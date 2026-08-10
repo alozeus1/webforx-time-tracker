@@ -1,26 +1,36 @@
-import { Resend } from 'resend';
 import { env } from '../config/env';
+import { getMailProvider, sendMail } from './mailer';
 
-let resendClient: Resend | null = null;
+/**
+ * Outbound mail now goes through services/mailer.ts (AWS SES SMTP, with Resend kept
+ * only as a rollback path). The two helpers below keep the existing call shape in this
+ * file — `getClient()` still returns null when no provider is configured, so every
+ * sender's "log in development and return" fallback behaves exactly as before.
+ */
+type MailerHandle = { provider: string };
 
-const getClient = (): Resend | null => {
-    if (!env.resendApiKey) return null;
-    if (!resendClient) {
-        resendClient = new Resend(env.resendApiKey);
-    }
-    return resendClient;
+const getClient = (): MailerHandle | null => {
+    const provider = getMailProvider();
+    return provider === 'none' ? null : { provider };
 };
 
 /**
- * Resend SDK v3+ returns { data, error } instead of throwing.
- * This helper checks the result and throws if error is present,
- * so callers can rely on standard async/await error handling.
+ * Normalises delivery failures into thrown errors.
+ *
+ * This matters more than it looks: the Resend SDK reports API-level failures in its
+ * RESOLVED value rather than by rejecting, so awaiting a send is not evidence anything
+ * was delivered. `sendMail` throws on both transports, so callers can rely on ordinary
+ * async/await error handling.
  */
-const send = async (client: Resend, payload: Parameters<Resend['emails']['send']>[0]): Promise<void> => {
-    const { error } = await client.emails.send(payload);
-    if (error) {
-        throw new Error(`Resend error [${error.name}]: ${error.message}`);
-    }
+const send = async (
+    _client: MailerHandle,
+    payload: { from?: string; to: string | string[]; subject: string; html: string },
+): Promise<void> => {
+    await sendMail({
+        to: Array.isArray(payload.to) ? payload.to : [payload.to],
+        subject: payload.subject,
+        html: payload.html,
+    });
 };
 
 // ─── Shared brand colours / layout ────────────────────────────────────────────
