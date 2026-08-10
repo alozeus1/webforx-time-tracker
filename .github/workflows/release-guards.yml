@@ -96,6 +96,35 @@ jobs:
         # for why bare `npm audit --omit=dev` was insufficient.
         run: node ../scripts/audit-guard.cjs
 
+  desktop:
+    name: Desktop Security Validation and Audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Clean install
+        run: npm ci
+
+      - name: Validate secure desktop configuration
+        run: npm run validate
+
+      - name: Production dependency audit
+        # Reuse the strict workspace-aware release guard. Electron and the local
+        # packager are dev-only, while any future production dependency advisory
+        # remains release-blocking unless explicitly reviewed and time-boxed.
+        run: node ../scripts/audit-guard.cjs
+
   migration-drift:
     name: Prisma Migration Bootstrap and Drift Guard
     runs-on: ubuntu-latest
@@ -185,7 +214,7 @@ jobs:
 
       - name: Wait for preview server
         run: |
-          for attempt in {1..30}; do
+          for _ in {1..30}; do
             if curl --silent --fail http://127.0.0.1:4173 >/dev/null; then
               exit 0
             fi
@@ -295,6 +324,7 @@ jobs:
     needs:
       - backend
       - frontend
+      - desktop
       - migration-drift
       - playwright-smoke
       - login-smoke
