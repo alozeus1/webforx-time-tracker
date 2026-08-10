@@ -138,8 +138,12 @@ const Admin: React.FC = () => {
     const [auditOutcome, setAuditOutcome] = useState<'all' | 'success' | 'failure'>('all');
     const [notifications, setNotifications] = useState<NotificationSummary[]>([]);
     const [corrections, setCorrections] = useState<TimerCorrectionRequestSummary[]>([]);
+    type CorrectionSegment = 'pending' | 'resolved' | 'all';
+    const [correctionSegment, setCorrectionSegment] = useState<CorrectionSegment>('pending');
     const [correctionSearch, setCorrectionSearch] = useState('');
     const [correctionStatus, setCorrectionStatus] = useState<'all' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'>('all');
+    const [correctionsLoading, setCorrectionsLoading] = useState(false);
+    const CORRECTION_RETENTION_DAYS = 30;
     const tabStripRef = useRef<HTMLDivElement | null>(null);
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
@@ -331,11 +335,24 @@ const Admin: React.FC = () => {
     }
 
     async function fetchCorrections() {
+        setCorrectionsLoading(true);
         try {
-            const res = await api.get<{ corrections: TimerCorrectionRequestSummary[] }>('/timers/corrections/review');
+            const params = new URLSearchParams();
+            if (correctionSegment === 'pending') {
+                params.set('status', 'PENDING');
+            } else if (correctionSegment === 'resolved') {
+                params.set('status', 'APPROVED,REJECTED,CANCELLED');
+                params.set('lookbackDays', String(CORRECTION_RETENTION_DAYS));
+            } else {
+                params.set('status', correctionStatus === 'all' ? 'all' : correctionStatus);
+            }
+
+            const res = await api.get<{ corrections: TimerCorrectionRequestSummary[] }>(`/timers/corrections/review?${params.toString()}`);
             setCorrections(res.data.corrections || []);
         } catch (error) {
             console.error('Error fetching correction requests:', error);
+        } finally {
+            setCorrectionsLoading(false);
         }
     }
 
@@ -400,6 +417,20 @@ const Admin: React.FC = () => {
         } catch (error) {
             console.error('Error reviewing correction request:', error);
             alert(getApiErrorMessage(error, 'Failed to review correction request.'));
+        }
+    }
+
+    async function handlePurgeResolvedCorrections() {
+        if (!window.confirm(`Permanently delete resolved corrections older than ${CORRECTION_RETENTION_DAYS} days? This cannot be undone.`)) {
+            return;
+        }
+        try {
+            const res = await api.post<{ deleted: number }>('/timers/corrections/purge-resolved');
+            void fetchCorrections();
+            alert(`${res.data.deleted} resolved correction(s) purged.`);
+        } catch (error) {
+            console.error('Error purging resolved corrections:', error);
+            alert(getApiErrorMessage(error, 'Failed to purge resolved corrections.'));
         }
     }
 
@@ -774,7 +805,15 @@ const Admin: React.FC = () => {
             ]);
         };
         void loadAdminData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    useEffect(() => {
+        if (activeTab === 'corrections') {
+            void fetchCorrections();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeTab, correctionSegment, correctionStatus]);
 
     // Lazy-load new tab data on first visit
     useEffect(() => {
@@ -1725,30 +1764,65 @@ const Admin: React.FC = () => {
                             </div>
                         )}
                         {activeTab === 'corrections' && (
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <div className="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 p-1">
+                                    {(['pending', 'resolved', 'all'] as const).map((segment) => (
+                                        <button
+                                            key={segment}
+                                            type="button"
+                                            onClick={() => setCorrectionSegment(segment)}
+                                            className={`px-3 py-1.5 rounded-md text-sm font-bold capitalize transition-colors ${
+                                                correctionSegment === segment
+                                                    ? 'bg-primary text-white'
+                                                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                            }`}
+                                        >
+                                            {segment}
+                                            {segment === 'resolved' && (
+                                                <span className="ml-1 text-[10px] opacity-80">(30d)</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
                                 <div className="relative">
                                     <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                     <input
                                         type="text"
                                         value={correctionSearch}
-                                        onChange={e => setCorrectionSearch(e.target.value)}
+                                        onChange={(e) => setCorrectionSearch(e.target.value)}
                                         placeholder="Search user or reason…"
                                         className="pl-8 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary w-56"
                                     />
                                 </div>
-                                <select value={correctionStatus} onChange={e => setCorrectionStatus(e.target.value as typeof correctionStatus)} className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30">
-                                    <option value="all">Status: All</option>
-                                    <option value="PENDING">Pending</option>
-                                    <option value="APPROVED">Approved</option>
-                                    <option value="REJECTED">Rejected</option>
-                                    <option value="CANCELLED">Cancelled</option>
-                                </select>
+                                {correctionSegment === 'all' && (
+                                    <select
+                                        value={correctionStatus}
+                                        onChange={(e) => setCorrectionStatus(e.target.value as typeof correctionStatus)}
+                                        className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                    >
+                                        <option value="all">Status: All</option>
+                                        <option value="PENDING">Pending</option>
+                                        <option value="APPROVED">Approved</option>
+                                        <option value="REJECTED">Rejected</option>
+                                        <option value="CANCELLED">Cancelled</option>
+                                    </select>
+                                )}
+                                {correctionSegment === 'resolved' && (
+                                    <button
+                                        type="button"
+                                        onClick={() => void handlePurgeResolvedCorrections()}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-rose-200 dark:border-rose-900 text-sm font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
+                                        title={`Delete resolved corrections older than ${CORRECTION_RETENTION_DAYS} days`}
+                                    >
+                                        Purge older than {CORRECTION_RETENTION_DAYS} days
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={exportCorrectionsCsv}
                                     disabled={filteredCorrections.length === 0}
                                     className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Download the currently filtered correction requests as CSV"
+                                    title="Download the currently visible correction requests as CSV"
                                 >
                                     <Download size={15} /> Export CSV
                                 </button>
@@ -1814,15 +1888,9 @@ const Admin: React.FC = () => {
                                         </>
                                     )}
                                     {activeTab === 'corrections' && (
-                                        <>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Submitted</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">User</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Requested Window</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Duration (h:mm)</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Reason</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Status</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400 text-right">Review</th>
-                                        </>
+                                        <th colSpan={7} className="px-6 py-4 text-xs font-bold uppercase text-slate-400">
+                                            Correction requests
+                                        </th>
                                     )}
                                     {activeTab === 'policy' && (
                                         <th className="px-6 py-4 text-xs font-bold uppercase text-slate-400">Timer idle policy</th>
@@ -2095,31 +2163,92 @@ const Admin: React.FC = () => {
                                         </td>
                                     </tr>
                                 )))}
-                                {activeTab === 'corrections' && (corrections.length === 0 ? (
-                                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests found.</td></tr>
+                                {activeTab === 'corrections' && (correctionsLoading ? (
+                                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">Loading corrections…</td></tr>
+                                ) : corrections.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="px-6 py-10">
+                                            <div className="mx-auto max-w-md rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center dark:border-slate-600 dark:bg-slate-900/40">
+                                                <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                                                    {correctionSegment === 'pending' && 'No pending corrections'}
+                                                    {correctionSegment === 'resolved' && 'No resolved corrections in the last 30 days'}
+                                                    {correctionSegment === 'all' && 'No correction requests found'}
+                                                </h4>
+                                                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                    {correctionSegment === 'pending' && 'You are all caught up.'}
+                                                    {correctionSegment === 'resolved' && 'Recent decisions appear here for 30 days.'}
+                                                    {correctionSegment === 'all' && 'Use the filters to find historical requests.'}
+                                                </p>
+                                            </div>
+                                        </td>
+                                    </tr>
                                 ) : filteredCorrections.length === 0 ? (
-                                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests match the current filters.</td></tr>
+                                    <tr><td colSpan={7} className="px-6 py-8 text-center text-slate-500 text-sm">No correction requests match the current search.</td></tr>
                                 ) : filteredCorrections.map((correction) => (
-                                    <tr key={correction.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
-                                        <td className="px-6 py-4 text-sm text-slate-500">{new Date(correction.created_at).toLocaleString()}</td>
-                                        <td className="px-6 py-4 text-sm font-semibold dark:text-slate-200">
-                                            {correction.user?.email || correction.user_id}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">
-                                            {new Date(correction.requested_start_time).toLocaleString()} – {new Date(correction.requested_end_time).toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm font-semibold text-slate-700 dark:text-slate-300">{formatDurationHM(correction.requested_duration_seconds)}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">{correction.reason}</td>
-                                        <td className="px-6 py-4 text-xs font-bold uppercase text-slate-500">{correction.status}</td>
-                                        <td className="px-6 py-4 text-right">
-                                            {correction.status === 'PENDING' ? (
-                                                <div className="flex justify-end gap-2">
-                                                    <button type="button" className="text-xs font-bold text-emerald-600" onClick={() => void handleReviewCorrection(correction.id, 'approve')}>Approve</button>
-                                                    <button type="button" className="text-xs font-bold text-rose-600" onClick={() => void handleReviewCorrection(correction.id, 'reject')}>Reject</button>
+                                    <tr key={correction.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 align-top">
+                                        <td colSpan={7} className="p-0">
+                                            <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-3 flex-wrap">
+                                                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
+                                                            {correction.user?.first_name?.[0]}{correction.user?.last_name?.[0]}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                                                {correction.user?.first_name} {correction.user?.last_name}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500">{correction.user?.email || correction.user_id}</p>
+                                                        </div>
+                                                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
+                                                            correction.status === 'PENDING'
+                                                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                                                                : correction.status === 'APPROVED'
+                                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                                                : correction.status === 'REJECTED'
+                                                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
+                                                                : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                                                        }`}>
+                                                            {correction.status}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+                                                        <span className="font-semibold">{new Date(correction.requested_start_time).toLocaleString()}</span>
+                                                        {' – '}
+                                                        <span className="font-semibold">{new Date(correction.requested_end_time).toLocaleString()}</span>
+                                                        {' '}
+                                                        <span className="text-xs text-slate-500">({formatDurationHM(correction.requested_duration_seconds)})</span>
+                                                    </div>
+                                                    <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{correction.reason}</p>
+                                                    {correction.status !== 'PENDING' && correction.reviewer_note && (
+                                                        <p className="mt-1 text-xs text-slate-500 italic">Note: {correction.reviewer_note}</p>
+                                                    )}
+                                                    {correction.status !== 'PENDING' && correction.reviewed_at && (
+                                                        <p className="mt-1 text-xs text-slate-400">Reviewed {new Date(correction.reviewed_at).toLocaleString()}</p>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <span className="text-xs text-slate-400">Reviewed</span>
-                                            )}
+                                                <div className="shrink-0">
+                                                    {correction.status === 'PENDING' ? (
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                type="button"
+                                                                className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+                                                                onClick={() => void handleReviewCorrection(correction.id, 'approve')}
+                                                            >
+                                                                Approve
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/20"
+                                                                onClick={() => void handleReviewCorrection(correction.id, 'reject')}
+                                                            >
+                                                                Reject
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">Reviewed</span>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </td>
                                     </tr>
                                 )))}

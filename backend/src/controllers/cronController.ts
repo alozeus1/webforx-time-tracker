@@ -3,6 +3,8 @@ import { checkBurnout } from '../workers/burnoutTracker';
 import { checkIdleTimers } from '../workers/idleTracker';
 import { generateAndEmailDailyReport, processDueScheduledReports } from '../services/reporterService';
 import { runRetentionCleanup } from '../services/retentionService';
+import { purgeResolvedCorrections } from '../services/correctionRetentionService';
+import { env } from '../config/env';
 import prisma from '../config/db';
 
 export const runIdleChecks = async (_req: Request, res: Response): Promise<void> => {
@@ -32,6 +34,18 @@ export const runRetention = async (_req: Request, res: Response): Promise<void> 
     } catch (error) {
         console.error('[Cron] Error during retention cleanup:', error);
         res.status(500).json({ status: 'error', message: 'Failed to run retention cleanup' });
+    }
+};
+
+export const runCorrectionRetention = async (_req: Request, res: Response): Promise<void> => {
+    try {
+        console.log('[Cron] Running correction retention cleanup...');
+        const deleted = await purgeResolvedCorrections(undefined, env.correctionRetentionDays);
+        console.log(`[Cron] Correction retention cleanup complete: ${deleted} deleted`);
+        res.status(200).json({ status: 'success', deleted });
+    } catch (error) {
+        console.error('[Cron] Error during correction retention cleanup:', error);
+        res.status(500).json({ status: 'error', message: 'Failed to run correction retention cleanup' });
     }
 };
 

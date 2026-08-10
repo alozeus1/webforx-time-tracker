@@ -28,6 +28,7 @@ jest.mock('../src/config/db', () => ({
             findFirst: jest.fn(),
             findUnique: jest.fn(),
             update: jest.fn(),
+            deleteMany: jest.fn(),
         },
         timeEntry: {
             create: jest.fn(),
@@ -824,5 +825,104 @@ describe('Timer correction requests', () => {
                 metadata: expect.objectContaining({ reviewer_note: 'Not enough detail' }),
             }),
         }));
+    });
+});
+
+// ─── correction review query filtering ───────────────────────────────────────
+
+describe('GET /api/v1/timers/corrections/review', () => {
+    beforeEach(() => {
+        (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([]);
+    });
+
+    it('defaults to returning all corrections for backward compatibility', async () => {
+        const res = await request(app)
+            .get('/api/v1/timers/corrections/review')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { organization_id: TEST_ORG_ID } })
+        );
+    });
+
+    it('filters by single status', async () => {
+        await request(app)
+            .get('/api/v1/timers/corrections/review?status=PENDING')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { organization_id: TEST_ORG_ID, status: { in: ['PENDING'] } } })
+        );
+    });
+
+    it('filters by comma-separated statuses', async () => {
+        await request(app)
+            .get('/api/v1/timers/corrections/review?status=APPROVED,REJECTED')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { organization_id: TEST_ORG_ID, status: { in: ['APPROVED', 'REJECTED'] } } })
+        );
+    });
+
+    it('applies lookbackDays for resolved statuses', async () => {
+        await request(app)
+            .get('/api/v1/timers/corrections/review?status=APPROVED,REJECTED,CANCELLED&lookbackDays=30')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: expect.objectContaining({
+                    organization_id: TEST_ORG_ID,
+                    status: { in: ['APPROVED', 'REJECTED', 'CANCELLED'] },
+                    created_at: expect.objectContaining({ gte: expect.any(Date) }),
+                }),
+            })
+        );
+    });
+
+    it('does not apply lookbackDays to pending requests', async () => {
+        await request(app)
+            .get('/api/v1/timers/corrections/review?status=PENDING&lookbackDays=30')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(prisma.timerCorrectionRequest.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: { organization_id: TEST_ORG_ID, status: { in: ['PENDING'] } },
+            })
+        );
+    });
+});
+
+// ─── correction retention purge ───────────────────────────────────────────────
+
+describe('POST /api/v1/timers/corrections/purge-resolved', () => {
+    beforeEach(() => {
+        (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([]);
+        (prisma.timerCorrectionRequest.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+    });
+
+    it('allows admins to purge old resolved corrections', async () => {
+        (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([{ id: 'old-1' }]);
+        (prisma.timerCorrectionRequest.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+        const res = await request(app)
+            .post('/api/v1/timers/corrections/purge-resolved')
+            .set('Authorization', `Bearer ${adminToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.deleted).toBe(1);
+        expect(prisma.timerCorrectionRequest.deleteMany).toHaveBeenCalledWith(
+            expect.objectContaining({ where: { id: { in: ['old-1'] } } })
+        );
+    });
+
+    it('prevents employees from purging corrections', async () => {
+        const res = await request(app)
+            .post('/api/v1/timers/corrections/purge-resolved')
+            .set('Authorization', `Bearer ${employeeToken}`);
+
+        expect(res.status).toBe(403);
     });
 });
