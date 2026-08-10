@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { LocateFixed, MapPin, Plus, Trash2 } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import type { GeofencePolicySummary, GeofenceZoneSummary } from '../types/api';
+import { useFeedback } from '../hooks/useFeedback';
 
 const Geofencing: React.FC = () => {
+    const { confirm } = useFeedback();
     const [policy, setPolicy] = useState<GeofencePolicySummary>({ enabled: false, enforce_on_clock_in: true, max_accuracy_meters: 500 });
     const [zones, setZones] = useState<GeofenceZoneSummary[]>([]);
     const [form, setForm] = useState({ name: '', rule_type: 'allow' as 'allow' | 'deny', latitude: '', longitude: '', radius_meters: '250' });
@@ -59,7 +61,7 @@ const Geofencing: React.FC = () => {
     };
 
     const removeZone = async (zoneId: string) => {
-        if (!window.confirm('Delete this geofence zone?')) return;
+        if (!await confirm({ message: 'Delete this geofence zone?', destructive: true, confirmLabel: 'Delete zone' })) return;
         try { await api.delete(`/geofences/zones/${zoneId}`); await load(); }
         catch (error) { setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to delete geofence zone') }); }
     };

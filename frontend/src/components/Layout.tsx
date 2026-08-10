@@ -121,7 +121,7 @@ const Layout: React.FC = () => {
             window.removeEventListener(TIMER_IDLE_RESUMED_EVENT, onIdleResumed);
             window.removeEventListener(TIMER_PAUSED_EVENT, onTimerPaused);
         };
-    }, []);
+    }, [location.pathname]);
 
     const handleResumeTimer = async () => {
         try {

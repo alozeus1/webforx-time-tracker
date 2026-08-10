@@ -3,6 +3,7 @@ import { CalendarDays, Plus, X, CheckCircle2, XCircle, Clock3, ChevronDown, Chev
 import api, { getApiErrorMessage } from '../services/api';
 import { hasAnyRole } from '../utils/session';
 import { usePageMetadata } from '../hooks/usePageMetadata';
+import { useFeedback } from '../hooks/useFeedback';
 
 const LEAVE_TYPES = [
     { value: 'annual', label: 'Annual Leave' },
@@ -142,6 +143,7 @@ const StatusTimeline: React.FC<{ request: LeaveRequest }> = ({ request }) => {
 // ─── Main component ──────────────────────────────────────────────────────────
 
 const Leave: React.FC = () => {
+    const { toast, confirm } = useFeedback();
     usePageMetadata({
         title: 'Leave & PTO | Web Forx Time Tracker',
         description: 'Submit and manage leave requests, view team leave calendar, and track PTO balances.',
@@ -281,12 +283,12 @@ const Leave: React.FC = () => {
     };
 
     const handleCancel = async (id: string) => {
-        if (!window.confirm('Cancel this leave request?')) return;
+        if (!await confirm({ message: 'Cancel this leave request?', destructive: true, confirmLabel: 'Cancel request' })) return;
         try {
             await api.delete(`/leave/${id}`);
             void fetchMine();
         } catch {
-            alert('Failed to cancel request.');
+            toast('Failed to cancel request.', { tone: 'error' });
         }
     };
 
@@ -298,7 +300,7 @@ const Leave: React.FC = () => {
             void fetchAll();
             void fetchMine();
         } catch (err) {
-            alert(getApiErrorMessage(err, 'Failed to review request'));
+            toast(getApiErrorMessage(err, 'Failed to review request'), { tone: 'error' });
         }
     };
 
