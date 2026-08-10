@@ -388,10 +388,11 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                     primaryProject = pName;
                 }
             }
-            // Expected hours scale the employment-type weekly minimum across the
-            // selected period. Under-hours is judged per classification, so an
-            // intern is measured at the intern target — not a blanket 40h.
-            const expectedHours = Number((u.minWeeklyHours * weekCount).toFixed(1));
+            // Prorate the employment-type weekly minimum to the exact selected
+            // period. A 30-day report represents 30/7 weeks, not five full weeks.
+            // Under-hours is judged per classification, so an intern is measured
+            // at the intern target — not a blanket 40h.
+            const expectedHours = Number((u.minWeeklyHours * (periodDays / 7)).toFixed(1));
             const expectedHoursAttainment = expectedHours > 0
                 ? Math.round((u.totalHours / expectedHours) * 100)
                 : 0;

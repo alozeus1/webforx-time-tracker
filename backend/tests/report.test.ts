@@ -268,6 +268,40 @@ describe('GET /api/v1/reports/dashboard', () => {
         });
     });
 
+    it('prorates expected hours to the exact selected range', async () => {
+        (prisma.timeEntry.findMany as jest.Mock)
+            .mockReset()
+            .mockResolvedValueOnce([{
+                duration: 20 * 3600,
+                is_billable: true,
+                status: 'approved',
+                start_time: new Date(),
+                user: {
+                    id: 'user-employee',
+                    first_name: 'Emery',
+                    last_name: 'Employee',
+                    hourly_rate: 100,
+                    team_name: 'Delivery',
+                    employment_type: 'employee',
+                    min_weekly_hours: 40,
+                    role: { name: 'Employee' },
+                },
+                project: { id: 'project-1', name: 'Delivery' },
+            }])
+            .mockResolvedValueOnce([]);
+
+        const res = await request(app)
+            .get('/api/v1/reports/dashboard?range=30d')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.userBreakdown[0]).toMatchObject({
+            expectedHours: 171.4,
+            expectedHoursAttainment: 12,
+            belowMinimum: true,
+        });
+    });
+
     it('filters manager analytics by team name when no individual user is selected', async () => {
         (prisma.timeEntry.findMany as jest.Mock)
             .mockResolvedValueOnce([])
