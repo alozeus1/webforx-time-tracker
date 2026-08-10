@@ -1,6 +1,5 @@
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
-import { Resend } from 'resend';
 import prisma from '../config/db';
 import { env } from '../config/env';
 import { generateExecutiveReportPdf } from './executiveReportTemplate';
@@ -14,6 +13,7 @@ import {
     isMonthlyGenerationDue,
     isValidTimeZone,
 } from '../utils/reportWindow';
+import { getMailProvider, sendMail } from './mailer';
 import {
     DEFAULT_VALIDATION_GATE_CONFIG,
     ValidationGateConfig,
@@ -66,15 +66,11 @@ export type ScheduledReportRunResult = {
     validationFailures: Array<{ id: string; window: string; messages: string[] }>;
 };
 
-let resendClient: Resend | null = null;
-
-const getResendClient = (): Resend | null => {
-    if (!env.resendApiKey) return null;
-    if (!resendClient) {
-        resendClient = new Resend(env.resendApiKey);
-    }
-    return resendClient;
-};
+/**
+ * True when an email provider is configured (AWS SES SMTP, or Resend as fallback).
+ * Delivery itself goes through services/mailer.ts, which throws on failure for both.
+ */
+const isMailConfigured = (): boolean => getMailProvider() !== 'none';
 
 const startOfDay = (date: Date): Date => {
     const next = new Date(date);
@@ -199,11 +195,11 @@ const notifyAdminsOfValidationFailure = async ({
     window: ReportWindow;
     outcome: ValidationOutcome;
 }): Promise<boolean> => {
-    const client = getResendClient();
-    if (!client || adminRecipients.length === 0) {
+    const mailConfigured = isMailConfigured();
+    if (!mailConfigured || adminRecipients.length === 0) {
         console.error(
             `[ReporterService] Report ${reportId} was blocked by a validation gate but NO ADMIN ALERT COULD BE SENT `
-            + `(${!client ? 'RESEND_API_KEY not configured' : 'no active Admin users found for the organization'}). `
+            + `(${!mailConfigured ? 'no email provider configured — set AWS_SES_SMTP_ENDPOINT/AWS_SMTP_USERNAME/AWS_SMTP_PASSWORD' : 'no active Admin users found for the organization'}). `
             + 'The failure is recorded in the logs and the cron run result only.',
         );
         return false;
@@ -214,12 +210,11 @@ const notifyAdminsOfValidationFailure = async ({
         .join('');
 
     try {
-        // Resend signals API-level failures in the resolved value rather than by
-        // rejecting, so the promise resolving is not evidence of delivery. Without
-        // this check a blocked report would be logged as alerted while nobody was
-        // told — the same mistake sendPdfReport already guards against.
-        const { error } = await client.emails.send({
-            from: env.emailFrom,
+        // sendMail throws on failure for BOTH transports. That matters because the
+        // Resend SDK reports API-level failures in its resolved value rather than by
+        // rejecting — without normalising that, a blocked report would be logged as
+        // alerted while nobody was actually told.
+        await sendMail({
             to: adminRecipients,
             subject: `[Action required] Scheduled report blocked — ${window.label}`,
             html: `
@@ -234,11 +229,6 @@ const notifyAdminsOfValidationFailure = async ({
                 <p>Troubleshooting: <code>docs/scheduled-report-windows.md</code></p>
             `,
         });
-
-        if (error) {
-            console.error(`[ReporterService] Validation alert for report ${reportId} rejected by Resend [${error.name}]: ${error.message}`);
-            return false;
-        }
 
         console.log(`[ReporterService] Validation-failure alert sent for report ${reportId} to ${adminRecipients.length} admin(s).`);
         return true;
@@ -307,32 +297,25 @@ const sendPdfReport = async ({
     pdfBuffer: ArrayBuffer;
     allowMissingProvider: boolean;
 }): Promise<boolean> => {
-    const client = getResendClient();
-    if (!client) {
-        const message = '[ReporterService] RESEND_API_KEY missing. Skipping report email dispatch.';
+    if (!isMailConfigured()) {
+        const message = '[ReporterService] No email provider configured. Skipping report email dispatch.';
         if (allowMissingProvider) {
             console.warn(message);
             return false;
         }
-        throw new Error('RESEND_API_KEY is not configured; scheduled report email was not sent.');
+        throw new Error(
+            'No email provider is configured; scheduled report email was not sent. '
+            + 'Set AWS_SES_SMTP_ENDPOINT, AWS_SMTP_USERNAME and AWS_SMTP_PASSWORD.',
+        );
     }
 
-    const { error } = await client.emails.send({
-        from: env.emailFrom,
+    // Throws on failure for both transports — see services/mailer.ts.
+    await sendMail({
         to,
         subject,
         html,
-        attachments: [
-            {
-                filename,
-                content: Buffer.from(pdfBuffer),
-            },
-        ],
+        attachments: [{ filename, content: Buffer.from(pdfBuffer) }],
     });
-
-    if (error) {
-        throw new Error(`Resend error [${error.name}]: ${error.message}`);
-    }
 
     return true;
 };

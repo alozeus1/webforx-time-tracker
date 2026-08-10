@@ -78,6 +78,20 @@ export const env = {
     authentikRedirectUri: process.env.AUTHENTIK_REDIRECT_URI?.trim() || '',
     authentikPostLogoutRedirectUri: process.env.AUTHENTIK_POST_LOGOUT_REDIRECT_URI?.trim() || '',
     authentikScopes: process.env.AUTHENTIK_SCOPES?.trim() || 'openid profile email',
+    // ── Outbound email ────────────────────────────────────────────────────────
+    // AWS SES SMTP is the primary transport for webforxtech.com and
+    // dev.webforxtech.com. Resend is retained only as a rollback path — see
+    // services/mailer.ts. Variable names match the SES console so the same keys can
+    // be pasted straight into Vercel.
+    smtpHost: process.env.AWS_SES_SMTP_ENDPOINT?.trim() || '',
+    smtpPort: (() => {
+        const raw = process.env.AWS_SES_SMTP_PORT?.trim();
+        const parsed = Number.parseInt(raw || '', 10);
+        // 587 (STARTTLS) is the SES default and what the WFT account is provisioned for.
+        return Number.isInteger(parsed) && parsed > 0 ? parsed : 587;
+    })(),
+    smtpUser: process.env.AWS_SMTP_USERNAME?.trim() || '',
+    smtpPassword: process.env.AWS_SMTP_PASSWORD || '',
     resendApiKey: process.env.RESEND_API_KEY?.trim() || '',
     emailFrom: process.env.EMAIL_FROM?.trim() || 'Web Forx Time Tracker <noreply@webforxtech.com>',
     executiveReportTemplateEnabled: process.env.EXECUTIVE_REPORT_TEMPLATE_ENABLED?.trim().toLowerCase() !== 'false',

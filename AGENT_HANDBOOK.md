@@ -132,6 +132,26 @@ Google OAuth callback (production):
 - `NODE_ENV=production`
 - `ENABLE_BACKGROUND_WORKERS`
 
+### Backend email (AWS SES SMTP — primary transport)
+
+All webforxtech.com and dev.webforxtech.com mail goes through AWS SES SMTP:
+
+- `AWS_SES_SMTP_ENDPOINT`
+- `AWS_SES_SMTP_PORT` (587 = STARTTLS, the WFT default; 465 = implicit TLS)
+- `AWS_SMTP_USERNAME`
+- `AWS_SMTP_PASSWORD` (an SES SMTP password derived from an IAM key — NOT an AWS secret access key)
+- `EMAIL_FROM` (must be a verified identity in SES, or every send is rejected)
+
+`RESEND_API_KEY` is retained only as a rollback path. `services/mailer.ts` prefers SMTP
+whenever the three SMTP variables are all present, and falls back to Resend otherwise, so
+the transport can be reverted by changing environment variables rather than redeploying.
+A partially configured SMTP block does NOT select SES — it falls back — so a missing
+credential cannot produce opaque auth failures at send time.
+
+Migration note: Resend rejected every send on 2026-08-10 ("The webforxtech.com domain is
+not verified"), which silently broke the weekly compliance report and, downstream, the
+n8n Mattermost publication. Verify the sending domain in SES before relying on delivery.
+
 ### Backend optional/feature-gated
 
 - `GOOGLE_CLIENT_ID`
