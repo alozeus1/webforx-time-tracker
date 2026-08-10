@@ -6,6 +6,7 @@ import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 import AccessibleDialog from '../components/AccessibleDialog';
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
 const EXPORT_PRESET_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
@@ -83,6 +84,7 @@ function getTrendClasses(trend: string | undefined): string {
 }
 
 const Reports: React.FC = () => {
+    const reducedMotion = useReducedMotionPreference();
     const [searchParams, setSearchParams] = useSearchParams();
     const initialRange = ['7d', '30d', '90d'].includes(searchParams.get('range') || '') ? (searchParams.get('range') as string) : '30d';
     const initialProjectId = searchParams.get('projectId') || 'all';
@@ -140,16 +142,16 @@ const Reports: React.FC = () => {
         [users],
     );
 
-    async function fetchApprovals() {
+    const fetchApprovals = useCallback(async () => {
         try {
             const res = await api.get<{ entries: TimeEntrySummary[] }>('/timers/approvals');
             setPendingApprovals(res.data.entries || []);
         } catch (error) {
             console.error('Failed to fetch approvals:', error);
         }
-    }
+    }, []);
 
-    async function fetchFilterData() {
+    const fetchFilterData = useCallback(async () => {
         try {
             const [projRes, usersRes] = await Promise.all([
                 api.get<ProjectSummary[]>('/projects'),
@@ -164,7 +166,7 @@ const Reports: React.FC = () => {
         } catch (error) {
             console.error('Failed to fetch filter options:', error);
         }
-    }
+    }, [canReviewApprovals]);
 
     const fetchAnalytics = useCallback(async () => {
         setIsLoading(true);
@@ -188,7 +190,7 @@ const Reports: React.FC = () => {
             }
         };
         void init();
-    }, [canReviewApprovals]);
+    }, [canReviewApprovals, fetchApprovals, fetchFilterData]);
 
     useEffect(() => {
         void fetchAnalytics();
@@ -709,9 +711,15 @@ const Reports: React.FC = () => {
                                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)', backgroundColor: 'var(--bg-glass, #ffffff)' }}
                                                 formatter={(value) => [formatHoursText(Number(value)), 'Hours']} 
                                             />
-                                            <Bar dataKey="hours" fill="url(#colorHours)" radius={[6, 6, 0, 0]} />
+                                            <Bar dataKey="hours" fill="url(#colorHours)" radius={[6, 6, 0, 0]} isAnimationActive={!reducedMotion} />
                                         </BarChart>
                                 </ResponsiveContainer>
+                                <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                                    <summary className="cursor-pointer font-semibold">Text summary of hours logged</summary>
+                                    <ul className="mt-2 space-y-1">
+                                        {(analytics?.hoursTrend || []).map((point) => <li key={point.name}>{point.name}: {formatHoursText(point.hours)}</li>)}
+                                    </ul>
+                                </details>
                             </div>
 
                             {/* Project Distribution — Recharts Pie */}
@@ -734,6 +742,7 @@ const Reports: React.FC = () => {
                                                     stroke="none"
                                                     label={({ name, percent }: PieLabelRenderProps) => `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                                                     labelLine={false}
+                                                    isAnimationActive={!reducedMotion}
                                                 >
                                                     {analytics?.projectDistribution.slice(0, 6).map((_entry, idx) => (
                                                         <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
@@ -743,6 +752,14 @@ const Reports: React.FC = () => {
                                                 <Legend />
                                             </PieChart>
                                     </ResponsiveContainer>
+                                )}
+                                {(analytics?.projectDistribution.length ?? 0) > 0 && (
+                                    <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                                        <summary className="cursor-pointer font-semibold">Text summary of project distribution</summary>
+                                        <ul className="mt-2 space-y-1">
+                                            {analytics?.projectDistribution.slice(0, 6).map((project) => <li key={project.name}>{project.name}: {formatHoursText(project.hours)}</li>)}
+                                        </ul>
+                                    </details>
                                 )}
                             </div>
                         </div>

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Admin from '../pages/Admin';
 import api from '../services/api';
+import { FeedbackProvider } from '../components/FeedbackProvider';
 
 vi.mock('../services/api', async () => {
     const actual = await vi.importActual<typeof import('../services/api')>('../services/api');
@@ -29,8 +30,6 @@ const mockedApi = api as unknown as MockedApi;
 describe('Admin users tab — MFA reset', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.stubGlobal('confirm', vi.fn(() => true));
-
         mockedApi.get.mockImplementation((url: string) => {
             if (url === '/users') {
                 return Promise.resolve({
@@ -69,7 +68,7 @@ describe('Admin users tab — MFA reset', () => {
     it('shows a Reset action only for users with MFA enabled, and calls the reset endpoint', async () => {
         render(
             <MemoryRouter initialEntries={['/admin?tab=users']}>
-                <Admin />
+                <FeedbackProvider><Admin /></FeedbackProvider>
             </MemoryRouter>
         );
 
@@ -79,6 +78,8 @@ describe('Admin users tab — MFA reset', () => {
         expect(resetButtons).toHaveLength(1); // only Alice (mfa_enabled: true), not Bob
 
         await userEvent.click(resetButtons[0]);
+        const confirmation = await screen.findByRole('alertdialog');
+        await userEvent.click(within(confirmation).getByRole('button', { name: 'Reset MFA' }));
 
         await waitFor(() => {
             expect(mockedApi.post).toHaveBeenCalledWith('/users/user-1/mfa/reset');

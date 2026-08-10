@@ -14,6 +14,7 @@ import type {
 import { emitTimeEntryChanged, TIME_ENTRY_CHANGED_EVENT } from '../utils/timeEntryEvents';
 import { TIMER_IDLE_WARNING_EVENT, TIMER_IDLE_RESUMED_EVENT, TIMER_PAUSED_EVENT, TIMER_IDLE_COUNTDOWN_EVENT } from '../hooks/useActiveTimerHeartbeat';
 import { getTimerLocationPayload } from '../utils/timerLocation';
+import { useFeedback } from '../hooks/useFeedback';
 
 const getElapsedSeconds = (
     startTime: string,
@@ -81,6 +82,7 @@ const buildTaskSuggestions = (entries: TimeEntrySummary[]) => (
 );
 
 const Timer: React.FC = () => {
+    const { toast } = useFeedback();
     const [searchParams, setSearchParams] = useSearchParams();
     const [time, setTime] = useState(0);
     const [timerStartedAt, setTimerStartedAt] = useState<string | null>(null);
@@ -375,12 +377,12 @@ const Timer: React.FC = () => {
             emitTimeEntryChanged();
         } catch (error) {
             console.error('Failed to start timer', error);
-            alert(extractErrorMessage(error, 'Failed to start timer'));
+            toast(extractErrorMessage(error, 'Failed to start timer'), { tone: 'error' });
             await loadTimerPageData(false);
         } finally {
             setSubmitting(false);
         }
-    }, [isBillable, loadTimerPageData, selectedProject, selectedTagIds, syncFromActiveTimer, task]);
+    }, [isBillable, loadTimerPageData, selectedProject, selectedTagIds, syncFromActiveTimer, task, toast]);
 
     const handleStopTimer = useCallback(async (clearDraft = true) => {
         setTaskError(null);
@@ -401,16 +403,16 @@ const Timer: React.FC = () => {
             if (message.toLowerCase().includes('no active timer found')) {
                 await loadTimerPageData(clearDraft);
                 emitTimeEntryChanged();
-                alert('Timer was already stopped. The page has been refreshed.');
+                toast('Timer was already stopped. The page has been refreshed.', { tone: 'info' });
                 return;
             }
 
-            alert(message);
+            toast(message, { tone: 'error' });
             await loadTimerPageData(false);
         } finally {
             setSubmitting(false);
         }
-    }, [loadTimerPageData]);
+    }, [loadTimerPageData, toast]);
 
     const handlePauseTimer = async () => {
         setTaskError(null);
@@ -423,7 +425,7 @@ const Timer: React.FC = () => {
             emitTimeEntryChanged();
         } catch (error) {
             console.error('Failed to pause timer', error);
-            alert(extractErrorMessage(error, 'Failed to pause timer'));
+            toast(extractErrorMessage(error, 'Failed to pause timer'), { tone: 'error' });
             await loadTimerPageData(false);
         } finally {
             setSubmitting(false);
@@ -441,7 +443,7 @@ const Timer: React.FC = () => {
             emitTimeEntryChanged();
         } catch (error) {
             console.error('Failed to resume timer', error);
-            alert(extractErrorMessage(error, 'Failed to resume timer'));
+            toast(extractErrorMessage(error, 'Failed to resume timer'), { tone: 'error' });
             await loadTimerPageData(false);
         } finally {
             setSubmitting(false);
@@ -528,7 +530,7 @@ const Timer: React.FC = () => {
             window.location.assign(response.data.url);
         } catch (error) {
             console.error('Failed to start Google Calendar connection:', error);
-            alert('Could not start Google Calendar connection');
+            toast('Could not start Google Calendar connection', { tone: 'error' });
         }
     };
 
