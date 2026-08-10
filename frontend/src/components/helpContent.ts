@@ -99,7 +99,7 @@ export const knowledgeBase: Record<string, KBEntry> = {
         ],
     },
     correction_request_help: {
-        answer: 'If an entry is wrong — or an approved entry needs changing — you can request a correction.\n\nSubmit the corrected start/end times and a reason; a Manager or Admin reviews it. Under stricter compliance modes (e.g. DCAA), approved entries cannot be edited directly, so a correction request is the proper way to fix them. Managers and Admins review correction requests in Admin → Corrections.',
+        answer: 'If an entry is wrong — or an approved entry needs changing — you can request a correction.\n\nSubmit the corrected start/end times and a reason; an authorized reviewer evaluates it. Under stricter compliance modes (e.g. DCAA), approved entries cannot be edited directly, so a correction request is the proper way to fix them. Admins review correction requests in Admin → Corrections.',
         keywords: ['correction', 'correction request', 'fix approved entry', 'amend time', 'edit approved time', 'change my time', 'wrong time entry'],
         followUp: [
             { label: 'My entry was rejected', key: 'entry_rejected' },
@@ -296,7 +296,7 @@ export const knowledgeBase: Record<string, KBEntry> = {
 
     // ── Manager / Admin tools ────────────────────────────────────────────────
     admin_help: {
-        answer: 'As an Admin or Manager, you can:\n\n- Manage Team: add/edit users, set employment type, reset passwords, change roles (Admin only), deactivate users.\n- Approve work: review time entries, leave requests, and time-correction requests.\n- Access Diagnostics (Team page): inspect login failures, reset requests, and recent sign-in activity.\n- Manage Projects, Templates, and Invoices.\n- Reports & Scheduled Reports: analytics, CSV exports, and emailed report schedules.\n- Admin page: compliance modes, time rounding, password policy, payroll periods, integrations, webhooks, branding, and audit logs.',
+        answer: 'Managers and Admins can manage team members, review time and leave, use Access Diagnostics, and work with reports, templates, and invoices.\n\nThe Admin page itself is Admin-only. It contains correction review, compliance modes, time rounding, password policy, payroll periods, integrations, webhooks, branding, and audit logs.',
         keywords: ['admin help', 'manager help', 'admin features', 'manager features', 'team management'],
         adminOnly: true,
         followUp: [
@@ -339,7 +339,7 @@ export const knowledgeBase: Record<string, KBEntry> = {
         ],
     },
     approve_time: {
-        answer: 'To review and approve work:\n\n- Time entries: on the Timesheet page, review "Pending" entries and Approve or Reject each; the employee is notified.\n- Leave requests: on the Leave & PTO page, approve or reject pending requests.\n- Time corrections: in Admin → Corrections, review requested changes to entries.\n\nApprovals and rejections are recorded and visible to the member.',
+        answer: 'To review and approve work:\n\n- Time entries: on the Timesheet page, review "Pending" entries and Approve or Reject each; the employee is notified.\n- Leave requests: on the Leave & PTO page, approve or reject pending requests.\n- Time corrections (Admin only): in Admin → Corrections, review requested changes to entries.\n\nApprovals and rejections are recorded and visible to the member.',
         keywords: ['approve time', 'review time', 'pending approvals', 'reject time', 'approve leave', 'approvals'],
         adminOnly: true,
         followUp: [
