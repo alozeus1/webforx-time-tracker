@@ -14,6 +14,7 @@
     "start": "npm run schema:check && node dist/index.js",
     "dev": "npm run schema:check && ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
+    "typecheck": "tsc -p tsconfig.test.json",
     "test": "jest",
     "postinstall": "prisma generate",
     "release:baseline-existing": "prisma migrate resolve --applied 20260401000000_initial_schema",

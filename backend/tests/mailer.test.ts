@@ -11,14 +11,26 @@
  * awaited send succeeding is not evidence of delivery.
  */
 
+type SmtpConfig = Record<string, unknown>;
+
 const mockSendMail = jest.fn();
-const mockCreateTransport = jest.fn(() => ({ sendMail: mockSendMail }));
 const mockResendSend = jest.fn();
+
+// The transport config is captured here rather than read back off
+// `mockCreateTransport.mock.calls[0][0]`. A zero-arg `jest.fn()` types its arguments as
+// an EMPTY TUPLE, so indexing it is a compile error (TS2493) — and the backend
+// tsconfig only includes `src/**`, so `tsc --noEmit` never type-checks this file.
+// Only ts-jest catches it, which meant CI was the first thing to see the mistake.
+let lastTransportConfig: SmtpConfig | undefined;
+const mockCreateTransport = jest.fn((config: SmtpConfig) => {
+    lastTransportConfig = config;
+    return { sendMail: mockSendMail };
+});
 
 jest.mock('nodemailer', () => ({
     __esModule: true,
-    default: { createTransport: (...args: unknown[]) => mockCreateTransport(...(args as [])) },
-    createTransport: (...args: unknown[]) => mockCreateTransport(...(args as [])),
+    default: { createTransport: (config: SmtpConfig) => mockCreateTransport(config) },
+    createTransport: (config: SmtpConfig) => mockCreateTransport(config),
 }));
 
 jest.mock('resend', () => ({
@@ -43,6 +55,7 @@ let saved: Record<string, string | undefined>;
 
 beforeEach(() => {
     jest.clearAllMocks();
+    lastTransportConfig = undefined;
     saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
     for (const k of ENV_KEYS) delete process.env[k];
     process.env.EMAIL_FROM = 'Web Forx Reports <reports@webforxtech.com>';
@@ -113,11 +126,11 @@ describe('SMTP transport configuration', () => {
         const mailer = await loadMailer();
         await mailer.sendMail(message);
 
-        const config = mockCreateTransport.mock.calls[0][0] as unknown as Record<string, unknown>;
-        expect(config.port).toBe(587);
-        expect(config.secure).toBe(false);
+        expect(lastTransportConfig).toBeDefined();
+        expect(lastTransportConfig!.port).toBe(587);
+        expect(lastTransportConfig!.secure).toBe(false);
         // Without requireTLS a downgrade would send SMTP credentials in the clear.
-        expect(config.requireTLS).toBe(true);
+        expect(lastTransportConfig!.requireTLS).toBe(true);
     });
 
     it('uses implicit TLS on 465', async () => {
@@ -126,9 +139,8 @@ describe('SMTP transport configuration', () => {
         const mailer = await loadMailer();
         await mailer.sendMail(message);
 
-        const config = mockCreateTransport.mock.calls[0][0] as unknown as Record<string, unknown>;
-        expect(config.secure).toBe(true);
-        expect(config.requireTLS).toBe(false);
+        expect(lastTransportConfig!.secure).toBe(true);
+        expect(lastTransportConfig!.requireTLS).toBe(false);
     });
 
     it('defaults to 587 when the port is missing or unparseable', async () => {
@@ -137,7 +149,7 @@ describe('SMTP transport configuration', () => {
         const mailer = await loadMailer();
         await mailer.sendMail(message);
 
-        expect((mockCreateTransport.mock.calls[0][0] as unknown as Record<string, unknown>).port).toBe(587);
+        expect(lastTransportConfig!.port).toBe(587);
     });
 
     it('sends from EMAIL_FROM and forwards attachments as buffers', async () => {

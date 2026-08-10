@@ -1,0 +1,14 @@
+{
+  // Type-checks tests as well as src.
+  //
+  // `tsconfig.json` deliberately includes only `src/**` because `npm run build` emits
+  // to dist and must not emit test files. The side effect is that `tsc --noEmit` never
+  // type-checks tests — only ts-jest does, at test runtime. A type error in a test
+  // therefore passes every local check and fails in CI, which is exactly how a TS2493
+  // in tests/mailer.test.ts reached the Release Guards.
+  //
+  // Run: npm run typecheck
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "rootDir": ".", "types": ["node", "jest"] },
+  "include": ["src/**/*", "tests/**/*"]
+}
