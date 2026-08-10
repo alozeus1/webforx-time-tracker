@@ -118,7 +118,7 @@ const Reports: React.FC = () => {
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
     const [managedTeams, setManagedTeams] = useState<TeamSummary[]>([]);
-    const [productivityFilter, setProductivityFilter] = useState<'all' | 'top' | 'needs_attention'>('all');
+    const [attainmentFilter, setAttainmentFilter] = useState<'all' | 'target_met' | 'below_expected'>('all');
 
     const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
     const teamOptions = useMemo(() => {
@@ -328,14 +328,14 @@ const Reports: React.FC = () => {
 
     const filteredBreakdown = useMemo(() => {
         const source = analytics?.userBreakdown || [];
-        if (productivityFilter === 'top') {
-            return source.filter((item) => item.efficiency >= 85);
+        if (attainmentFilter === 'target_met') {
+            return source.filter((item) => item.expectedHoursAttainment >= 100);
         }
-        if (productivityFilter === 'needs_attention') {
-            return source.filter((item) => item.efficiency < 85);
+        if (attainmentFilter === 'below_expected') {
+            return source.filter((item) => item.expectedHoursAttainment < 100);
         }
         return source;
-    }, [analytics?.userBreakdown, productivityFilter]);
+    }, [analytics?.userBreakdown, attainmentFilter]);
 
     const autoStoppedPendingApprovals = useMemo(
         () => pendingApprovals.filter((entry) => entry.auto_stopped || entry.stop_reason === 'active_duration_limit'),
@@ -565,16 +565,16 @@ const Reports: React.FC = () => {
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Avg. Productivity</p>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Billable Utilization</p>
                                     <span
-                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.productivity)}`}
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.billableUtilization)}`}
                                         title="Compared to previous period"
                                     >
-                                        {analytics?.metrics.trends.productivity}
+                                        {analytics?.metrics.trends.billableUtilization}
                                     </span>
                                 </div>
-                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.avgProductivity}%</h3>
-                                <p className="text-xs text-slate-400 mt-1">Target is 85%</p>
+                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.billableUtilization}%</h3>
+                                <p className="text-xs text-slate-400 mt-1">Share of logged time marked billable</p>
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -840,22 +840,22 @@ const Reports: React.FC = () => {
                         </div>
                         )}
 
-                        {/* User Productivity */}
+                        {/* Expected-hours attainment */}
                         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                <h4 className="font-bold text-slate-900 dark:text-white">User Productivity Breakdown</h4>
+                                <h4 className="font-bold text-slate-900 dark:text-white">Expected Hours Attainment</h4>
                                 <div className="flex gap-2 items-center">
                                     <span className="text-xs text-slate-500 capitalize">
-                                        {productivityFilter === 'all' ? 'All users' : productivityFilter.replace('_', ' ')}
+                                        {attainmentFilter === 'all' ? 'All users' : attainmentFilter.replace('_', ' ')}
                                     </span>
                                     <button
                                         className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors text-slate-500"
-                                        onClick={() => setProductivityFilter((previous) => {
-                                            if (previous === 'all') return 'top';
-                                            if (previous === 'top') return 'needs_attention';
+                                        onClick={() => setAttainmentFilter((previous) => {
+                                            if (previous === 'all') return 'target_met';
+                                            if (previous === 'target_met') return 'below_expected';
                                             return 'all';
                                         })}
-                                        title="Cycle productivity filters"
+                                        title="Cycle expected-hours filters"
                                     >
                                         <span className="material-symbols-outlined text-xl">filter_list</span>
                                     </button>
@@ -872,7 +872,7 @@ const Reports: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Approved h</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Pending h</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Rejected h</th>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efficiency</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Expected Hours</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
@@ -880,7 +880,7 @@ const Reports: React.FC = () => {
                                         {filteredBreakdown.length === 0 ? (
                                             <tr>
                                                 <td colSpan={9} className="px-6 py-8 text-center text-slate-500 text-sm">
-                                                    No users match the selected productivity filter.
+                                                    No users match the selected expected-hours filter.
                                                 </td>
                                             </tr>
                                         ) : filteredBreakdown.map((u) => (
@@ -898,20 +898,25 @@ const Reports: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.teamName || 'Unassigned'}</td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.primaryProject}</td>
-                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{formatHoursText(Number(u.totalHours))}</td>
+                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">
+                                                    {formatHoursText(Number(u.totalHours))}
+                                                    {u.expectedHours !== undefined && (
+                                                        <p className="mt-1 text-xs font-normal text-slate-500">of {formatHoursText(u.expectedHours)} expected</p>
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400">{u.approved_hours !== undefined ? formatHoursText(u.approved_hours) : '—'}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-amber-600 dark:text-amber-400">{u.pending_hours !== undefined ? formatHoursText(u.pending_hours) : '—'}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-rose-600 dark:text-rose-400">{u.rejected_hours !== undefined ? formatHoursText(u.rejected_hours) : '—'}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="h-1.5 w-16 rounded-full bg-slate-100 dark:bg-slate-700">
-                                                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(u.efficiency, 100)}%` }}></div>
+                                                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(u.expectedHoursAttainment, 100)}%` }}></div>
                                                         </div>
-                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{u.efficiency}%</span>
+                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{u.expectedHoursAttainment}%</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${u.belowMinimum ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
                                                         {u.status}
                                                     </span>
                                                 </td>

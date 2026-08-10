@@ -301,9 +301,9 @@ describe('UAT remediation regressions', () => {
                         metrics: {
                             totalHours: '1.0',
                             activeProjects: 0,
-                            avgProductivity: 100,
+                            billableUtilization: 100,
                             billableAmount: '0.00',
-                            trends: { hours: '+10%', projects: '0%', productivity: '+0%', billable: '0%' },
+                            trends: { hours: '+10%', projects: 'No prior data', billableUtilization: 'No prior data', billable: 'No prior data' },
                         },
                         hoursTrend: [],
                         projectDistribution: [],
@@ -368,9 +368,9 @@ describe('UAT remediation regressions', () => {
                         metrics: {
                             totalHours: '1.0',
                             activeProjects: 0,
-                            avgProductivity: 100,
+                            billableUtilization: 100,
                             billableAmount: '0.00',
-                            trends: { hours: '+0%', projects: '0%', productivity: '+0%', billable: '0%' },
+                            trends: { hours: 'No prior data', projects: 'No prior data', billableUtilization: 'No prior data', billable: 'No prior data' },
                         },
                         hoursTrend: [],
                         projectDistribution: [],

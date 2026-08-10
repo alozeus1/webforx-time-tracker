@@ -212,12 +212,12 @@ export interface TaskSourceSummary {
 export interface AnalyticsMetrics {
     totalHours: string;
     activeProjects: number;
-    avgProductivity: number;
+    billableUtilization: number;
     billableAmount: string;
     trends: {
         hours: string;
         projects: string;
-        productivity: string;
+        billableUtilization: string;
         billable: string;
     };
 }
@@ -245,7 +245,9 @@ export interface AnalyticsUserBreakdown {
     approved_hours?: number;
     pending_hours?: number;
     rejected_hours?: number;
-    efficiency: number;
+    expectedHours: number;
+    belowMinimum: boolean;
+    expectedHoursAttainment: number;
     status: string;
 }
 

@@ -267,7 +267,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 billableSeconds += entry.duration;
             }
         });
-        const avgProductivity = totalDurationSec > 0
+        const billableUtilization = totalDurationSec > 0
             ? Math.round((billableSeconds / totalDurationSec) * 100)
             : 0;
 
@@ -341,15 +341,15 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         });
 
         const prevHours = prevTotalSec / 3600;
-        const prevAvgProd = prevTotalSec > 0 ? Math.round((prevBillableSec / prevTotalSec) * 100) : 0;
+        const prevBillableUtilization = prevTotalSec > 0 ? Math.round((prevBillableSec / prevTotalSec) * 100) : 0;
 
         const pctChange = (current: number, previous: number): string => {
-            if (previous === 0) return current > 0 ? '+100%' : '0%';
+            if (previous === 0) return current > 0 ? 'New' : 'No prior data';
             const change = Math.round(((current - previous) / previous) * 100);
             return change >= 0 ? `+${change}%` : `${change}%`;
         };
 
-        // Compute User Productivity Breakdown
+        // Compute each user's logged-hours attainment against their configured target.
         const userMap = new Map<string, any>();
         entries.forEach(entry => {
             const uId = entry.user.id;
@@ -380,7 +380,6 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         });
 
         const usersList = Array.from(userMap.values());
-        const maxUserHours = Math.max(...usersList.map((user) => user.totalHours), 0);
 
         const userBreakdown = usersList.map(u => {
             let primaryProject = 'Unassigned';
@@ -391,11 +390,13 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                     primaryProject = pName;
                 }
             }
-            const efficiency = maxUserHours > 0 ? Math.round((u.totalHours / maxUserHours) * 100) : 0;
             // Expected hours scale the employment-type weekly minimum across the
             // selected period. Under-hours is judged per classification, so an
             // intern is measured at the intern target — not a blanket 40h.
             const expectedHours = Number((u.minWeeklyHours * weekCount).toFixed(1));
+            const expectedHoursAttainment = expectedHours > 0
+                ? Math.round((u.totalHours / expectedHours) * 100)
+                : 0;
             const belowMinimum = u.totalHours + 1e-6 < expectedHours;
             return {
                 id: u.id,
@@ -412,8 +413,8 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 approved_hours: secondsToHours(u.approvedSec),
                 pending_hours: secondsToHours(u.pendingSec),
                 rejected_hours: secondsToHours(u.rejectedSec),
-                efficiency,
-                status: efficiency >= 85 ? 'On Track' : 'Needs Attention'
+                expectedHoursAttainment,
+                status: belowMinimum ? 'Below Expected' : 'Target Met'
             };
         }).sort((a, b) => parseFloat(b.totalHours) - parseFloat(a.totalHours));
 
@@ -506,12 +507,12 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             metrics: {
                 totalHours: formatHoursMetric(totalHours),
                 activeProjects: activeProjectsCount,
-                avgProductivity,
+                billableUtilization,
                 billableAmount: billableAmount.toFixed(2),
                 trends: {
                     hours: pctChange(totalHours, prevHours),
                     projects: pctChange(activeProjectsCount, prevProjectIds.size),
-                    productivity: pctChange(avgProductivity, prevAvgProd),
+                    billableUtilization: pctChange(billableUtilization, prevBillableUtilization),
                     billable: pctChange(billableAmount, prevBillable),
                 }
             },

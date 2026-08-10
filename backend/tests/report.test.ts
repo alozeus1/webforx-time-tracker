@@ -144,6 +144,119 @@ describe('GET /api/v1/reports/export', () => {
 });
 
 describe('GET /api/v1/reports/dashboard', () => {
+    it('reports billable utilization, expected-hours attainment, and honest base-zero trends', async () => {
+        (prisma.timeEntry.findMany as jest.Mock)
+            .mockReset()
+            .mockResolvedValueOnce([
+                {
+                    duration: 30 * 3600,
+                    is_billable: true,
+                    status: 'approved',
+                    start_time: new Date(),
+                    user: {
+                        id: 'user-employee',
+                        first_name: 'Emery',
+                        last_name: 'Employee',
+                        hourly_rate: 100,
+                        team_name: 'Delivery',
+                        employment_type: 'employee',
+                        min_weekly_hours: 40,
+                        role: { name: 'Employee' },
+                    },
+                    project: { id: 'project-1', name: 'Delivery' },
+                },
+                {
+                    duration: 10 * 3600,
+                    is_billable: false,
+                    status: 'pending',
+                    start_time: new Date(),
+                    user: {
+                        id: 'user-employee',
+                        first_name: 'Emery',
+                        last_name: 'Employee',
+                        hourly_rate: 100,
+                        team_name: 'Delivery',
+                        employment_type: 'employee',
+                        min_weekly_hours: 40,
+                        role: { name: 'Employee' },
+                    },
+                    project: { id: 'project-1', name: 'Delivery' },
+                },
+                {
+                    duration: 5 * 3600,
+                    is_billable: true,
+                    status: 'approved',
+                    start_time: new Date(),
+                    user: {
+                        id: 'user-intern',
+                        first_name: 'Indigo',
+                        last_name: 'Intern',
+                        hourly_rate: 20,
+                        team_name: 'Delivery',
+                        employment_type: 'intern',
+                        min_weekly_hours: 10,
+                        role: { name: 'Employee' },
+                    },
+                    project: { id: 'project-1', name: 'Delivery' },
+                },
+            ])
+            .mockResolvedValueOnce([]);
+        (prisma.project.count as jest.Mock).mockResolvedValue(2);
+
+        const res = await request(app)
+            .get('/api/v1/reports/dashboard?range=7d')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.metrics).toMatchObject({
+            totalHours: '45.0',
+            billableUtilization: 78,
+            trends: {
+                hours: 'New',
+                projects: 'New',
+                billableUtilization: 'New',
+                billable: 'New',
+            },
+        });
+        expect(res.body.metrics.avgProductivity).toBeUndefined();
+        expect(res.body.userBreakdown).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                id: 'user-employee',
+                expectedHours: 40,
+                expectedHoursAttainment: 100,
+                belowMinimum: false,
+                status: 'Target Met',
+            }),
+            expect.objectContaining({
+                id: 'user-intern',
+                expectedHours: 10,
+                expectedHoursAttainment: 50,
+                belowMinimum: true,
+                status: 'Below Expected',
+            }),
+        ]));
+        expect(res.body.userBreakdown[0].efficiency).toBeUndefined();
+    });
+
+    it('uses No prior data when both report periods are empty', async () => {
+        (prisma.timeEntry.findMany as jest.Mock)
+            .mockReset()
+            .mockResolvedValueOnce([])
+            .mockResolvedValueOnce([]);
+
+        const res = await request(app)
+            .get('/api/v1/reports/dashboard?range=7d')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.body.metrics.trends).toEqual({
+            hours: 'No prior data',
+            projects: 'No prior data',
+            billableUtilization: 'No prior data',
+            billable: 'No prior data',
+        });
+    });
+
     it('filters manager analytics by team name when no individual user is selected', async () => {
         (prisma.timeEntry.findMany as jest.Mock)
             .mockResolvedValueOnce([])

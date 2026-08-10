@@ -8,12 +8,12 @@ const mockAnalytics = {
     metrics: {
         totalHours: '42.5',
         activeProjects: 2,
-        avgProductivity: 85,
+        billableUtilization: 85,
         billableAmount: '5,300',
         trends: {
             hours: '+12%',
             projects: '+1',
-            productivity: '+5%',
+            billableUtilization: '+5%',
             billable: '+8%',
         },
     },
@@ -27,7 +27,8 @@ const mockAnalytics = {
     ],
     userBreakdown: [
         { id: 'user-1', name: 'Test User', role: 'Employee', initials: 'TU',
-          primaryProject: 'EDUSUC', totalHours: '42.5', efficiency: 85, status: 'active' },
+          primaryProject: 'EDUSUC', totalHours: '42.5', expectedHours: 40,
+          expectedHoursAttainment: 106, status: 'Target Met' },
     ],
 };
 
@@ -113,6 +114,16 @@ test.describe('Reports Page', () => {
         } else {
             await expect(pageWrapper).toBeVisible();
         }
+    });
+
+    test('labels billable utilization and expected-hours attainment truthfully', async ({ page }) => {
+        await expect(page.getByText('Billable Utilization')).toBeVisible();
+        await expect(page.getByText('Share of logged time marked billable')).toBeVisible();
+        await expect(page.getByText('Expected Hours Attainment')).toBeVisible();
+        await expect(page.getByText('106%')).toBeVisible();
+        await expect(page.getByText('of 40.0h expected')).toBeVisible();
+        await expect(page.getByText('Avg. Productivity')).toHaveCount(0);
+        await expect(page.getByText('Efficiency', { exact: true })).toHaveCount(0);
     });
 
     test('export button or export-related control is present on reports page', async ({ page }) => {
