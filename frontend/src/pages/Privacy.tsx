@@ -38,7 +38,7 @@ const Privacy: React.FC = () => {
           <section>
             <h2>Overview</h2>
             <p>
-              Web Forx Time Tracker is designed for internal workforce operations. This policy describes how
+              Web Forx Time Tracker, operated by Web Forx Global Inc., is designed for internal workforce operations. This policy describes how
               account information, time records, and operational telemetry are processed to deliver secure
               time tracking, approvals, and reporting for authorized organizations.
             </p>

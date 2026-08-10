@@ -24,14 +24,6 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/dashboard.png",
-      "sizes": "1280x800",
-      "type": "image/png",
-      "label": "Dashboard overview"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Start Timer",
