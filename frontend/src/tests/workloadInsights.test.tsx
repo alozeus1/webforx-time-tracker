@@ -24,13 +24,17 @@ const makeWellbeing = (overrides: Partial<UserWellbeingSummary> = {}): UserWellb
 });
 
 describe('WorkloadInsights', () => {
-    it('renders a burnout banner and alert history for high-risk users', () => {
+    it('renders transparent workload and recovery wording for high logged hours', () => {
         render(<WorkloadInsights wellbeing={makeWellbeing()} />);
 
         expect(screen.getByText('Your recent workload is too high')).toBeInTheDocument();
-        expect(screen.getByText('Burnout Monitor')).toBeInTheDocument();
+        expect(screen.getByText('Workload & Recovery')).toBeInTheDocument();
+        expect(screen.getByText('High Workload')).toBeInTheDocument();
         expect(screen.getByText('Recent Workload Alerts')).toBeInTheDocument();
-        expect(screen.getByText(/Burnout Alert: You have logged 52.4 hours/i)).toBeInTheDocument();
+        expect(screen.getByText(/Workload alert: You have logged 52.4 hours/i)).toBeInTheDocument();
+        expect(screen.getByText(/planning threshold, not a medical assessment/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Burnout Monitor/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Burnout Alert:/i)).not.toBeInTheDocument();
     });
 
     it('shows a balanced state without the warning banner when workload is healthy', () => {
