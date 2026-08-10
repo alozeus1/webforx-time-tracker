@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, getActiveTimer, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries } from '../controllers/timeEntryController';
+import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, getActiveTimer, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries, purgeResolvedCorrectionsController } from '../controllers/timeEntryController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -24,6 +24,7 @@ router.post('/corrections', createCorrectionRequest);
 // NOTE: router.post('/correction', ...) was a typo/duplicate — removed.
 router.get('/corrections/review', requireRole(['Manager', 'Admin']), getCorrectionRequestsForReview);
 router.post('/corrections/:correctionId/review', requireRole(['Manager', 'Admin']), reviewCorrectionRequest);
+router.post('/corrections/purge-resolved', requireRole(['Manager', 'Admin']), purgeResolvedCorrectionsController);
 
 // Manager/Admin endpoints
 router.get('/approvals', requireRole(['Manager', 'Admin']), getPendingTimesheets);

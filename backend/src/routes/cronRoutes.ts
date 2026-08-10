@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { runIdleChecks, runWorkloadChecks, runDailyReport, runScheduledReports, resetDemoData, runRetention } from '../controllers/cronController';
+import { runIdleChecks, runWorkloadChecks, runDailyReport, runScheduledReports, resetDemoData, runRetention, runCorrectionRetention } from '../controllers/cronController';
 import { env } from '../config/env';
 
 const router = Router();
@@ -32,6 +32,8 @@ router.get('/workload', runWorkloadChecks);
 router.get('/daily', runDailyReport);
 router.get('/scheduled-reports', runScheduledReports);
 router.get('/retention', runRetention);
+router.get('/correction-retention', runCorrectionRetention);
+router.post('/correction-retention', runCorrectionRetention);
 router.get('/reset-demo', resetDemoData);
 router.post('/reset-demo', resetDemoData);
 

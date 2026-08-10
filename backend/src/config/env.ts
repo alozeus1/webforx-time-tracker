@@ -51,6 +51,11 @@ export const env = {
         const parsed = Number.parseInt(process.env.DATA_RETENTION_DAYS?.trim() || '', 10);
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 90;
     })(),
+    // Resolved timer correction requests older than this are eligible for purge.
+    correctionRetentionDays: (() => {
+        const parsed = Number.parseInt(process.env.CORRECTION_RETENTION_DAYS?.trim() || '', 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+    })(),
     corsOrigin: process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173',
     frontendUrl: process.env.FRONTEND_URL?.trim() || process.env.CORS_ORIGIN?.trim() || 'http://localhost:5173',
     enableBackgroundWorkers: process.env.ENABLE_BACKGROUND_WORKERS !== 'false',

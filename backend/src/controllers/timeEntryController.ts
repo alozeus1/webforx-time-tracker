@@ -12,6 +12,7 @@ import { applyRounding } from '../services/roundingService';
 import { assertProjectBelongsToOrganization, assertTagsBelongToOrganization, normalizeIdList } from '../services/tenantOwnershipService';
 import { verifyToken } from '../services/tokenService';
 import { evaluateClockInGeofence, normalizeTimerLocation } from '../services/geofenceService';
+import { getCorrectionRequestsForReview as getCorrectionRequestsForReviewService, purgeResolvedCorrections } from '../services/correctionRetentionService';
 
 type GuardrailActiveTimer = {
     id: string;
@@ -694,18 +695,33 @@ export const getMyCorrectionRequests = async (req: AuthRequest, res: Response): 
 
 export const getCorrectionRequestsForReview = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const corrections = await prisma.timerCorrectionRequest.findMany({
-            where: { organization_id: req.user!.organization_id },
-            orderBy: { created_at: 'desc' },
-            take: 200,
-            include: {
-                user: { select: { id: true, email: true, first_name: true, last_name: true } },
-            },
+        const status = typeof req.query.status === 'string' ? req.query.status : 'all';
+        const lookbackDays = Number.parseInt(String(req.query.lookbackDays ?? ''), 10);
+        const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit ?? ''), 10) || 200, 1), 500);
+        const offset = Math.max(Number.parseInt(String(req.query.offset ?? ''), 10) || 0, 0);
+
+        const corrections = await getCorrectionRequestsForReviewService({
+            organizationId: req.user!.organization_id,
+            status,
+            lookbackDays: Number.isFinite(lookbackDays) && lookbackDays > 0 ? lookbackDays : undefined,
+            limit,
+            offset,
         });
+
         res.status(200).json({ corrections });
     } catch (error) {
         console.error('Failed to list correction requests for review:', error);
         res.status(500).json({ message: 'Internal server error while loading correction requests' });
+    }
+};
+
+export const purgeResolvedCorrectionsController = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const deleted = await purgeResolvedCorrections(req.user!.organization_id, env.correctionRetentionDays);
+        res.status(200).json({ deleted });
+    } catch (error) {
+        console.error('Failed to purge resolved corrections:', error);
+        res.status(500).json({ message: 'Internal server error while purging resolved corrections' });
     }
 };
 
