@@ -14,7 +14,6 @@ const PwaStatus: React.FC = () => {
 
         void registerPwa({
             onUpdateReady: setUpdate,
-            onControllerChange: () => window.location.reload(),
             onRegistrationError: (error) => console.warn('Service worker registration failed', error),
         });
 
@@ -39,7 +38,7 @@ const PwaStatus: React.FC = () => {
                 <button
                     type="button"
                     className="rounded-md bg-blue-700 px-3 py-1 font-semibold text-white"
-                    onClick={() => activateWaitingServiceWorker(update)}
+                    onClick={() => activateWaitingServiceWorker(update, () => window.location.reload())}
                 >
                     Reload to update
                 </button>

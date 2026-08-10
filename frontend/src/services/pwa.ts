@@ -2,13 +2,11 @@ export const SERVICE_WORKER_PATH = '/sw.js';
 
 export interface PwaRegistrationHandlers {
     onUpdateReady: (registration: ServiceWorkerRegistration) => void;
-    onControllerChange: () => void;
     onRegistrationError?: (error: unknown) => void;
 }
 
 export const registerPwa = async ({
     onUpdateReady,
-    onControllerChange,
     onRegistrationError,
 }: PwaRegistrationHandlers): Promise<ServiceWorkerRegistration | null> => {
     if (!('serviceWorker' in navigator)) return null;
@@ -31,7 +29,6 @@ export const registerPwa = async ({
             });
         });
 
-        navigator.serviceWorker.addEventListener('controllerchange', onControllerChange, { once: true });
         return registration;
     } catch (error) {
         onRegistrationError?.(error);
@@ -39,6 +36,11 @@ export const registerPwa = async ({
     }
 };
 
-export const activateWaitingServiceWorker = (registration: ServiceWorkerRegistration): void => {
-    registration.waiting?.postMessage({ type: 'SKIP_WAITING' });
+export const activateWaitingServiceWorker = (
+    registration: ServiceWorkerRegistration,
+    onControllerChange: () => void,
+): void => {
+    if (!registration.waiting) return;
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange, { once: true });
+    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
 };
