@@ -211,14 +211,18 @@ export interface TaskSourceSummary {
 
 export interface AnalyticsMetrics {
     totalHours: string;
-    activeProjects: number;
+    projectsWorked: number;
+    /** @deprecated Use projectsWorked. */
+    activeProjects?: number;
     billableUtilization: number;
     /** @deprecated Use billableUtilization. */
     avgProductivity?: number;
     billableAmount: string;
     trends: {
         hours: string;
-        projects: string;
+        projectsWorked: string;
+        /** @deprecated Use projectsWorked. */
+        projects?: string;
         billableUtilization: string;
         /** @deprecated Use billableUtilization. */
         productivity?: string;

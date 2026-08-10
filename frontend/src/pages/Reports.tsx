@@ -551,16 +551,16 @@ const Reports: React.FC = () => {
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Active Projects</p>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Projects Worked</p>
                                     <span
-                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.projects)}`}
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.projectsWorked)}`}
                                         title="Compared to previous period"
                                     >
-                                        {analytics?.metrics.trends.projects}
+                                        {analytics?.metrics.trends.projectsWorked}
                                     </span>
                                 </div>
-                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.activeProjects}</h3>
-                                <p className="text-xs text-slate-400 mt-1">Currently active projects</p>
+                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.projectsWorked}</h3>
+                                <p className="text-xs text-slate-400 mt-1">Distinct projects with logged time</p>
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">

@@ -7,11 +7,13 @@ const MANAGER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJtZ3It
 const mockAnalytics = {
     metrics: {
         totalHours: '42.5',
+        projectsWorked: 2,
         activeProjects: 2,
         billableUtilization: 85,
         billableAmount: '5,300',
         trends: {
             hours: '+12%',
+            projectsWorked: '+1',
             projects: '+1',
             billableUtilization: '+5%',
             billable: '+8%',
@@ -119,6 +121,8 @@ test.describe('Reports Page', () => {
     test('labels billable utilization and expected-hours attainment truthfully', async ({ page }) => {
         await expect(page.getByText('Billable Utilization')).toBeVisible();
         await expect(page.getByText('Share of logged time marked billable')).toBeVisible();
+        await expect(page.getByText('Projects Worked')).toBeVisible();
+        await expect(page.getByText('Distinct projects with logged time')).toBeVisible();
         await expect(page.getByText('Expected Hours Attainment')).toBeVisible();
         await expect(page.getByText('106%')).toBeVisible();
         await expect(page.getByText('of 40.0h expected')).toBeVisible();

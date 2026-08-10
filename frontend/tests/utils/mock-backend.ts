@@ -464,11 +464,13 @@ export const installStableApiMocks = async (page: Page, options: MockOptions = {
       return respond(200, {
         metrics: {
           totalHours: '12.5',
+          projectsWorked: 2,
           activeProjects: 2,
           billableUtilization: 84,
           billableAmount: '1200',
           trends: {
             hours: '+8%',
+            projectsWorked: '+1',
             projects: '+1',
             billableUtilization: '+3%',
             billable: '+6%',

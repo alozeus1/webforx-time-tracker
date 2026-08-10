@@ -220,7 +220,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             return;
         }
 
-        const { whereClause, now, startDate, selectedProjectId, canViewAll, selectedUserId, selectedTeamName } = buildReportWhereClause({ req, includeDateRange: true });
+        const { whereClause, now, startDate, canViewAll, selectedUserId, selectedTeamName } = buildReportWhereClause({ req, includeDateRange: true });
 
         // Fetch entries
         const entries = await prisma.timeEntry.findMany({
@@ -251,16 +251,13 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
 
         entries.forEach(entry => {
             totalDurationSec += entry.duration;
-            const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
-            billableAmount += (entry.duration / 3600) * rate;
+            if (entry.is_billable !== false) {
+                const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
+                billableAmount += (entry.duration / 3600) * rate;
+            }
         });
 
         const totalHours = totalDurationSec / 3600;
-        const activeProjectsCount = await prisma.project.count({
-            where: selectedProjectId
-                ? { id: selectedProjectId, is_active: true, organization_id: req.user!.organization_id }
-                : { is_active: true, organization_id: req.user!.organization_id },
-        });
         let billableSeconds = 0;
         entries.forEach(entry => {
             if (entry.is_billable !== false) {
@@ -286,6 +283,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 percentage: totalHours > 0 ? Math.round((p.hours / totalHours) * 100) : 0
             }))
             .sort((a, b) => b.hours - a.hours);
+        const projectsWorked = projectHoursMap.size;
 
         // Compute Hours Trend (Weekly buckets over the period, including zero-hour weeks)
         const totalDays = Math.max(Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)), 1);
@@ -333,9 +331,9 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         prevEntries.forEach(entry => {
             prevTotalSec += entry.duration;
             if (entry.project_id) prevProjectIds.add(entry.project_id);
-            const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
-            prevBillable += (entry.duration / 3600) * rate;
             if (entry.is_billable !== false) {
+                const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
+                prevBillable += (entry.duration / 3600) * rate;
                 prevBillableSec += entry.duration;
             }
         });
@@ -509,7 +507,10 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         res.status(200).json({
             metrics: {
                 totalHours: formatHoursMetric(totalHours),
-                activeProjects: activeProjectsCount,
+                projectsWorked,
+                // Deprecated compatibility alias. Both values now use the same
+                // selected-period definition so the legacy trend remains valid.
+                activeProjects: projectsWorked,
                 billableUtilization,
                 // Deprecated compatibility alias. This value has always represented
                 // billable utilization, despite the old productivity name.
@@ -517,7 +518,8 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 billableAmount: billableAmount.toFixed(2),
                 trends: {
                     hours: pctChange(totalHours, prevHours),
-                    projects: pctChange(activeProjectsCount, prevProjectIds.size),
+                    projectsWorked: pctChange(projectsWorked, prevProjectIds.size),
+                    projects: pctChange(projectsWorked, prevProjectIds.size),
                     billableUtilization: pctChange(billableUtilization, prevBillableUtilization),
                     productivity: pctChange(billableUtilization, prevBillableUtilization),
                     billable: pctChange(billableAmount, prevBillable),

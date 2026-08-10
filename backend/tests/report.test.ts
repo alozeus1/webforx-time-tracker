@@ -210,15 +210,21 @@ describe('GET /api/v1/reports/dashboard', () => {
         expect(res.status).toBe(200);
         expect(res.body.metrics).toMatchObject({
             totalHours: '45.0',
+            projectsWorked: 1,
+            activeProjects: 1,
             billableUtilization: 78,
+            billableAmount: '3100.00',
             trends: {
                 hours: 'New',
+                projectsWorked: 'New',
                 projects: 'New',
                 billableUtilization: 'New',
                 billable: 'New',
             },
         });
         expect(res.body.metrics.avgProductivity).toBe(res.body.metrics.billableUtilization);
+        expect(res.body.metrics.activeProjects).toBe(res.body.metrics.projectsWorked);
+        expect(res.body.metrics.trends.projects).toBe(res.body.metrics.trends.projectsWorked);
         expect(res.body.metrics.trends.productivity).toBe(res.body.metrics.trends.billableUtilization);
         expect(res.body.userBreakdown).toEqual(expect.arrayContaining([
             expect.objectContaining({
@@ -254,6 +260,7 @@ describe('GET /api/v1/reports/dashboard', () => {
         expect(res.status).toBe(200);
         expect(res.body.metrics.trends).toEqual({
             hours: 'No prior data',
+            projectsWorked: 'No prior data',
             projects: 'No prior data',
             billableUtilization: 'No prior data',
             productivity: 'No prior data',
