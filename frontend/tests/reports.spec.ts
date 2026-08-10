@@ -46,8 +46,10 @@ const injectSession = async (page: import('@playwright/test').Page, token = MOCK
 };
 
 const mockReportsAPIs = async (page: import('@playwright/test').Page) => {
-    // Use a single smart catch-all — glob patterns don't intercept cross-origin requests
-    await page.route('http://localhost:5005/**', (route) => {
+    // Match the API path rather than a specific loopback hostname. Preview
+    // verification may run the frontend on localhost or 127.0.0.1, and the app
+    // deliberately derives the matching local API origin from that hostname.
+    await page.route('**/api/v1/**', (route) => {
         const url = route.request().url();
 
         if (url.includes('/reports/dashboard') || url.includes('/reports/analytics')) {
