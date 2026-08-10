@@ -16,6 +16,7 @@ import { usePageMetadata } from '../hooks/usePageMetadata';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from './CommandPalette';
+import PwaStatus from './PwaStatus';
 
 interface PausedTimerState {
     taskDescription: string;
@@ -219,6 +220,7 @@ const Layout: React.FC = () => {
 
             <main className="main-content">
                 <Navbar onMenuClick={() => setSidebarOpen(true)} />
+                <PwaStatus />
 
                 {isDemoSession && (
                     <div role="status" style={{

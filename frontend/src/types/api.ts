@@ -200,13 +200,14 @@ export interface CalendarStatus {
 export interface IntegrationSummary {
     type: string;
     is_active: boolean;
+    readiness?: 'live' | 'configured' | 'error' | 'preview';
     summary?: Record<string, string>;
 }
 
 export interface TaskSourceSummary {
     type: string;
     label: string;
-    readiness: 'live' | 'configured' | 'error';
+    readiness: 'live' | 'configured' | 'error' | 'preview';
 }
 
 export interface AnalyticsMetrics {

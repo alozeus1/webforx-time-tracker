@@ -3,6 +3,13 @@ import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
 import { decryptConfig, encryptConfig } from '../utils/crypto';
 import { publicHttpsFetch, validatePublicHttpsUrl } from '../utils/outboundHttp';
+import {
+    fetchGitHubCommits,
+    GitHubConfig,
+    GitHubIntegrationError,
+    normalizeGitHubRepository,
+    validateGitHubToken,
+} from '../services/githubIntegrationService';
 
 type IntegrationType = 'taiga' | 'mattermost' | 'quickbooks' | 'github' | 'jira' | 'linear' | 'asana' | 'clickup' | 'trello';
 
@@ -13,11 +20,6 @@ interface TaigaConfig {
 
 interface MattermostConfig {
     webhookUrl: string;
-}
-
-interface GithubConfig {
-    repository: string;
-    personalAccessToken: string;
 }
 
 interface JiraConfig {
@@ -50,16 +52,45 @@ interface TrelloConfig {
 
 export const getGithubCommits = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        // In a real app, uses a stored GitHub PAT from the integrations table to fetch user's recent commits.
-        const mockCommits = [
-            { id: 'c_1xyz', message: 'fix: resolving strict mode warnings in Playwright', repo: 'webforxtech/time-tracker', timestamp: new Date().toISOString() },
-            { id: 'c_2abc', message: 'feat: connecting calendar mock controller', repo: 'webforxtech/time-tracker', timestamp: new Date(Date.now() - 3600000).toISOString() }
-        ];
+        const integration = await prisma.integration.findFirst({
+            where: {
+                type: 'github',
+                organization_id: req.user!.organization_id,
+                is_active: true,
+            },
+        });
+        if (!integration) {
+            res.status(404).json({ message: 'GitHub integration is not configured', readiness: 'preview', commits: [] });
+            return;
+        }
 
-        res.status(200).json({ commits: mockCommits });
+        const commits = await fetchGitHubCommits(decryptConfig<GitHubConfig>(integration.config));
+        res.status(200).json({ commits, readiness: 'live' });
     } catch (error) {
-        res.status(500).json({ message: 'Internal server error while syncing GitHub' });
+        sendGitHubError(res, error);
     }
+};
+
+const sendGitHubError = (res: Response, error: unknown): void => {
+    if (error instanceof GitHubIntegrationError) {
+        const status = error.code === 'rate_limited'
+            ? 429
+            : error.code === 'not_found'
+                ? 404
+                : error.code === 'invalid_config'
+                    ? 400
+                    : 502;
+        res.status(status).json({
+            message: error.message,
+            code: `GITHUB_${error.code.toUpperCase()}`,
+            readiness: 'error',
+            ...(error.retryAt ? { retryAt: error.retryAt } : {}),
+        });
+        return;
+    }
+
+    console.error('GitHub integration request failed:', error instanceof Error ? error.message : 'Unknown error');
+    res.status(500).json({ message: 'GitHub integration configuration could not be loaded', readiness: 'error' });
 };
 
 export const getTaskSources = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -76,39 +107,39 @@ export const getTaskSources = async (req: AuthRequest, res: Response): Promise<v
         const sources = integrations.map((integration) => {
             try {
                 if (integration.type === 'github') {
-                    const config = decryptConfig<GithubConfig>(integration.config);
-                    return { type: integration.type, label: config.repository, readiness: 'live' };
+                    const config = decryptConfig<GitHubConfig>(integration.config);
+                    return { type: integration.type, label: config.repository, readiness: 'configured' };
                 }
 
                 if (integration.type === 'jira') {
                     const config = decryptConfig<JiraConfig>(integration.config);
-                    return { type: integration.type, label: `${config.projectKey} @ ${new URL(config.baseUrl).host}`, readiness: 'configured' };
+                    return { type: integration.type, label: `${config.projectKey} @ ${new URL(config.baseUrl).host}`, readiness: 'preview' };
                 }
 
                 if (integration.type === 'linear') {
                     const config = decryptConfig<LinearConfig>(integration.config);
-                    return { type: integration.type, label: config.teamName, readiness: 'configured' };
+                    return { type: integration.type, label: config.teamName, readiness: 'preview' };
                 }
 
                 if (integration.type === 'asana') {
                     const config = decryptConfig<AsanaConfig>(integration.config);
-                    return { type: integration.type, label: config.workspace, readiness: 'configured' };
+                    return { type: integration.type, label: config.workspace, readiness: 'preview' };
                 }
 
                 if (integration.type === 'clickup') {
                     const config = decryptConfig<ClickUpConfig>(integration.config);
-                    return { type: integration.type, label: config.workspaceId, readiness: 'configured' };
+                    return { type: integration.type, label: config.workspaceId, readiness: 'preview' };
                 }
 
                 if (integration.type === 'trello') {
                     const config = decryptConfig<TrelloConfig>(integration.config);
-                    return { type: integration.type, label: config.boardId, readiness: 'configured' };
+                    return { type: integration.type, label: config.boardId, readiness: 'preview' };
                 }
             } catch (error) {
                 return { type: integration.type, label: 'Configuration unreadable', readiness: 'error' };
             }
 
-            return { type: integration.type, label: integration.type, readiness: 'configured' };
+            return { type: integration.type, label: integration.type, readiness: 'preview' };
         });
 
         res.status(200).json({ sources });
@@ -140,7 +171,7 @@ export const listIntegrations = async (req: AuthRequest, res: Response): Promise
                 }
 
                 if (integration.type === 'github') {
-                    const config = decryptConfig<GithubConfig>(integration.config);
+                    const config = decryptConfig<GitHubConfig>(integration.config);
                     summary = { repository: config.repository };
                 }
 
@@ -175,6 +206,9 @@ export const listIntegrations = async (req: AuthRequest, res: Response): Promise
             return {
                 type: integration.type,
                 is_active: integration.is_active,
+                readiness: integration.type === 'github'
+                    ? 'configured'
+                    : (['jira', 'linear', 'asana', 'clickup', 'trello'].includes(integration.type) ? 'preview' : 'configured'),
                 summary,
             };
         });
@@ -224,6 +258,13 @@ export const saveIntegration = async (req: AuthRequest, res: Response): Promise<
         if (type === 'github') {
             if (!config.repository?.trim() || !config.personalAccessToken?.trim()) {
                 res.status(400).json({ message: 'GitHub repository and personal access token are required' });
+                return;
+            }
+            try {
+                config.repository = normalizeGitHubRepository(config.repository);
+                config.personalAccessToken = validateGitHubToken(config.personalAccessToken);
+            } catch (error) {
+                res.status(400).json({ message: error instanceof Error ? error.message : 'GitHub repository is invalid' });
                 return;
             }
         }
@@ -358,7 +399,35 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
             return;
         }
 
-        if (['github', 'jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
+        if (type === 'github') {
+            try {
+                const config = decryptConfig<GitHubConfig>(integration.config);
+                await fetchGitHubCommits(config, { limit: 1 });
+
+                if (req.user?.userId) {
+                    try {
+                        await prisma.auditLog.create({
+                            data: {
+                                user_id: req.user.userId,
+                                organization_id: req.user!.organization_id,
+                                action: 'integration_tested',
+                                resource: 'integration',
+                                metadata: { type: 'github', result: 'live' },
+                            },
+                        });
+                    } catch (auditError) {
+                        console.error('Failed to write github test audit log:', auditError);
+                    }
+                }
+
+                res.status(200).json({ status: 'success', readiness: 'live', message: 'GitHub repository access validated successfully' });
+            } catch (error) {
+                sendGitHubError(res, error);
+            }
+            return;
+        }
+
+        if (['jira', 'linear', 'asana', 'clickup', 'trello'].includes(type)) {
             if (req.user?.userId) {
                 try {
                     await prisma.auditLog.create({
@@ -367,7 +436,7 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
                             organization_id: req.user!.organization_id,
                             action: 'integration_tested',
                             resource: 'integration',
-                            metadata: { type, result: 'configured' },
+                            metadata: { type, result: 'preview' },
                         },
                     });
                 } catch (error) {
@@ -376,8 +445,9 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
             }
 
             res.status(200).json({
-                status: 'success',
-                message: `${type} connector saved and ready for workday suggestions.`,
+                status: 'preview',
+                readiness: 'preview',
+                message: `${type} configuration is stored, but live sync is not implemented yet.`,
             });
             return;
         }
@@ -429,13 +499,8 @@ export const testIntegration = async (req: AuthRequest, res: Response): Promise<
 };
 
 export const syncQuickbooks = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        // In a real app, groups recent approved timesheets and POSTs an invoice to Intuit Quickbooks API
-        const { project_id } = req.body;
-
-        console.log(`[Integration Worker] Mock syncing invoice for project ${project_id} to QuickBooks...`);
-        res.status(200).json({ message: 'Timesheets successfully synced as draft invoices in QuickBooks', status: 'success' });
-    } catch (error) {
-        res.status(500).json({ message: 'Internal server error while syncing QuickBooks' });
-    }
+    res.status(501).json({
+        status: 'not_implemented',
+        message: 'QuickBooks sync is not implemented. No invoice was created.',
+    });
 };

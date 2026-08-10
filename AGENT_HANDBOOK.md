@@ -87,6 +87,15 @@ Background workloads:
 - Burnout tracker.
 - Cron routes protected by `CRON_SECRET` in production.
 
+Integration readiness:
+
+- GitHub commit signals use the tenant's encrypted repository/token configuration and
+  the live GitHub REST API. Use a repository-scoped fine-grained token with Contents read.
+- Jira, Linear, Asana, ClickUp, and Trello configuration surfaces are preview-only; they
+  do not perform live sync.
+- QuickBooks sync is not implemented and fails closed with HTTP 501.
+- Webhook retries are bounded and best-effort; they are not a durable delivery queue.
+
 ## 5. Runtime And Version Constraints
 
 - Node.js: `>=20.19.0 <21 || >=22.12.0`
