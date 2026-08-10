@@ -118,7 +118,8 @@ const Workday: React.FC = () => {
                 }),
                 api.get<CalendarStatus>('/calendar/status').catch(() => ({ data: null })),
                 api.get<{ sources: TaskSourceSummary[] }>('/integrations/task-sources').catch(() => ({ data: { sources: [] } })),
-                api.get<{ commits: Array<{ id: string; message: string; repo: string; timestamp: string }> }>('/integrations/github/commits').catch(() => ({ data: { commits: [] } })),
+                api.get<{ commits: Array<{ id: string; message: string; repo: string; timestamp: string }>; readiness?: TaskSourceSummary['readiness'] }>('/integrations/github/commits')
+                    .catch(() => ({ data: { commits: [], readiness: 'error' as const } })),
             ]);
 
             const entryList = (timersResponse.data.entries || []).filter((entry) => isToday(entry.start_time));
@@ -126,7 +127,12 @@ const Workday: React.FC = () => {
             setProjects(projectsResponse.data || []);
             setWellbeing(wellbeingResponse.data || null);
             setCalendarStatus(calendarStatusResponse.data);
-            setTaskSources(taskSourcesResponse.data.sources || []);
+            const taskSourceList = taskSourcesResponse.data.sources || [];
+            setTaskSources(taskSourceList.map((source) => (
+                source.type === 'github' && githubResponse.data.readiness
+                    ? { ...source, readiness: githubResponse.data.readiness }
+                    : source
+            )));
             setGithubCommits(githubResponse.data.commits || []);
             setSelectedShareProject((previous) => previous || projectsResponse.data?.[0]?.id || '');
 

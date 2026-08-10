@@ -7,10 +7,10 @@ const taskConnectorDefinitions = [
     {
         type: 'github',
         title: 'GitHub',
-        description: 'Turn commits and repos into workday signals.',
+        description: 'Live commit signals. Use a fine-grained token limited to this repository with Contents read access; the token is encrypted and never returned.',
         fields: [
             { key: 'repository', label: 'Repository', placeholder: 'webforxtech/time-tracker' },
-            { key: 'personalAccessToken', label: 'Personal Access Token', placeholder: 'ghp_...' },
+            { key: 'personalAccessToken', label: 'Fine-grained token (Contents: read)', placeholder: 'github_pat_...' },
         ],
     },
     {
@@ -453,9 +453,9 @@ const Integrations: React.FC = () => {
                                                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{connector.description}</p>
                                             </div>
                                             {configuredIntegration?.is_active && (
-                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                                                <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${configuredIntegration.readiness === 'preview' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                     <BadgeCheck size={14} />
-                                                    Configured
+                                                    {configuredIntegration.readiness === 'preview' ? 'Preview only' : 'Configured'}
                                                 </span>
                                             )}
                                         </div>
