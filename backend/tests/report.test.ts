@@ -218,7 +218,8 @@ describe('GET /api/v1/reports/dashboard', () => {
                 billable: 'New',
             },
         });
-        expect(res.body.metrics.avgProductivity).toBeUndefined();
+        expect(res.body.metrics.avgProductivity).toBe(res.body.metrics.billableUtilization);
+        expect(res.body.metrics.trends.productivity).toBe(res.body.metrics.trends.billableUtilization);
         expect(res.body.userBreakdown).toEqual(expect.arrayContaining([
             expect.objectContaining({
                 id: 'user-employee',
@@ -235,7 +236,9 @@ describe('GET /api/v1/reports/dashboard', () => {
                 status: 'Below Expected',
             }),
         ]));
-        expect(res.body.userBreakdown[0].efficiency).toBeUndefined();
+        for (const user of res.body.userBreakdown) {
+            expect(user.efficiency).toBe(user.expectedHoursAttainment);
+        }
     });
 
     it('uses No prior data when both report periods are empty', async () => {
@@ -253,6 +256,7 @@ describe('GET /api/v1/reports/dashboard', () => {
             hours: 'No prior data',
             projects: 'No prior data',
             billableUtilization: 'No prior data',
+            productivity: 'No prior data',
             billable: 'No prior data',
         });
     });

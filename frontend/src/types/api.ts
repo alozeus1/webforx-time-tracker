@@ -213,11 +213,15 @@ export interface AnalyticsMetrics {
     totalHours: string;
     activeProjects: number;
     billableUtilization: number;
+    /** @deprecated Use billableUtilization. */
+    avgProductivity?: number;
     billableAmount: string;
     trends: {
         hours: string;
         projects: string;
         billableUtilization: string;
+        /** @deprecated Use billableUtilization. */
+        productivity?: string;
         billable: string;
     };
 }
@@ -248,6 +252,8 @@ export interface AnalyticsUserBreakdown {
     expectedHours: number;
     belowMinimum: boolean;
     expectedHoursAttainment: number;
+    /** @deprecated Use expectedHoursAttainment. */
+    efficiency?: number;
     status: string;
 }
 

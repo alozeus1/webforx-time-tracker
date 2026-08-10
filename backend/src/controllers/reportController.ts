@@ -414,6 +414,9 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 pending_hours: secondsToHours(u.pendingSec),
                 rejected_hours: secondsToHours(u.rejectedSec),
                 expectedHoursAttainment,
+                // Deprecated compatibility alias. Remove only after every deployed
+                // client consumes expectedHoursAttainment.
+                efficiency: expectedHoursAttainment,
                 status: belowMinimum ? 'Below Expected' : 'Target Met'
             };
         }).sort((a, b) => parseFloat(b.totalHours) - parseFloat(a.totalHours));
@@ -508,11 +511,15 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 totalHours: formatHoursMetric(totalHours),
                 activeProjects: activeProjectsCount,
                 billableUtilization,
+                // Deprecated compatibility alias. This value has always represented
+                // billable utilization, despite the old productivity name.
+                avgProductivity: billableUtilization,
                 billableAmount: billableAmount.toFixed(2),
                 trends: {
                     hours: pctChange(totalHours, prevHours),
                     projects: pctChange(activeProjectsCount, prevProjectIds.size),
                     billableUtilization: pctChange(billableUtilization, prevBillableUtilization),
+                    productivity: pctChange(billableUtilization, prevBillableUtilization),
                     billable: pctChange(billableAmount, prevBillable),
                 }
             },
