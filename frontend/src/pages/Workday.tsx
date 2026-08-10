@@ -560,7 +560,7 @@ const Workday: React.FC = () => {
 
                         {wellbeing && (
                             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Burnout & Capacity Forecasting</p>
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Workload & Recovery Forecasting</p>
                                 <h2 className="mt-1 text-lg font-black text-slate-900">Two-Week Load Outlook</h2>
                                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -573,8 +573,8 @@ const Workday: React.FC = () => {
                                     </div>
                                 </div>
                                 <p className="mt-4 text-sm text-slate-600">
-                                    Current status: <span className="font-semibold text-slate-900">{wellbeing.status.replace(/_/g, ' ')}</span>.
-                                    {wellbeing.hoursUntilBurnout > 0 ? ` About ${wellbeing.hoursUntilBurnout.toFixed(1)}h remain before the burnout threshold.` : ' You are already above the burnout threshold.'}
+                                    Current status: <span className="font-semibold text-slate-900">{{ balanced: 'balanced', approaching_burnout: 'recovery recommended', burnout_risk: 'high workload' }[wellbeing.status]}</span>.
+                                    {wellbeing.hoursUntilBurnout > 0 ? ` About ${wellbeing.hoursUntilBurnout.toFixed(1)}h remain before the workload alert threshold.` : ' Logged hours are already above the workload alert threshold.'}
                                 </p>
                             </div>
                         )}

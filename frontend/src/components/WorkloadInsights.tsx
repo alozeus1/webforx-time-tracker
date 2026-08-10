@@ -18,7 +18,7 @@ const statusConfig: Record<UserWellbeingSummary['status'], {
         bannerMessage: (wellbeing) => `You have logged ${wellbeing.sevenDayHours.toFixed(1)}h in the last 7 days.`,
     },
     approaching_burnout: {
-        label: 'Approaching Burnout',
+        label: 'Recovery Recommended',
         chipClass: 'bg-amber-100 text-amber-700',
         panelClass: 'border-amber-200 bg-amber-50',
         accentClass: 'text-amber-700',
@@ -27,7 +27,7 @@ const statusConfig: Record<UserWellbeingSummary['status'], {
             `You have logged ${wellbeing.sevenDayHours.toFixed(1)}h in the last 7 days. Try to protect recovery time before you cross ${wellbeing.burnoutThresholdHours}h.`,
     },
     burnout_risk: {
-        label: 'Burnout Risk',
+        label: 'High Workload',
         chipClass: 'bg-rose-100 text-rose-700',
         panelClass: 'border-rose-200 bg-rose-50',
         accentClass: 'text-rose-700',
@@ -38,9 +38,12 @@ const statusConfig: Record<UserWellbeingSummary['status'], {
 };
 
 const alertLabelMap: Record<string, string> = {
-    burnout_alert: 'Burnout alert',
+    burnout_alert: 'Workload alert',
     overtime_alert: 'Weekly limit alert',
 };
+
+const formatAlertMessage = (message: string): string =>
+    message.replace(/^Burnout Alert:/i, 'Workload alert:');
 
 interface WorkloadInsightsProps {
     wellbeing: UserWellbeingSummary;
@@ -72,8 +75,8 @@ const WorkloadInsights: React.FC<WorkloadInsightsProps> = ({ wellbeing }) => {
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Workload & Recovery</p>
-                            <h2 className="mt-1 text-lg font-black text-slate-900">Burnout Monitor</h2>
+                            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Logged Hours</p>
+                            <h2 className="mt-1 text-lg font-black text-slate-900">Workload & Recovery</h2>
                         </div>
                         <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold ${config.chipClass}`}>
                             {config.label}
@@ -99,12 +102,12 @@ const WorkloadInsights: React.FC<WorkloadInsightsProps> = ({ wellbeing }) => {
 
                     <div className="mt-5 space-y-2 text-sm text-slate-600">
                         <p>
-                            Burnout alerts start at <span className="font-semibold text-slate-900">{wellbeing.burnoutThresholdHours}h</span> logged in 7 days.
+                            Workload alerts start at <span className="font-semibold text-slate-900">{wellbeing.burnoutThresholdHours}h</span> logged in 7 days. This is a planning threshold, not a medical assessment.
                         </p>
                         <p>
                             {wellbeing.status === 'burnout_risk'
-                                ? 'You are already above the threshold.'
-                                : `${wellbeing.hoursUntilBurnout.toFixed(1)}h remaining before the burnout threshold.`}
+                                ? 'Logged hours are already above the alert threshold.'
+                                : `${wellbeing.hoursUntilBurnout.toFixed(1)}h remaining before the workload alert threshold.`}
                         </p>
                     </div>
                 </div>
@@ -120,7 +123,7 @@ const WorkloadInsights: React.FC<WorkloadInsightsProps> = ({ wellbeing }) => {
                     <div className="mt-4 space-y-3">
                         {wellbeing.workloadAlerts.length === 0 && (
                             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                                No recent workload alerts. This history will show burnout and weekly-limit warnings when they happen.
+                                No recent workload alerts. This history will show logged-hours and weekly-limit warnings when they happen.
                             </div>
                         )}
                         {wellbeing.workloadAlerts.map((alert) => (
@@ -133,7 +136,7 @@ const WorkloadInsights: React.FC<WorkloadInsightsProps> = ({ wellbeing }) => {
                                         {new Date(alert.created_at).toLocaleString()}
                                     </span>
                                 </div>
-                                <p className="mt-2 text-sm text-slate-800">{alert.message}</p>
+                                <p className="mt-2 text-sm text-slate-800">{formatAlertMessage(alert.message)}</p>
                             </div>
                         ))}
                     </div>

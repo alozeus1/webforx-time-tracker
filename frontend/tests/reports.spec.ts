@@ -7,13 +7,15 @@ const MANAGER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJtZ3It
 const mockAnalytics = {
     metrics: {
         totalHours: '42.5',
+        projectsWorked: 2,
         activeProjects: 2,
-        avgProductivity: 85,
+        billableUtilization: 85,
         billableAmount: '5,300',
         trends: {
             hours: '+12%',
+            projectsWorked: '+1',
             projects: '+1',
-            productivity: '+5%',
+            billableUtilization: '+5%',
             billable: '+8%',
         },
     },
@@ -27,7 +29,8 @@ const mockAnalytics = {
     ],
     userBreakdown: [
         { id: 'user-1', name: 'Test User', role: 'Employee', initials: 'TU',
-          primaryProject: 'EDUSUC', totalHours: '42.5', efficiency: 85, status: 'active' },
+          primaryProject: 'EDUSUC', totalHours: '42.5', expectedHours: 40,
+          expectedHoursAttainment: 106, status: 'Target Met' },
     ],
 };
 
@@ -43,8 +46,10 @@ const injectSession = async (page: import('@playwright/test').Page, token = MOCK
 };
 
 const mockReportsAPIs = async (page: import('@playwright/test').Page) => {
-    // Use a single smart catch-all — glob patterns don't intercept cross-origin requests
-    await page.route('http://localhost:5005/**', (route) => {
+    // Match the API path rather than a specific loopback hostname. Preview
+    // verification may run the frontend on localhost or 127.0.0.1, and the app
+    // deliberately derives the matching local API origin from that hostname.
+    await page.route('**/api/v1/**', (route) => {
         const url = route.request().url();
 
         if (url.includes('/reports/dashboard') || url.includes('/reports/analytics')) {
@@ -113,6 +118,18 @@ test.describe('Reports Page', () => {
         } else {
             await expect(pageWrapper).toBeVisible();
         }
+    });
+
+    test('labels billable utilization and expected-hours attainment truthfully', async ({ page }) => {
+        await expect(page.getByText('Billable Utilization')).toBeVisible();
+        await expect(page.getByText('Share of logged time marked billable')).toBeVisible();
+        await expect(page.getByText('Projects Worked')).toBeVisible();
+        await expect(page.getByText('Distinct projects with logged time')).toBeVisible();
+        await expect(page.getByText('Expected Hours Attainment')).toBeVisible();
+        await expect(page.getByText('106%')).toBeVisible();
+        await expect(page.getByText('of 40.0h expected')).toBeVisible();
+        await expect(page.getByText('Avg. Productivity')).toHaveCount(0);
+        await expect(page.getByText('Efficiency', { exact: true })).toHaveCount(0);
     });
 
     test('export button or export-related control is present on reports page', async ({ page }) => {

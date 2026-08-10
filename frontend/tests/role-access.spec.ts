@@ -112,6 +112,16 @@ test.describe('Role-Based Access Control', () => {
         await expect(page).toHaveURL(/.*team/, { timeout: 10000 });
     });
 
+    test('manager cannot access the Admin-only /admin page', async ({ page }) => {
+        await page.goto('/login');
+        await injectSession(page, 'Manager');
+        await mockAuthenticatedAPIs(page, 'Manager');
+
+        await page.goto('/admin');
+        await expect(page).toHaveURL(/.*dashboard/, { timeout: 10000 });
+        await expect(page.getByRole('link', { name: 'Admin', exact: true })).toHaveCount(0);
+    });
+
     // ─── Admin access ────────────────────────────────────────────────────────
 
     test('admin can access /admin page', async ({ page }) => {

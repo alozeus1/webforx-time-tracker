@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 // node:fs here compiles under vitest but breaks `tsc -b`, which is what the production
 // build runs. `vite/client` declares `*?raw`, so this needs no tsconfig change.
 import vercelConfigRaw from '../../vercel.json?raw';
+import indexHtmlRaw from '../../index.html?raw';
+import fontImportsRaw from '../fontImports.ts?raw';
+import themeBootstrapRaw from '../../public/theme-bootstrap.js?raw';
 
 /**
  * Guards the CSP that the /schedule page depends on.
@@ -80,6 +83,19 @@ describe('production Content-Security-Policy', () => {
         expect(scriptSrc).not.toContain("'unsafe-inline'");
         expect(scriptSrc).not.toContain("'unsafe-eval'");
         expect(scriptSrc).not.toContain('*');
+    });
+
+    it('loads the theme bootstrap as a same-origin external script', () => {
+        expect(indexHtmlRaw).toContain('<script src="/theme-bootstrap.js"></script>');
+        expect(indexHtmlRaw).not.toMatch(/<script>(?!\s*<\/script>)/i);
+        expect(themeBootstrapRaw).toContain("localStorage.getItem('wfx-theme')");
+    });
+
+    it('bundles application fonts instead of loading Google Fonts', () => {
+        expect(fontImportsRaw).toContain("import '@fontsource/inter/latin-400.css'");
+        expect(fontImportsRaw).toContain("import '@fontsource/manrope/latin-600.css'");
+        expect(fontImportsRaw).not.toContain('fonts.googleapis.com');
+        expect(indexHtmlRaw).not.toContain('fonts.googleapis.com');
     });
 
     it('keeps the other hardening directives intact', () => {

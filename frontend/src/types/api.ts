@@ -211,13 +211,21 @@ export interface TaskSourceSummary {
 
 export interface AnalyticsMetrics {
     totalHours: string;
-    activeProjects: number;
-    avgProductivity: number;
+    projectsWorked: number;
+    /** @deprecated Use projectsWorked. */
+    activeProjects?: number;
+    billableUtilization: number;
+    /** @deprecated Use billableUtilization. */
+    avgProductivity?: number;
     billableAmount: string;
     trends: {
         hours: string;
-        projects: string;
-        productivity: string;
+        projectsWorked: string;
+        /** @deprecated Use projectsWorked. */
+        projects?: string;
+        billableUtilization: string;
+        /** @deprecated Use billableUtilization. */
+        productivity?: string;
         billable: string;
     };
 }
@@ -245,7 +253,11 @@ export interface AnalyticsUserBreakdown {
     approved_hours?: number;
     pending_hours?: number;
     rejected_hours?: number;
-    efficiency: number;
+    expectedHours: number;
+    belowMinimum: boolean;
+    expectedHoursAttainment: number;
+    /** @deprecated Use expectedHoursAttainment. */
+    efficiency?: number;
     status: string;
 }
 
