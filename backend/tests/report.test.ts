@@ -74,6 +74,75 @@ beforeEach(() => {
     (prisma.timerCorrectionRequest.groupBy as jest.Mock).mockResolvedValue([]);
 });
 
+describe('GET /api/v1/reports/export', () => {
+    it('enforces the approved export window and writes spreadsheet-safe CSV', async () => {
+        (prisma.timeEntry.findMany as jest.Mock).mockReset().mockResolvedValue([
+            {
+                start_time: new Date('2026-03-15T05:30:00.000Z'),
+                duration: 5_400,
+                task_description: '=SUM(1,2), "quoted"\nnext line',
+                status: 'approved',
+                user: {
+                    first_name: 'Zoë',
+                    last_name: 'Tester',
+                    email: 'zoe@example.com',
+                    hourly_rate: 100,
+                    team_name: 'Quality, Assurance',
+                },
+                project: { name: 'Client "Alpha"' },
+            },
+        ]);
+
+        const res = await request(app)
+            .get('/api/v1/reports/export')
+            .query({
+                startAt: '2026-03-01T06:00:00.000Z',
+                endAt: '2026-04-01T05:00:00.000Z',
+                timeZone: 'America/Chicago',
+                projectId: 'project-1',
+                queryUserId: 'user-1',
+                teamName: 'all',
+            })
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toContain('text/csv');
+        expect(prisma.timeEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({
+            where: expect.objectContaining({
+                organization_id: 'org-1',
+                project_id: 'project-1',
+                user_id: 'user-1',
+                start_time: {
+                    gte: new Date('2026-03-01T06:00:00.000Z'),
+                    lt: new Date('2026-04-01T05:00:00.000Z'),
+                },
+            }),
+        }));
+        expect(res.text).toContain('"2026-03-15"');
+        expect(res.text).toContain('"Quality, Assurance"');
+        expect(res.text).toContain('"Client ""Alpha"""');
+        expect(res.text).toContain('"\'=SUM(1,2), ""quoted""\nnext line"');
+        expect(res.text).toContain('\r\n');
+    });
+
+    it('rejects incomplete or reversed explicit export windows before querying data', async () => {
+        (prisma.timeEntry.findMany as jest.Mock).mockReset();
+
+        const incomplete = await request(app)
+            .get('/api/v1/reports/export?startAt=2026-03-01T00:00:00.000Z')
+            .set('Authorization', `Bearer ${managerToken}`);
+        const reversed = await request(app)
+            .get('/api/v1/reports/export?startAt=2026-04-01T00:00:00.000Z&endAt=2026-03-01T00:00:00.000Z')
+            .set('Authorization', `Bearer ${managerToken}`);
+
+        expect(incomplete.status).toBe(400);
+        expect(incomplete.body.message).toMatch(/Both startAt and endAt/);
+        expect(reversed.status).toBe(400);
+        expect(reversed.body.message).toMatch(/end date must be after/i);
+        expect(prisma.timeEntry.findMany).not.toHaveBeenCalled();
+    });
+});
+
 describe('GET /api/v1/reports/dashboard', () => {
     it('filters manager analytics by team name when no individual user is selected', async () => {
         (prisma.timeEntry.findMany as jest.Mock)

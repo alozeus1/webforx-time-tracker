@@ -5,8 +5,11 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import type { TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
+import AccessibleDialog from '../components/AccessibleDialog';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
+const EXPORT_PRESET_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
+type ExportPreset = keyof typeof EXPORT_PRESET_DAYS | 'custom';
 
 const formatHoursText = (hours: number) => {
     if (hours <= 0) return '0.0h';
@@ -27,6 +30,26 @@ const toDateInputValue = (date: Date): string => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const getExportPresetDates = (preset: keyof typeof EXPORT_PRESET_DAYS) => {
+    const endDate = new Date();
+    endDate.setHours(0, 0, 0, 0);
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - (EXPORT_PRESET_DAYS[preset] - 1));
+    return {
+        startDate: toDateInputValue(startDate),
+        endDate: toDateInputValue(endDate),
+    };
+};
+
+const toExportBoundary = (dateValue: string, exclusiveEnd = false): string => {
+    const date = parseDateInputValue(dateValue);
+    date.setHours(0, 0, 0, 0);
+    if (exclusiveEnd) {
+        date.setDate(date.getDate() + 1);
+    }
+    return date.toISOString();
 };
 
 const getStartOfWeek = (date: Date): Date => {
@@ -76,6 +99,15 @@ const Reports: React.FC = () => {
     const [projectId, setProjectId] = useState(initialProjectId);
     const [queryUserId, setQueryUserId] = useState(initialQueryUserId);
     const [teamName, setTeamName] = useState(initialTeamName);
+    const initialExportPreset = initialRange as keyof typeof EXPORT_PRESET_DAYS;
+    const initialExportDates = getExportPresetDates(initialExportPreset);
+    const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+    const [exportPreset, setExportPreset] = useState<ExportPreset>(initialExportPreset);
+    const [exportStartDate, setExportStartDate] = useState(initialExportDates.startDate);
+    const [exportEndDate, setExportEndDate] = useState(initialExportDates.endDate);
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportError, setExportError] = useState('');
+    const [exportNotice, setExportNotice] = useState('');
 
     // Daily breakdown (pick a user + a specific day)
     const [focusDate, setFocusDate] = useState(initialFocusDate);
@@ -225,22 +257,72 @@ const Reports: React.FC = () => {
         }
     };
 
+    const exportValidationError = useMemo(() => {
+        if (!exportStartDate || !exportEndDate) {
+            return 'Choose both a start date and an end date.';
+        }
+        if (parseDateInputValue(exportStartDate) > parseDateInputValue(exportEndDate)) {
+            return 'The start date must be on or before the end date.';
+        }
+        return '';
+    }, [exportEndDate, exportStartDate]);
+
+    const openExportDialog = () => {
+        const preset = range in EXPORT_PRESET_DAYS ? range as keyof typeof EXPORT_PRESET_DAYS : '30d';
+        const dates = getExportPresetDates(preset);
+        setExportPreset(preset);
+        setExportStartDate(dates.startDate);
+        setExportEndDate(dates.endDate);
+        setExportError('');
+        setExportNotice('');
+        setIsExportDialogOpen(true);
+    };
+
+    const handleExportPresetChange = (preset: ExportPreset) => {
+        setExportPreset(preset);
+        setExportError('');
+        if (preset !== 'custom') {
+            const dates = getExportPresetDates(preset);
+            setExportStartDate(dates.startDate);
+            setExportEndDate(dates.endDate);
+        }
+    };
+
     const handleExport = async () => {
+        if (exportValidationError) {
+            setExportError(exportValidationError);
+            return;
+        }
+
+        setIsExporting(true);
+        setExportError('');
         try {
             const res = await api.get('/reports/export', {
-                params: { range, projectId, queryUserId, teamName },
+                params: {
+                    startAt: toExportBoundary(exportStartDate),
+                    endAt: toExportBoundary(exportEndDate, true),
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                    projectId,
+                    queryUserId,
+                    teamName,
+                },
                 responseType: 'blob',
             });
-            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', 'timesheet_export.csv');
+            link.setAttribute('download', `timesheet-${exportStartDate}-to-${exportEndDate}.csv`);
             document.body.appendChild(link);
             link.click();
             link.remove();
+            window.URL.revokeObjectURL(url);
+            setIsExportDialogOpen(false);
+            setExportNotice(`CSV exported for ${exportStartDate} through ${exportEndDate}.`);
         } catch (error) {
             console.error('Failed to export report:', error);
-            alert('Export failed. Please try again.');
+            setExportError('Export failed. Please try again.');
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -276,13 +358,19 @@ const Reports: React.FC = () => {
                             <p className="text-slate-500 dark:text-slate-400 text-base">Performance analysis for Engineering team projects.</p>
                         </div>
                         <button
-                            onClick={handleExport}
+                            onClick={openExportDialog}
+                            aria-haspopup="dialog"
                             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start md:self-auto"
                         >
                             <span className="material-symbols-outlined text-lg">download</span>
                             <span>Export CSV</span>
                         </button>
                     </div>
+                    {exportNotice && (
+                        <p role="status" className="mt-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                            {exportNotice}
+                        </p>
+                    )}
 
                     {/* Filter bar — pill-style, below title */}
                     <div className="mt-4 flex flex-wrap gap-2 items-center">
@@ -836,6 +924,113 @@ const Reports: React.FC = () => {
                     </>
                 )}
             </div>
+
+            <AccessibleDialog
+                isOpen={isExportDialogOpen}
+                onClose={() => {
+                    if (!isExporting) setIsExportDialogOpen(false);
+                }}
+                ariaLabelledBy="report-export-title"
+                panelClassName="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+                closeOnBackdrop={!isExporting}
+            >
+                <div className="border-b border-slate-200 p-5 dark:border-slate-700">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h2 id="report-export-title" className="text-xl font-black text-slate-900 dark:text-white">
+                                Export workspace report
+                            </h2>
+                            <p id="report-export-description" className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                Select and approve the exact timeframe before downloading the CSV.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsExportDialogOpen(false)}
+                            disabled={isExporting}
+                            aria-label="Close export dialog"
+                            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                        >
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-5 p-5" aria-describedby="report-export-description">
+                    <label className="block">
+                        <span className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Timeframe</span>
+                        <select
+                            value={exportPreset}
+                            onChange={(event) => handleExportPresetChange(event.target.value as ExportPreset)}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                        >
+                            <option value="7d">Last 7 days</option>
+                            <option value="30d">Last 30 days</option>
+                            <option value="90d">Last 90 days</option>
+                            <option value="custom">Custom date range</option>
+                        </select>
+                    </label>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                            <span className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Start date</span>
+                            <input
+                                type="date"
+                                value={exportStartDate}
+                                onChange={(event) => {
+                                    setExportPreset('custom');
+                                    setExportStartDate(event.target.value);
+                                    setExportError('');
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">End date</span>
+                            <input
+                                type="date"
+                                value={exportEndDate}
+                                onChange={(event) => {
+                                    setExportPreset('custom');
+                                    setExportEndDate(event.target.value);
+                                    setExportError('');
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
+                        Entries started from <strong>{exportStartDate || '—'}</strong> through <strong>{exportEndDate || '—'}</strong> will be included. Your current user, team, and project filters remain applied.
+                    </div>
+
+                    {(exportError || exportValidationError) && (
+                        <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+                            {exportError || exportValidationError}
+                        </p>
+                    )}
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-5 sm:flex-row sm:justify-end dark:border-slate-700">
+                    <button
+                        type="button"
+                        onClick={() => setIsExportDialogOpen(false)}
+                        disabled={isExporting}
+                        className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExport}
+                        disabled={isExporting || Boolean(exportValidationError)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <span className="material-symbols-outlined text-lg">download</span>
+                        {isExporting ? 'Preparing CSV…' : 'Download CSV'}
+                    </button>
+                </div>
+            </AccessibleDialog>
         </div>
     );
 };
