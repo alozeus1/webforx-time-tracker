@@ -1,7 +1,27 @@
 import prisma from '../config/db';
+import { getGlobalTimerPolicy } from './timerPolicyService';
 import { normalizeIdList } from './tenantOwnershipService';
 
-type AutoStopReason = 'idle_timeout' | 'heartbeat_missing' | 'browser_inactive' | 'pause_expired' | 'active_duration_limit';
+export type AutoStopReason =
+    | 'idle_timeout'
+    | 'heartbeat_missing'
+    | 'browser_inactive'
+    | 'pause_expired'
+    | 'active_duration_limit'
+    | 'abandoned_timer';
+
+/**
+ * Reasons whose recorded end time is clamped back to proven activity.
+ *
+ * A timer left running on a closed laptop used to be credited in full up to the
+ * session cap, even though the last evidence the user was working is the last
+ * heartbeat. For these reasons the entry ends at the last heartbeat plus a short
+ * grace, so unproven time is never paid.
+ *
+ * `idle_timeout` and `browser_inactive` are deliberately NOT clamped: those pause
+ * first and their paused span is already excluded from the duration.
+ */
+const CLAMPED_REASONS: AutoStopReason[] = ['active_duration_limit', 'abandoned_timer', 'heartbeat_missing'];
 
 export const stopActiveTimerWithReason = async ({
     userId,
@@ -21,15 +41,37 @@ export const stopActiveTimerWithReason = async ({
         return null;
     }
 
+    const policy = await getGlobalTimerPolicy();
     const startTime = new Date(activeTimer.start_time);
-    const endTime = triggeredAt > startTime ? triggeredAt : new Date(startTime.getTime() + 1000);
+
+    let endTime = triggeredAt > startTime ? triggeredAt : new Date(startTime.getTime() + 1000);
+    let clampedToHeartbeat = false;
+
+    if (CLAMPED_REASONS.includes(reason)) {
+        const lastProof = activeTimer.last_heartbeat_at
+            ?? activeTimer.last_client_activity_at
+            ?? activeTimer.last_active_ping;
+
+        if (lastProof) {
+            const clampTarget = new Date(
+                new Date(lastProof).getTime() + policy.abandonedTimerGraceMinutes * 60_000,
+            );
+            if (clampTarget < endTime && clampTarget > startTime) {
+                endTime = clampTarget;
+                clampedToHeartbeat = true;
+            }
+        }
+    }
+
     const rawDuration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
     const pausedSeconds = activeTimer.paused_duration_seconds ?? 0;
     const duration = Math.max(rawDuration - pausedSeconds, 1);
     const persistedState = (activeTimer.persisted_state as Record<string, unknown>) || {};
     const isBillable = persistedState.is_billable !== false;
     const existingNotes = typeof persistedState.notes === 'string' ? persistedState.notes.trim() : '';
-    const reasonNote = `Automatically stopped due to ${reason.replace(/_/g, ' ')}.`;
+    const reasonNote = clampedToHeartbeat
+        ? `Automatically stopped due to ${reason.replace(/_/g, ' ')}. Recorded end time was trimmed back to the last confirmed activity.`
+        : `Automatically stopped due to ${reason.replace(/_/g, ' ')}.`;
     const notes = existingNotes ? `${existingNotes}\n\n${reasonNote}` : reasonNote;
 
     const timeEntry = await prisma.$transaction(async (tx) => {
@@ -47,6 +89,10 @@ export const stopActiveTimerWithReason = async ({
                 is_billable: isBillable,
                 auto_stopped: true,
                 stop_reason: reason,
+                over_daily_cap: persistedState.over_daily_cap === true,
+                overtime_reason: typeof persistedState.overtime_reason === 'string'
+                    ? persistedState.overtime_reason
+                    : null,
             },
         });
 
@@ -80,6 +126,8 @@ export const stopActiveTimerWithReason = async ({
                 resource: 'time_entry',
                 metadata: {
                     reason,
+                    clamped_to_heartbeat: clampedToHeartbeat,
+                    recorded_end_time: endTime.toISOString(),
                     time_entry_id: timeEntry.id,
                     active_timer_id: activeTimer.id,
                     triggered_at: triggeredAt.toISOString(),
@@ -100,7 +148,9 @@ export const stopActiveTimerWithReason = async ({
             data: {
                 user_id: userId,
                 organization_id: organizationId,
-                message: `Your timer for "${activeTimer.task_description}" was stopped automatically because ${reason.replace(/_/g, ' ')} was detected.`,
+                message: clampedToHeartbeat
+                    ? `Your timer for "${activeTimer.task_description}" was stopped automatically and trimmed back to your last confirmed activity. Review it on your timesheet, or request a correction if that is wrong.`
+                    : `Your timer for "${activeTimer.task_description}" was stopped automatically because ${reason.replace(/_/g, ' ')} was detected.`,
                 type: 'timer_auto_stopped',
             },
         });

@@ -11,6 +11,25 @@ export const runIdleChecks = async (_req: Request, res: Response): Promise<void>
     try {
         console.log('[Cron] Running idle timer checks...');
         await checkIdleTimers();
+
+        // Liveness marker for the sweeper itself. The frequent sweep runs on GitHub
+        // Actions (Vercel Hobby rejects sub-daily cron), and GitHub silently disables
+        // scheduled workflows after 60 days of repository inactivity — which has already
+        // bitten this project once with the scheduled-reports tick. Stamping each run
+        // lets the admin policy screen show how long ago the last sweep was and go red
+        // when it stops, instead of the failure being invisible until timers run away.
+        //
+        // Written on the GLOBAL policy row rather than AuditLog because an audit row
+        // needs a real acting user and this has none.
+        try {
+            await prisma.timerPolicyConfig.updateMany({
+                where: { scope_type: 'GLOBAL', scope_id: null },
+                data: { last_sweep_at: new Date() },
+            });
+        } catch (markerError) {
+            console.error('[Cron] Failed to record timer sweep marker:', markerError);
+        }
+
         res.status(200).json({ status: 'success', message: 'Idle checks completed successfully' });
     } catch (error) {
         console.error('[Cron] Error during idle checks:', error);

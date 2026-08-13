@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../config/db';
+import { isValidTimeZone } from '../utils/reportWindow';
 import { AuthRequest } from '../types/auth';
 import { logAuthEvent } from '../services/authEventService';
 import { getUserWellbeingSummary } from '../services/wellbeingService';
@@ -169,6 +170,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
             weekly_hour_limit: user.weekly_hour_limit,
             employment_type: user.employment_type,
             min_weekly_hours: user.min_weekly_hours,
+            timezone: user.timezone,
         });
     } catch (error) {
         res.status(500).json({ message: 'Internal server error' });
@@ -1151,7 +1153,7 @@ export const permanentlyDeleteUser = async (req: AuthRequest, res: Response): Pr
 export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = requireUserId(req);
-        const { first_name, last_name, password, weekly_hour_limit } = req.body;
+        const { first_name, last_name, password, weekly_hour_limit, timezone } = req.body;
 
         const updateData: Record<string, unknown> = {};
 
@@ -1180,6 +1182,21 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
 
         if (weekly_hour_limit !== undefined) {
             updateData.weekly_hour_limit = weekly_hour_limit === null ? null : parseInt(String(weekly_hour_limit), 10) || null;
+        }
+
+        // The browser reports this on sign-in and on app mount. It defines the user's
+        // day boundary for the daily cap and their week for the recovery quota, so an
+        // unrecognised value is dropped rather than stored — a bad zone must never be
+        // able to shift someone's limits.
+        if (timezone !== undefined) {
+            if (timezone === null) {
+                updateData.timezone = null;
+            } else if (typeof timezone === 'string' && isValidTimeZone(timezone.trim())) {
+                updateData.timezone = timezone.trim();
+            } else {
+                res.status(400).json({ message: 'timezone must be a valid IANA time zone name.' });
+                return;
+            }
         }
 
         if (Object.keys(updateData).length === 0) {

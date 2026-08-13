@@ -6,10 +6,18 @@ import OnboardingTour, { ONBOARDING_KEY } from './OnboardingTour';
 import HelpChatbot from './HelpChatbot';
 import AccessibleDialog from './AccessibleDialog';
 import ResumeConfirmDialog from './ResumeConfirmDialog';
-import { TIMER_IDLE_RESUMED_EVENT, TIMER_IDLE_WARNING_EVENT, TIMER_PAUSED_EVENT, useActiveTimerHeartbeat } from '../hooks/useActiveTimerHeartbeat';
+import DailyCapDialog, { type DailyCapDialogMode } from './DailyCapDialog';
+import {
+    TIMER_DAILY_CAP_EVENT,
+    TIMER_DAILY_FLOOR_EVENT,
+    TIMER_IDLE_RESUMED_EVENT,
+    TIMER_IDLE_WARNING_EVENT,
+    TIMER_PAUSED_EVENT,
+    useActiveTimerHeartbeat,
+} from '../hooks/useActiveTimerHeartbeat';
 import { useWorkSignals } from '../hooks/useWorkSignals';
 import api from '../services/api';
-import type { TimerEntriesResponse } from '../types/api';
+import type { DailyCapSummary, TimerEntriesResponse } from '../types/api';
 import { getStoredToken } from '../utils/session';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
 import { usePageMetadata } from '../hooks/usePageMetadata';
@@ -22,6 +30,29 @@ interface PausedTimerState {
     projectName?: string;
 }
 
+/**
+ * The soft intern nudge is shown at most once per local day. Persisted in
+ * localStorage rather than component state so it survives a reload — otherwise
+ * someone who refreshes mid-afternoon gets nagged again.
+ */
+const FLOOR_NUDGE_KEY = 'wfx:daily-floor-nudge';
+
+const floorNudgeSeenToday = (localDate: string): boolean => {
+    try {
+        return window.localStorage.getItem(FLOOR_NUDGE_KEY) === localDate;
+    } catch {
+        return false;
+    }
+};
+
+const markFloorNudgeSeen = (localDate: string): void => {
+    try {
+        window.localStorage.setItem(FLOOR_NUDGE_KEY, localDate);
+    } catch {
+        // Private-mode storage failures must not break the timer.
+    }
+};
+
 const Layout: React.FC = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
@@ -31,6 +62,9 @@ const Layout: React.FC = () => {
     const [idleWarning, setIdleWarning] = useState<{ inactiveForMs: number } | null>(null);
     const [showResumeDialog, setShowResumeDialog] = useState(false);
     const [pausedTimer, setPausedTimer] = useState<PausedTimerState | null>(null);
+    const [dailyCap, setDailyCap] = useState<DailyCapSummary | null>(null);
+    const [dailyCapMode, setDailyCapMode] = useState<DailyCapDialogMode>('cap');
+    const [dailyCapSubmitting, setDailyCapSubmitting] = useState(false);
     const isDemoSession = localStorage.getItem('wfx-email') === 'demo@webforxtech.com';
 
     const navigate = useNavigate();
@@ -112,16 +146,119 @@ const Layout: React.FC = () => {
             setShowResumeDialog(true);
         };
 
+        const onDailyCap = (event: Event) => {
+            const detail = (event as CustomEvent<DailyCapSummary>).detail;
+            if (!detail) return;
+            setDailyCap(detail);
+            setDailyCapMode('cap');
+        };
+
+        const onDailyFloor = (event: Event) => {
+            const detail = (event as CustomEvent<DailyCapSummary>).detail;
+            if (!detail || floorNudgeSeenToday(detail.localDate)) return;
+            markFloorNudgeSeen(detail.localDate);
+            setDailyCap(detail);
+            setDailyCapMode('floor');
+        };
+
         window.addEventListener(TIMER_IDLE_WARNING_EVENT, onIdleWarning as EventListener);
         window.addEventListener(TIMER_IDLE_RESUMED_EVENT, onIdleResumed);
         window.addEventListener(TIMER_PAUSED_EVENT, onTimerPaused);
+        window.addEventListener(TIMER_DAILY_CAP_EVENT, onDailyCap as EventListener);
+        window.addEventListener(TIMER_DAILY_FLOOR_EVENT, onDailyFloor as EventListener);
 
         return () => {
             window.removeEventListener(TIMER_IDLE_WARNING_EVENT, onIdleWarning as EventListener);
             window.removeEventListener(TIMER_IDLE_RESUMED_EVENT, onIdleResumed);
             window.removeEventListener(TIMER_PAUSED_EVENT, onTimerPaused);
+            window.removeEventListener(TIMER_DAILY_CAP_EVENT, onDailyCap as EventListener);
+            window.removeEventListener(TIMER_DAILY_FLOOR_EVENT, onDailyFloor as EventListener);
         };
     }, []);
+
+    /**
+     * Report the browser's timezone once per session so the server can compute this
+     * user's day and week boundaries. Without it every daily limit would silently fall
+     * back to UTC, which resets mid-afternoon for anyone in the Americas.
+     */
+    useEffect(() => {
+        if (!getStoredToken()) return;
+
+        const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (!zone) return;
+
+        const storageKey = 'wfx:reported-timezone';
+        try {
+            if (window.localStorage.getItem(storageKey) === zone) return;
+        } catch {
+            // Fall through and report anyway — a redundant PUT is harmless.
+        }
+
+        void api.put('/users/me', { timezone: zone })
+            .then(() => {
+                try {
+                    window.localStorage.setItem(storageKey, zone);
+                } catch {
+                    // Non-fatal.
+                }
+            })
+            .catch(() => {
+                // A failed timezone report must never block the app; the server keeps
+                // using the previous value (or UTC).
+            });
+    }, []);
+
+    /**
+     * "Stop for today" from either tier of the daily-limit dialog. Stops the running
+     * timer outright; the entry keeps whatever flags it already had.
+     */
+    const handleStopForToday = async () => {
+        setDailyCap(null);
+        try {
+            await api.post('/timers/stop');
+            emitTimeEntryChanged();
+        } catch {
+            // A 404 just means the timer was already stopped elsewhere.
+        }
+    };
+
+    /**
+     * "Submit and continue" — the user attested to working past their daily cap.
+     *
+     * The running session is stopped and restarted carrying the attestation, because
+     * the flag has to live on the ActiveTimer for the entry created at stop to inherit
+     * it. The cost is one extra entry boundary at the cap, which is also the honest
+     * representation: normal hours and over-cap hours are separate rows, and only the
+     * second one is flagged for review.
+     */
+    const handleContinuePastCap = async (reason: string) => {
+        setDailyCapSubmitting(true);
+        try {
+            const { data } = await api.get<TimerEntriesResponse>('/timers/me');
+            const running = data.activeTimer;
+
+            await api.post('/timers/stop').catch(() => undefined);
+
+            if (running) {
+                await api.post('/timers/start', {
+                    task_description: running.task_description,
+                    project_id: running.project?.id ?? null,
+                    overtime_ack: { acknowledged: true, reason },
+                });
+            }
+
+            emitTimeEntryChanged();
+            setDailyCap(null);
+        } catch {
+            // The stop above has already committed, so no time is lost — the user
+            // simply is not tracking any more. Close the prompt and let the page
+            // refresh rather than leaving them staring at a dead dialog.
+            emitTimeEntryChanged();
+            setDailyCap(null);
+        } finally {
+            setDailyCapSubmitting(false);
+        }
+    };
 
     const handleResumeTimer = async () => {
         try {
@@ -292,6 +429,19 @@ const Layout: React.FC = () => {
                     </div>
                 </div>
             </AccessibleDialog>
+
+            {/* Daily limits — soft nudge at an intern's floor, hard attestation at the cap */}
+            <DailyCapDialog
+                isOpen={Boolean(dailyCap)}
+                mode={dailyCapMode}
+                workedSeconds={dailyCap?.workedSeconds ?? 0}
+                capSeconds={dailyCap?.capSeconds ?? 0}
+                floorSeconds={dailyCap?.floorSeconds ?? 0}
+                submitting={dailyCapSubmitting}
+                onDismiss={() => setDailyCap(null)}
+                onStop={handleStopForToday}
+                onContinue={handleContinuePastCap}
+            />
 
             {/* Resume confirmation — shown when server signals timer was auto-paused */}
             <ResumeConfirmDialog

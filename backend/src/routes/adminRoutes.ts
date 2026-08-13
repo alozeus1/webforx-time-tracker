@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createTeam, deleteSystemNotification, getAuditLogs, getOrgSettings, getSystemNotifications, getTeams, getTimerPolicy, updateOrgSettings, updateTeam, updateTimerPolicy } from '../controllers/adminController';
+import { createTeam, deleteSystemNotification, getAuditLogs, getOrgSettings, getSystemNotifications, getTeams, getTimerPolicy, updateOrgSettings, updateTeam, updateTimerPolicy, grantRecoveryOverride } from '../controllers/adminController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -16,5 +16,7 @@ router.get('/timer-policy', requireRole(['Admin']), getTimerPolicy);
 router.put('/timer-policy', requireRole(['Admin']), updateTimerPolicy);
 router.get('/org-settings', requireRole(['Admin']), getOrgSettings);
 router.put('/org-settings', requireRole(['Admin']), updateOrgSettings);
+// Lifting a user's recovery allowance is a privileged, audited act — Admin only.
+router.post('/recovery-grants', requireRole(['Admin']), grantRecoveryOverride);
 
 export default router;

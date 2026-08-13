@@ -107,6 +107,9 @@ export interface TimeEntrySummary {
     is_billable?: boolean;
     auto_stopped?: boolean;
     stop_reason?: string | null;
+    over_daily_cap?: boolean;
+    overtime_reason?: string | null;
+    auto_stop_reviewed_at?: string | null;
     intelligence?: ApprovalIntelligence;
     user: UserSummary;
     project?: ProjectReference | null;
@@ -180,6 +183,74 @@ export interface TimerPolicySummary {
     maxSessionDurationHours: number;
     allowResumeAfterIdlePause: boolean;
     requireNoteOnResumeAfterMinutes: number;
+    dailyCapHours: number;
+    internDailyFloorHours: number;
+    weeklyRecoveryLimit: number;
+    abandonedTimerGraceMinutes: number;
+}
+
+/** Where the user stands against their daily limits. Served by POST /timers/ping. */
+export type DailyCapState = 'ok' | 'floor_passed' | 'approaching' | 'at_cap' | 'over_cap';
+
+export interface DailyCapSummary {
+    workedSeconds: number;
+    capSeconds: number;
+    /** 0 for anyone without a daily floor (everyone who is not an intern). */
+    floorSeconds: number;
+    remainingSeconds: number;
+    state: DailyCapState;
+    localDate: string;
+}
+
+/** 409 body returned by every write path when the daily cap would be exceeded. */
+export interface DailyCapConflict {
+    code: 'DAILY_CAP_REACHED';
+    message: string;
+    worked_seconds: number;
+    cap_seconds: number;
+    floor_seconds: number;
+    local_date: string;
+    timezone: string;
+}
+
+export interface TimeClashConflict {
+    id: string;
+    kind: 'entry' | 'correction';
+    start: string;
+    end: string;
+    label: string;
+    status: string;
+}
+
+/** 409 body returned when a write clashes with time already on the timeline. */
+export interface TimeOverlapConflict {
+    code: 'TIME_OVERLAP';
+    message: string;
+    conflicts: TimeClashConflict[];
+}
+
+export type RecoveryTier = 'normal' | 'final' | 'blocked';
+
+export interface RecoveryUsageSummary {
+    used: number;
+    limit: number;
+    base_limit: number;
+    granted_extra: number;
+    remaining: number;
+    week_start: string;
+    week_end: string;
+    timezone: string;
+    tier: RecoveryTier;
+    requires_acknowledgement: boolean;
+    min_reason_length: number;
+}
+
+export interface BulkReviewResult {
+    updated: number;
+    skipped_locked: string[];
+    skipped_not_pending: string[];
+    not_found: string[];
+    message: string;
 }
 
 export interface CalendarEventSuggestion {

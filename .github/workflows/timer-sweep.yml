@@ -1,0 +1,111 @@
+name: Timer Sweep
+
+# WHY THIS EXISTS
+# ----------------
+# Timers that are left running — a closed laptop, a killed browser, a machine that
+# went to sleep — have to be stopped by the server, because the client that would
+# otherwise enforce the cap is exactly the thing that is gone. That sweep is
+# /api/v1/cron/idle.
+#
+# In backend/vercel.json that endpoint is scheduled '5 0 * * *' — ONCE PER DAY.
+# Vercel's Hobby plan rejects any cron expression more frequent than daily, and it
+# does so at DEPLOY time, so the backend build fails outright rather than the cron
+# merely not running. A daily sweep means an abandoned timer can keep accruing for
+# up to 24 hours before anything server-side notices.
+#
+# So the frequent sweep lives here, exactly like the scheduled-reports tick. If the
+# Vercel project is ever upgraded to Pro, this workflow can be deleted and the
+# backend/vercel.json entry changed to '*/15 * * * *'.
+#
+# The daily Vercel entry is deliberately KEPT as a fallback: if this workflow is
+# disabled or GitHub Actions is unavailable, timers still get swept once a day.
+#
+# WHY 15-MINUTE POLLING IS SAFE
+# ------------------------------
+# checkIdleTimers() is idempotent — it only acts on timers that have already
+# crossed a threshold, and a timer it stops no longer exists on the next run.
+# Extra ticks are no-ops. Each run also stamps TimerPolicyConfig.last_sweep_at,
+# which the Admin → Policy screen reads to show how long ago the last sweep was.
+#
+# KNOWN GITHUB ACTIONS CAVEAT
+# ----------------------------
+# GitHub disables scheduled workflows in repositories with no commit activity for
+# 60 days, and it does so SILENTLY. That is precisely why the sweep records
+# last_sweep_at: the admin screen turns red when the marker goes stale, so a
+# disabled workflow surfaces as a visible warning rather than as timers quietly
+# running away. If you see that warning, check this workflow first.
+#
+# REQUIRED SECRETS
+# ----------------
+#   CRON_SECRET  — must match the backend's CRON_SECRET env var exactly.
+#                  cronRoutes.ts rejects anything else with 401.
+#   API_BASE_URL — optional. Backend API base including /api/v1, e.g.
+#                  https://api.dev.webforxtech.com/api/v1
+#                  Falls back to the production URL below when unset.
+#
+# Set them with:
+#   gh secret set CRON_SECRET --repo alozeus1/webforx-time-tracker
+# Never commit either value.
+
+on:
+  schedule:
+    # Every 15 minutes (UTC). GitHub does not guarantee punctuality; a late or
+    # skipped tick just means the next one does the work.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this run was triggered manually (recorded in the run log)'
+        required: false
+        default: 'Manual sweep'
+
+permissions:
+  contents: read
+
+concurrency:
+  # Two sweeps running at once would race on the same ActiveTimer rows.
+  group: timer-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    name: Poll idle timer sweep endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check for required secret
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "::error::CRON_SECRET is not set. See this workflow's header comment for setup instructions."
+            exit 1
+          fi
+
+      - name: Trigger idle timer sweep
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          API_BASE_URL: ${{ secrets.API_BASE_URL || 'https://api.dev.webforxtech.com/api/v1' }}
+        run: |
+          set -euo pipefail
+
+          # --fail-with-body is required: without it curl exits 0 on a 5xx and the
+          # sweep would report success while timers silently ran away.
+          set +e
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 120 \
+            --retry 2 --retry-delay 5 --retry-connrefused \
+            --write-out '\n%{http_code}' \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${API_BASE_URL}/cron/idle")
+          curl_exit=$?
+          set -e
+
+          http_status=$(printf '%s' "$response" | tail -n1)
+          body=$(printf '%s' "$response" | sed '$d')
+
+          echo "HTTP ${http_status}"
+          echo "${body}"
+
+          if [ "$curl_exit" -ne 0 ]; then
+            echo "::error::Timer sweep failed (curl exit ${curl_exit}, HTTP ${http_status})."
+            exit 1
+          fi

@@ -4,8 +4,20 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
+import { hasAnyRole } from '../utils/session';
 
 const availableTabs = ['projects', 'budgets', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
+
+/**
+ * Tabs restricted to Admin.
+ *
+ * /admin is reachable by Managers as well as Admins, but the audit feed is the record
+ * of every action taken across the whole app — a privileged view, and its endpoint is
+ * already `requireRole(['Admin'])`. Rendering the tab for Managers therefore showed
+ * them a privileged-looking surface that could only ever 403. Gating it here keeps the
+ * UI honest about who can see what; the backend remains the actual enforcement.
+ */
+const adminOnlyTabs = new Set<string>(['audit']);
 
 /** Formats a duration in seconds as "H:MM" (e.g. 5400 → "1:30"). */
 const formatDurationHM = (seconds: number) => {
@@ -122,8 +134,17 @@ const getAuditDetails = (log: AuditLogSummary) => {
 const Admin: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const queryTab = searchParams.get('tab');
+    const isAdmin = hasAnyRole(['Admin']);
+    const visibleTabs = useMemo(
+        () => availableTabs.filter((tab) => isAdmin || !adminOnlyTabs.has(tab)),
+        [isAdmin],
+    );
+
+    // A hand-typed ?tab=audit must not leave a Manager on a permanently empty tab.
     const activeTab =
-        queryTab && availableTabs.includes(queryTab as (typeof availableTabs)[number])
+        queryTab
+        && availableTabs.includes(queryTab as (typeof availableTabs)[number])
+        && (isAdmin || !adminOnlyTabs.has(queryTab))
             ? queryTab
             : 'projects';
 
@@ -146,6 +167,7 @@ const Admin: React.FC = () => {
     const CORRECTION_RETENTION_DAYS = 30;
     const tabStripRef = useRef<HTMLDivElement | null>(null);
     const [timerPolicy, setTimerPolicy] = useState<TimerPolicySummary | null>(null);
+    const [lastSweepAt, setLastSweepAt] = useState<string | null>(null);
     const [policyFeedback, setPolicyFeedback] = useState<string | null>(null);
     const [teamSavingFor, setTeamSavingFor] = useState<Set<string>>(new Set());
     const [editingRateUserId, setEditingRateUserId] = useState<string | null>(null);
@@ -226,6 +248,18 @@ const Admin: React.FC = () => {
     const [editingProject, setEditingProject] = useState<ProjectSummary | null>(null);
     const [projectMenuOpen, setProjectMenuOpen] = useState<string | null>(null);
     
+    /** Anything older than an hour means the 15-minute sweep has stopped running. */
+    const SWEEP_STALE_AFTER_MS = 60 * 60 * 1000;
+    const sweepAgeMs = lastSweepAt ? Date.now() - new Date(lastSweepAt).getTime() : null;
+    const sweepIsStale = sweepAgeMs === null || sweepAgeMs > SWEEP_STALE_AFTER_MS;
+    const sweepAgeLabel = sweepAgeMs === null
+        ? 'never'
+        : sweepAgeMs < 60_000
+            ? 'less than a minute ago'
+            : sweepAgeMs < 60 * 60 * 1000
+                ? `${Math.round(sweepAgeMs / 60_000)} minutes ago`
+                : `${Math.round(sweepAgeMs / 3_600_000)} hours ago`;
+
     const handleTabChange = (tab: string) => {
         setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
@@ -398,8 +432,9 @@ const Admin: React.FC = () => {
 
     async function fetchTimerPolicy() {
         try {
-            const res = await api.get<{ policy: TimerPolicySummary }>('/admin/timer-policy');
+            const res = await api.get<{ policy: TimerPolicySummary; last_sweep_at: string | null }>('/admin/timer-policy');
             setTimerPolicy(res.data.policy);
+            setLastSweepAt(res.data.last_sweep_at ?? null);
         } catch (error) {
             console.error('Error fetching timer policy:', error);
         }
@@ -417,6 +452,27 @@ const Admin: React.FC = () => {
         } catch (error) {
             console.error('Error reviewing correction request:', error);
             alert(getApiErrorMessage(error, 'Failed to review correction request.'));
+        }
+    }
+
+    /**
+     * Give a user one more recovery request for the current week.
+     *
+     * Week-scoped and audited by design: the weekly allowance exists so that repeated
+     * "the timer wasn't running" claims are visible, so lifting it is a deliberate act
+     * that expires on its own rather than a setting someone quietly raises.
+     */
+    async function handleGrantRecovery(userId: string, displayName: string) {
+        const note = window.prompt(`Why does ${displayName || 'this user'} need an extra recovery request this week?`);
+        if (note === null) return;
+
+        try {
+            await api.post('/admin/recovery-grants', { user_id: userId, extra_requests: 1, note: note.trim() || null });
+            alert(`Granted ${displayName || 'the user'} one extra recovery request for this week.`);
+            void fetchAuditLogs();
+        } catch (error) {
+            console.error('Error granting recovery override:', error);
+            alert(getApiErrorMessage(error, 'Failed to grant the extra recovery request.'));
         }
     }
 
@@ -798,7 +854,9 @@ const Admin: React.FC = () => {
                 fetchTeams(),
                 fetchUsers(),
                 fetchIntegrations(),
-                fetchAuditLogs(),
+                // Admin-only endpoint. Managers can open /admin, so calling this
+                // unconditionally fired a guaranteed 403 on every manager page load.
+                isAdmin ? fetchAuditLogs() : Promise.resolve(),
                 fetchNotifications(),
                 fetchCorrections(),
                 fetchTimerPolicy(),
@@ -806,7 +864,7 @@ const Admin: React.FC = () => {
         };
         void loadAdminData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [isAdmin]);
 
     useEffect(() => {
         if (activeTab === 'corrections') {
@@ -997,7 +1055,7 @@ const Admin: React.FC = () => {
                     </button>
                     <div ref={tabStripRef} className="flex border-b border-slate-200 dark:border-slate-800 gap-8 overflow-x-auto admin-tab-strip" style={{scrollbarWidth:'thin'}}>
                     <style>{`.admin-tab-strip::-webkit-scrollbar{height:6px}.admin-tab-strip::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}`}</style>
-                        {availableTabs.map(tab => (
+                        {visibleTabs.map(tab => (
                             <button
                                 key={tab}
                                 type="button"
@@ -2243,6 +2301,17 @@ const Admin: React.FC = () => {
                                                             >
                                                                 Reject
                                                             </button>
+                                                            {/* Admin-only escape hatch for someone who has genuinely
+                                                                exhausted their weekly recovery allowance. */}
+                                                            {isAdmin && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-200"
+                                                                    onClick={() => void handleGrantRecovery(correction.user_id, `${correction.user?.first_name ?? ''} ${correction.user?.last_name ?? ''}`.trim())}
+                                                                >
+                                                                    Grant extra request
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     ) : (
                                                         <span className="text-xs text-slate-400">Reviewed</span>
@@ -2265,6 +2334,10 @@ const Admin: React.FC = () => {
                                                         ['idlePauseAfterMinutes', 'Idle pause minutes'],
                                                         ['maxSessionDurationHours', 'Max session hours'],
                                                         ['requireNoteOnResumeAfterMinutes', 'Resume note minutes'],
+                                                        ['dailyCapHours', 'Daily cap (hours)'],
+                                                        ['internDailyFloorHours', 'Intern daily floor (hours)'],
+                                                        ['weeklyRecoveryLimit', 'Recovery requests per week'],
+                                                        ['abandonedTimerGraceMinutes', 'Abandoned timer grace (min)'],
                                                     ].map(([key, label]) => (
                                                         <label key={key} className="text-xs font-bold uppercase tracking-wide text-slate-500">
                                                             {label}
@@ -2290,6 +2363,30 @@ const Admin: React.FC = () => {
                                                         />
                                                         Allow resume after idle pause
                                                     </label>
+                                                    {/* Sweep liveness. The frequent stale-timer sweep runs from a
+                                                        GitHub Actions schedule because Vercel Hobby rejects sub-daily
+                                                        cron, and GitHub disables scheduled workflows after 60 days of
+                                                        repo inactivity — silently. Surfacing the marker here is what
+                                                        makes that failure visible instead of showing up as timers
+                                                        quietly running away. */}
+                                                    <div className={`md:col-span-3 rounded-lg border px-4 py-3 text-sm ${
+                                                        sweepIsStale
+                                                            ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                                            : 'border-slate-200 bg-slate-50 text-slate-600'
+                                                    }`}>
+                                                        <p className="font-semibold">
+                                                            Stale-timer sweep: {lastSweepAt
+                                                                ? `last ran ${sweepAgeLabel}`
+                                                                : 'has never run'}
+                                                        </p>
+                                                        {sweepIsStale && (
+                                                            <p className="mt-1 text-xs">
+                                                                Expected every 15 minutes. Check that the “Timer Sweep”
+                                                                GitHub Actions workflow is enabled and that CRON_SECRET
+                                                                is set — GitHub disables scheduled workflows silently.
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                     <div className="flex items-center gap-3 md:col-span-3">
                                                         <button type="submit" className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white">Save policy</button>
                                                         {policyFeedback && <span className="text-sm text-slate-500">{policyFeedback}</span>}

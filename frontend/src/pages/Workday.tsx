@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, BadgeCheck, CalendarDays, Clock3, FolderClock, ShieldCheck, Sparkles } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
+import TimeClashDialog from '../components/TimeClashDialog';
 import type {
     CalendarEventSuggestion,
     CalendarStatus,
     ManagerOperationsResponse,
     ProjectSummary,
+    RecoveryUsageSummary,
     TaskSourceSummary,
+    TimeClashConflict,
+    TimeOverlapConflict,
     TimeEntrySummary,
     TimerEntriesResponse,
     UserWellbeingSummary,
@@ -83,6 +87,9 @@ const Workday: React.FC = () => {
     const [nonBlockingFeedback, setNonBlockingFeedback] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
     const [convertingId, setConvertingId] = useState<string | null>(null);
+    const [recoveryUsage, setRecoveryUsage] = useState<RecoveryUsageSummary | null>(null);
+    const [clashConflicts, setClashConflicts] = useState<TimeClashConflict[] | null>(null);
+    const [clashMessage, setClashMessage] = useState<string | undefined>(undefined);
     const [shareUrl, setShareUrl] = useState<string | null>(null);
     const [desktopIdleSeconds, setDesktopIdleSeconds] = useState<number | null>(null);
     const [selectedShareProject, setSelectedShareProject] = useState('');
@@ -301,22 +308,55 @@ const Workday: React.FC = () => {
         };
     }, [calendarEvents, entries, entryBlocks, wellbeing]);
 
+    /**
+     * Turn a detected gap into a correction request.
+     *
+     * This used to POST straight to /timers/manual, which meant recovered time was
+     * written instantly with no clash check, no daily cap, no weekly allowance and no
+     * manager review — the widest way around every guardrail in the app. It now goes
+     * through the same review path as any other claim for time the timer did not
+     * record, and counts against the weekly recovery allowance.
+     */
     const handleConvertSuggestion = async (suggestion: WorkSuggestion) => {
         setConvertingId(suggestion.id);
         try {
-            const project = projects.find((item) => item.name === suggestion.suggested_project);
-            await api.post('/timers/manual', {
-                project_id: project?.id,
-                task_description: suggestion.source === 'gap' ? 'Recovered work block' : suggestion.title,
-                start_time: suggestion.start,
-                end_time: suggestion.end,
-                notes: `Created by missing-time copilot from ${suggestion.source} signal.`,
+            const response = await api.post<{ recovery_usage?: RecoveryUsageSummary }>('/timers/corrections', {
+                requested_start_time: suggestion.start,
+                requested_end_time: suggestion.end,
+                reason: suggestion.source === 'gap'
+                    ? `Untracked work block detected by the missing-time copilot (${suggestion.title}).`
+                    : suggestion.title,
+                work_note: `Created by missing-time copilot from ${suggestion.source} signal.`,
             });
+
+            if (response.data.recovery_usage) {
+                setRecoveryUsage(response.data.recovery_usage);
+            }
+
             emitTimeEntryChanged();
             await loadWorkday();
-            setFeedback({ tone: 'success', message: `Converted ${suggestion.title} into a manual time entry.` });
+            setFeedback({
+                tone: 'success',
+                message: `Submitted ${suggestion.title} as a correction request. It appears on your timesheet once a manager approves it.`,
+            });
         } catch (error) {
-            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to convert suggestion into a time entry') });
+            const body = (error as { response?: { data?: unknown } })?.response?.data as
+                | TimeOverlapConflict
+                | { code?: string; message?: string; recovery_usage?: RecoveryUsageSummary }
+                | undefined;
+
+            if (body && 'code' in body && body.code === 'TIME_OVERLAP') {
+                const overlap = body as TimeOverlapConflict;
+                setClashConflicts(overlap.conflicts);
+                setClashMessage(overlap.message);
+                return;
+            }
+
+            if (body && 'recovery_usage' in body && body.recovery_usage) {
+                setRecoveryUsage(body.recovery_usage);
+            }
+
+            setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to submit the recovered block for review') });
         } finally {
             setConvertingId(null);
         }
@@ -468,11 +508,23 @@ const Workday: React.FC = () => {
                                 <div>
                                     <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Missing-Time Copilot</p>
                                     <h2 className="mt-1 text-lg font-black text-slate-900">Recovered Suggestions</h2>
+                                    <p className="mt-1 text-xs text-slate-500">
+                                        Recovered blocks go to your manager as correction requests and count
+                                        against your weekly recovery allowance.
+                                    </p>
                                 </div>
                                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
                                     {workSuggestions.length} suggestions
+                                    {recoveryUsage && ` · ${recoveryUsage.remaining} left this week`}
                                 </span>
                             </div>
+                            <TimeClashDialog
+                                isOpen={Boolean(clashConflicts?.length)}
+                                message={clashMessage}
+                                conflicts={clashConflicts ?? []}
+                                onAdjust={() => setClashConflicts(null)}
+                                onClose={() => setClashConflicts(null)}
+                            />
                             <div className="mt-4 space-y-3">
                                 {workSuggestions.length === 0 && (
                                     <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
@@ -494,7 +546,7 @@ const Workday: React.FC = () => {
                                                 onClick={() => void handleConvertSuggestion(suggestion)}
                                                 className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
                                             >
-                                                {convertingId === suggestion.id ? 'Converting...' : 'Convert to entry'}
+                                                {convertingId === suggestion.id ? 'Submitting...' : 'Request review'}
                                                 <ArrowRight size={16} />
                                             </button>
                                         </div>

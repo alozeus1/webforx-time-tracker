@@ -65,6 +65,13 @@ const toLocalInputValue = (value: Date) => {
     return local.toISOString().slice(0, 19);
 };
 
+/**
+ * PATCH /timers/bulk returns the ids it skipped, not a count. This was typed as a
+ * number and compared with `> 0`, which is always false for an array — so the
+ * "N skipped (locked period)" branch never ran and locked entries vanished silently.
+ */
+type BulkEditResult = { updated: number; skipped_locked: string[] };
+
 const Timeline: React.FC = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -345,12 +352,13 @@ const Timeline: React.FC = () => {
         if (!selectedIds.size || !window.confirm(`Delete ${selectedIds.size} entr${selectedIds.size === 1 ? 'y' : 'ies'}?`)) return;
         setBulkWorking(true);
         try {
-            const res = await api.patch<{ updated: number; skipped_locked: number; message: string }>('/timers/bulk', {
+            const res = await api.patch<BulkEditResult & { message: string }>('/timers/bulk', {
                 entry_ids: Array.from(selectedIds),
                 action: 'delete',
             });
-            const msg = res.data.skipped_locked > 0
-                ? `Deleted ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}. ${res.data.skipped_locked} skipped (locked period).`
+            const skippedLocked = res.data.skipped_locked?.length ?? 0;
+            const msg = skippedLocked > 0
+                ? `Deleted ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}. ${skippedLocked} skipped (locked period).`
                 : `Deleted ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}.`;
             setFeedback({ tone: 'success', message: msg });
             clearSelection();
@@ -368,12 +376,13 @@ const Timeline: React.FC = () => {
         if (!selectedIds.size) return;
         setBulkWorking(true);
         try {
-            const res = await api.patch<{ updated: number; skipped_locked: number }>('/timers/bulk', {
+            const res = await api.patch<BulkEditResult>('/timers/bulk', {
                 entry_ids: Array.from(selectedIds),
                 action: 'set_project',
                 project_id: bulkProjectId || null,
             });
-            setFeedback({ tone: 'success', message: `Updated ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}.${res.data.skipped_locked > 0 ? ` ${res.data.skipped_locked} skipped (locked).` : ''}` });
+            const skippedLocked = res.data.skipped_locked?.length ?? 0;
+            setFeedback({ tone: 'success', message: `Updated ${res.data.updated} entr${res.data.updated === 1 ? 'y' : 'ies'}.${skippedLocked > 0 ? ` ${skippedLocked} skipped (locked).` : ''}` });
             setBulkProjectId('');
             clearSelection();
             await loadTimeline();
@@ -390,7 +399,7 @@ const Timeline: React.FC = () => {
         if (!selectedIds.size) return;
         setBulkWorking(true);
         try {
-            const res = await api.patch<{ updated: number; skipped_locked: number }>('/timers/bulk', {
+            const res = await api.patch<BulkEditResult>('/timers/bulk', {
                 entry_ids: Array.from(selectedIds),
                 action: 'approve',
             });

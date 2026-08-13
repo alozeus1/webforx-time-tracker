@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import type { PieLabelRenderProps } from 'recharts';
 import { useSearchParams } from 'react-router-dom';
-import api from '../services/api';
-import type { TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
+import api, { getApiErrorMessage } from '../services/api';
+import ApprovalQueue from '../components/ApprovalQueue';
+import type { ReviewAction } from '../utils/timeEntryLabels';
+import type { BulkReviewResult, TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
@@ -41,15 +43,6 @@ const getStartOfWeek = (date: Date): Date => {
 const formatDayLabel = (date: Date): string =>
     date.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
 
-const formatStopReason = (reason?: string | null) => {
-    if (!reason) return null;
-    if (reason === 'active_duration_limit') return '8h cap reached';
-    if (reason === 'idle_timeout') return 'Idle timeout';
-    if (reason === 'heartbeat_missing') return 'Heartbeat missing';
-    if (reason === 'pause_expired') return 'Paused too long';
-    return reason.replace(/_/g, ' ');
-};
-
 /** Returns Tailwind classes based on a trend string like "+5%", "-3%", "0%" */
 function getTrendClasses(trend: string | undefined): string {
     if (!trend) return 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
@@ -68,6 +61,7 @@ const Reports: React.FC = () => {
     const initialFocusDate = searchParams.get('focusDate') || '';
 
     const [pendingApprovals, setPendingApprovals] = useState<TimeEntrySummary[]>([]);
+    const [approvalFeedback, setApprovalFeedback] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
     const [analytics, setAnalytics] = useState<AnalyticsDashboardResponse | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -216,12 +210,37 @@ const Reports: React.FC = () => {
         });
     }, [focusDate]);
 
-    const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
+    const handleReview = async (entryId: string, action: ReviewAction) => {
         try {
             await api.post(`/timers/approvals/${entryId}`, { action });
+            setApprovalFeedback({ message: `Entry ${action}d successfully`, tone: 'success' });
             void fetchApprovals();
         } catch (error) {
-            console.error(`Failed to ${action} timesheet:`, error);
+            // Previously swallowed to console, so a failed approval looked like a
+            // successful one to the manager.
+            setApprovalFeedback({ message: getApiErrorMessage(error, `Failed to ${action} entry`), tone: 'error' });
+        }
+    };
+
+    const handleBulkReview = async (entryIds: string[], action: ReviewAction) => {
+        try {
+            const response = await api.post<BulkReviewResult>('/timers/approvals/bulk', {
+                entry_ids: entryIds,
+                action,
+            });
+            const { updated, skipped_locked: skippedLocked = [], skipped_not_pending: skippedNotPending = [] } = response.data;
+
+            const notes: string[] = [];
+            if (skippedLocked.length > 0) notes.push(`${skippedLocked.length} skipped (locked payroll period)`);
+            if (skippedNotPending.length > 0) notes.push(`${skippedNotPending.length} already reviewed`);
+
+            setApprovalFeedback({
+                message: `${updated} ${updated === 1 ? 'entry' : 'entries'} ${action}d${notes.length ? ` — ${notes.join(', ')}` : ''}.`,
+                tone: 'success',
+            });
+            void fetchApprovals();
+        } catch (error) {
+            setApprovalFeedback({ message: getApiErrorMessage(error, `Failed to ${action} the selected entries`), tone: 'error' });
         }
     };
 
@@ -659,96 +678,25 @@ const Reports: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Pending Approvals */}
+                        {/* Pending Approvals — same shared component as /timesheet, so the
+                            two surfaces can no longer drift apart. */}
                         {canReviewApprovals && (
-                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-sm overflow-hidden mb-8">
-                            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-rose-50/50 dark:bg-rose-900/10">
-                                <div className="flex items-center gap-3">
-                                    <span className="material-symbols-outlined text-rose-500">pending_actions</span>
-                                    <h4 className="font-bold text-slate-900 dark:text-white">Timesheet Approvals Required ({pendingApprovals.length})</h4>
+                        <div className="bg-white dark:bg-slate-800 rounded-xl border border-rose-200 dark:border-rose-900/50 shadow-sm mb-8 p-6">
+                            {approvalFeedback && (
+                                <div className={`mb-4 rounded-lg px-4 py-3 text-sm font-medium ${approvalFeedback.tone === 'success'
+                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                    : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                                    {approvalFeedback.message}
                                 </div>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-slate-50 dark:bg-slate-900/50">
-                                        <tr>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Employee</th>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Task & Project</th>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Duration</th>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Date</th>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                        {pendingApprovals.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={5} className="px-6 py-8 text-center text-slate-500 text-sm">
-                                                    No pending timesheets require your approval.
-                                                </td>
-                                            </tr>
-                                        ) : pendingApprovals.map(entry => (
-                                            <tr key={entry.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-xs text-slate-600 dark:text-slate-300">
-                                                            {entry.user.first_name[0]}{entry.user.last_name[0]}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-slate-900 dark:text-white">{entry.user.first_name} {entry.user.last_name}</p>
-                                                            <p className="text-xs text-slate-500">{entry.user.email}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4 text-sm">
-                                                    <p className="font-semibold text-slate-900 dark:text-slate-200">{entry.task_description}</p>
-                                                    <p className="text-xs text-slate-500 mt-0.5">{entry.project?.name || 'Unassigned Project'}</p>
-                                                    {(entry.auto_stopped || entry.stop_reason || entry.intelligence) && (
-                                                        <div className="mt-2 flex flex-wrap gap-1.5">
-                                                            {entry.intelligence && (
-                                                                <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${
-                                                                    entry.intelligence.level === 'high'
-                                                                        ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300'
-                                                                        : entry.intelligence.level === 'medium'
-                                                                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
-                                                                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                                                                }`}>
-                                                                    {entry.intelligence.level} risk
-                                                                </span>
-                                                            )}
-                                                            {entry.auto_stopped && (
-                                                                <span className="inline-flex rounded-full bg-indigo-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
-                                                                    auto-stopped
-                                                                </span>
-                                                            )}
-                                                            {formatStopReason(entry.stop_reason) && (
-                                                                <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                                                    {formatStopReason(entry.stop_reason)}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">
-                                                    {formatSecondsText(entry.duration)}
-                                                </td>
-                                                <td className="px-6 py-4 text-sm text-slate-500">
-                                                    {new Date(entry.start_time).toLocaleDateString()}
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button onClick={() => handleReview(entry.id, 'reject')} className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded transition-colors" title="Reject">
-                                                            <span className="material-symbols-outlined text-xl">close</span>
-                                                        </button>
-                                                        <button onClick={() => handleReview(entry.id, 'approve')} className="p-1.5 text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 rounded transition-colors" title="Approve">
-                                                            <span className="material-symbols-outlined text-xl">check</span>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                            )}
+                            <ApprovalQueue
+                                entries={pendingApprovals}
+                                loading={false}
+                                onReviewOne={handleReview}
+                                onReviewBulk={handleBulkReview}
+                                title={`Timesheet Approvals Required (${pendingApprovals.length})`}
+                                emptyLabel="Nothing is waiting on your review."
+                            />
                         </div>
                         )}
 
