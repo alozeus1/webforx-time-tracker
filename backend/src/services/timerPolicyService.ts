@@ -11,6 +11,14 @@ export type TimerPolicy = {
     maxSessionDurationHours: number;
     allowResumeAfterIdlePause: boolean;
     requireNoteOnResumeAfterMinutes: number;
+    /** Ceiling on total time logged in one calendar day, in the user's timezone. */
+    dailyCapHours: number;
+    /** Daily expectation for interns — a floor that triggers a soft nudge, not a block. */
+    internDailyFloorHours: number;
+    /** Correction ("recovered time") requests a user may submit per Monday-based week. */
+    weeklyRecoveryLimit: number;
+    /** Grace after the last heartbeat before an abandoned timer's end time is clamped. */
+    abandonedTimerGraceMinutes: number;
 };
 
 export const DEFAULT_TIMER_POLICY: TimerPolicy = {
@@ -22,6 +30,10 @@ export const DEFAULT_TIMER_POLICY: TimerPolicy = {
     maxSessionDurationHours: env.maxActiveTimerHours,
     allowResumeAfterIdlePause: true,
     requireNoteOnResumeAfterMinutes: 30,
+    dailyCapHours: env.dailyCapHours,
+    internDailyFloorHours: env.internDailyFloorHours,
+    weeklyRecoveryLimit: env.weeklyRecoveryLimit,
+    abandonedTimerGraceMinutes: env.abandonedTimerGraceMinutes,
 };
 
 const toNumber = (value: unknown, fallback: number) => {
@@ -40,6 +52,10 @@ export const normalizeTimerPolicy = (config?: Partial<TimerPolicy> | null): Time
     maxSessionDurationHours: toNumber(config?.maxSessionDurationHours, DEFAULT_TIMER_POLICY.maxSessionDurationHours),
     allowResumeAfterIdlePause: config?.allowResumeAfterIdlePause ?? DEFAULT_TIMER_POLICY.allowResumeAfterIdlePause,
     requireNoteOnResumeAfterMinutes: Math.round(toNumber(config?.requireNoteOnResumeAfterMinutes, DEFAULT_TIMER_POLICY.requireNoteOnResumeAfterMinutes)),
+    dailyCapHours: toNumber(config?.dailyCapHours, DEFAULT_TIMER_POLICY.dailyCapHours),
+    internDailyFloorHours: toNumber(config?.internDailyFloorHours, DEFAULT_TIMER_POLICY.internDailyFloorHours),
+    weeklyRecoveryLimit: Math.round(toNumber(config?.weeklyRecoveryLimit, DEFAULT_TIMER_POLICY.weeklyRecoveryLimit)),
+    abandonedTimerGraceMinutes: Math.round(toNumber(config?.abandonedTimerGraceMinutes, DEFAULT_TIMER_POLICY.abandonedTimerGraceMinutes)),
 });
 
 export const validateTimerPolicy = (policy: TimerPolicy): string[] => {
@@ -72,8 +88,39 @@ export const validateTimerPolicy = (policy: TimerPolicy): string[] => {
     if (policy.requireNoteOnResumeAfterMinutes < 0 || policy.requireNoteOnResumeAfterMinutes > 480) {
         errors.push('Resume note threshold must be between 0 and 480 minutes.');
     }
+    // The daily cap governs a whole day, so unlike max session duration it may exceed
+    // 8 hours — an org running two 6-hour shifts is legitimate. 24 is the hard ceiling.
+    if (policy.dailyCapHours < 1 || policy.dailyCapHours > 24) {
+        errors.push('Daily cap must be between 1 and 24 hours.');
+    }
+    if (policy.internDailyFloorHours < 0 || policy.internDailyFloorHours > policy.dailyCapHours) {
+        errors.push('Intern daily floor must be between 0 hours and the daily cap.');
+    }
+    if (policy.weeklyRecoveryLimit < 1 || policy.weeklyRecoveryLimit > 20) {
+        errors.push('Weekly recovery limit must be between 1 and 20.');
+    }
+    if (policy.abandonedTimerGraceMinutes < 1 || policy.abandonedTimerGraceMinutes > 120) {
+        errors.push('Abandoned timer grace must be between 1 and 120 minutes.');
+    }
 
     return errors;
+};
+
+/**
+ * Policy plus operational state the admin screen needs but that is not itself a
+ * tunable knob. Kept separate from `TimerPolicy` so validation and normalisation
+ * never have to reason about a read-only field.
+ */
+export const getGlobalTimerPolicyStatus = async (): Promise<{ policy: TimerPolicy; lastSweepAt: Date | null }> => {
+    const config = await prisma.timerPolicyConfig.findFirst({
+        where: { scope_type: 'GLOBAL', scope_id: null },
+        orderBy: { updated_at: 'desc' },
+    });
+
+    return {
+        policy: await getGlobalTimerPolicy(),
+        lastSweepAt: config?.last_sweep_at ?? null,
+    };
 };
 
 export const getGlobalTimerPolicy = async (): Promise<TimerPolicy> => {
@@ -93,5 +140,9 @@ export const getGlobalTimerPolicy = async (): Promise<TimerPolicy> => {
         maxSessionDurationHours: config.max_session_duration_hours.toNumber(),
         allowResumeAfterIdlePause: config.allow_resume_after_idle_pause,
         requireNoteOnResumeAfterMinutes: config.require_note_on_resume_after_minutes,
+        dailyCapHours: config.daily_cap_hours.toNumber(),
+        internDailyFloorHours: config.intern_daily_floor_hours.toNumber(),
+        weeklyRecoveryLimit: config.weekly_recovery_limit,
+        abandonedTimerGraceMinutes: config.abandoned_timer_grace_minutes,
     });
 };

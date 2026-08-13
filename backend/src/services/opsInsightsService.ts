@@ -114,6 +114,7 @@ export const scoreTimeEntryRisk = (entry: {
     updated_at?: Date | string;
     auto_stopped?: boolean;
     stop_reason?: string | null;
+    over_daily_cap?: boolean;
 }): ApprovalIntelligence => {
     let score = 0;
     const reasons: string[] = [];
@@ -139,9 +140,20 @@ export const scoreTimeEntryRisk = (entry: {
         reasons.push('auto-stopped entry');
     }
 
+    // Deliberately the single heaviest signal: the user was told they were at their
+    // limit, typed a justification, and continued anyway. That is exactly the entry a
+    // manager should look at first, so it alone is enough to reach 'medium'.
+    if (entry.over_daily_cap) {
+        score += 35;
+        reasons.push('logged past daily cap');
+    }
+
     if (entry.stop_reason === 'active_duration_limit') {
         score += 28;
         reasons.push('hit 8h active timer cap');
+    } else if (entry.stop_reason === 'abandoned_timer') {
+        score += 30;
+        reasons.push('timer left running, trimmed to last activity');
     } else if (entry.stop_reason === 'idle_timeout' || entry.stop_reason === 'heartbeat_missing') {
         score += 14;
         reasons.push('stopped after inactivity');

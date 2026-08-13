@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import api from '../services/api';
-import type { ActiveTimerResponse } from '../types/api';
+import type { ActiveTimerResponse, DailyCapSummary } from '../types/api';
 import { getStoredToken } from '../utils/session';
 import { TIME_ENTRY_CHANGED_EVENT, TIME_ENTRY_CHANGED_STORAGE_KEY, emitTimeEntryChanged } from '../utils/timeEntryEvents';
 
@@ -12,6 +12,13 @@ export const TIMER_IDLE_RESUMED_EVENT = 'wfx:timer-idle-resumed';
 export const TIMER_PAUSED_EVENT = 'wfx:timer-paused';
 /** Fired every 10 s while the idle warning is active so the UI can show a countdown. */
 export const TIMER_IDLE_COUNTDOWN_EVENT = 'wfx:timer-idle-countdown';
+/**
+ * Fired when the server reports the user has reached their daily limit, or (for
+ * interns) passed their daily expectation. Carries the whole `daily` block from the
+ * ping response so the dialog can render exact figures rather than guess.
+ */
+export const TIMER_DAILY_CAP_EVENT = 'wfx:timer-daily-cap';
+export const TIMER_DAILY_FLOOR_EVENT = 'wfx:timer-daily-floor';
 
 // ---------------------------------------------------------------------------
 // Feature flag — mirrors TIMER_ENHANCED_ACTIVITY_DETECTION on the backend.
@@ -105,6 +112,13 @@ export const useActiveTimerHeartbeat = () => {
     const hasActiveTimerRef = useRef(false);
     const activeTimerIdRef = useRef<string | null>(null);
     const activeTimerStartedAtRef = useRef<number | null>(null);
+    /**
+     * Paused seconds already banked on the server, plus the open pause if there is one.
+     * The cap must be compared against counted time, not wall clock — otherwise a
+     * session paused for two hours is stopped at six hours of real work.
+     */
+    const activeTimerPausedSecondsRef = useRef(0);
+    const activeTimerPausedAtRef = useRef<number | null>(null);
     const isPausedRef = useRef(false);
     const lastHeartbeatAtRef = useRef(0);
     const lastActivitySampleAtRef = useRef(0);
@@ -138,6 +152,11 @@ export const useActiveTimerHeartbeat = () => {
                     ? new Date(response.data.activeTimer.start_time).getTime()
                     : null;
 
+                activeTimerPausedSecondsRef.current = response.data.activeTimer?.paused_duration_seconds ?? 0;
+                activeTimerPausedAtRef.current = response.data.activeTimer?.paused_at
+                    ? new Date(response.data.activeTimer.paused_at).getTime()
+                    : null;
+
                 const newIsPaused = Boolean(response.data.activeTimer?.is_paused);
                 if (newIsPaused && !isPausedRef.current) {
                     window.dispatchEvent(new CustomEvent(TIMER_PAUSED_EVENT, {
@@ -151,6 +170,9 @@ export const useActiveTimerHeartbeat = () => {
                     idleWarningShownRef.current = false;
                     isPausedRef.current = false;
                     activeTimerStartedAtRef.current = null;
+                    activeTimerPausedSecondsRef.current = 0;
+                    activeTimerPausedAtRef.current = null;
+                    lastDailyStateRef.current = null;
                 }
             } catch (error) {
                 console.error('Failed to sync active timer heartbeat state:', error);
@@ -162,20 +184,37 @@ export const useActiveTimerHeartbeat = () => {
         return syncInFlightRef.current;
     }, []);
 
+    const lastDailyStateRef = useRef<string | null>(null);
+
     const enforceActiveTimerCap = useCallback(async () => {
         if (!getStoredToken() || !hasActiveTimerRef.current || !activeTimerStartedAtRef.current) {
             return false;
         }
 
-        if (Date.now() - activeTimerStartedAtRef.current < MAX_ACTIVE_TIMER_MS) {
+        const now = Date.now();
+        const openPauseMs = isPausedRef.current && activeTimerPausedAtRef.current
+            ? Math.max(now - activeTimerPausedAtRef.current, 0)
+            : 0;
+        const countedMs = Math.max(
+            now - activeTimerStartedAtRef.current - activeTimerPausedSecondsRef.current * 1000 - openPauseMs,
+            0,
+        );
+
+        if (countedMs < MAX_ACTIVE_TIMER_MS) {
             return false;
         }
 
         try {
-            await api.post('/timers/stop');
+            // Declaring the reason matters: a plain stop records auto_stopped=false with
+            // no stop_reason, which scores 28 risk points lower than the identical entry
+            // stopped by the server sweep. Without this, whether a capped session got
+            // flagged depended on which enforcer happened to win the race.
+            await api.post('/timers/stop', { reason: 'active_duration_limit' });
             hasActiveTimerRef.current = false;
             activeTimerIdRef.current = null;
             activeTimerStartedAtRef.current = null;
+            activeTimerPausedSecondsRef.current = 0;
+            activeTimerPausedAtRef.current = null;
             isPausedRef.current = false;
             lastHeartbeatAtRef.current = 0;
             idleWarningShownRef.current = false;
@@ -242,6 +281,7 @@ export const useActiveTimerHeartbeat = () => {
             const response = await api.post<{
                 state: string;
                 policy?: { idleWarningAfterMinutes: number; idlePauseAfterMinutes: number; heartbeatIntervalSeconds: number };
+                daily?: DailyCapSummary | null;
             }>('/timers/ping', payload);
 
             lastHeartbeatAtRef.current = now;
@@ -250,6 +290,24 @@ export const useActiveTimerHeartbeat = () => {
             if (response.data.policy) {
                 serverIdleWarningMsRef.current = response.data.policy.idleWarningAfterMinutes * 60_000;
                 serverIdlePauseMsRef.current = response.data.policy.idlePauseAfterMinutes * 60_000;
+            }
+
+            // Daily limits. The server never refuses the ping — it reports where the user
+            // stands and the UI decides whether to prompt. Only fire on a *transition*,
+            // so the modal appears once rather than on every heartbeat.
+            const daily = response.data.daily;
+            if (daily) {
+                const previousState = lastDailyStateRef.current;
+                lastDailyStateRef.current = daily.state;
+
+                const reachedCap = daily.state === 'at_cap' || daily.state === 'over_cap';
+                const previouslyAtCap = previousState === 'at_cap' || previousState === 'over_cap';
+
+                if (reachedCap && !previouslyAtCap) {
+                    window.dispatchEvent(new CustomEvent(TIMER_DAILY_CAP_EVENT, { detail: daily }));
+                } else if (daily.state === 'floor_passed' && previousState !== 'floor_passed') {
+                    window.dispatchEvent(new CustomEvent(TIMER_DAILY_FLOOR_EVENT, { detail: daily }));
+                }
             }
 
             // If the server enforced a pause during the ping guardrail, update local state.

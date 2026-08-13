@@ -76,6 +76,28 @@ export const env = {
         const parsed = Number.parseFloat(raw || '');
         return Number.isFinite(parsed) && parsed > 0 ? parsed : 8;
     })(),
+    // Ceiling on total time logged in one calendar day, in the user's timezone.
+    // Distinct from maxActiveTimerHours, which caps a single continuous session.
+    dailyCapHours: (() => {
+        const raw = process.env.DAILY_CAP_HOURS?.trim();
+        const parsed = Number.parseFloat(raw || '');
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 8;
+    })(),
+    // Daily expectation for interns. Passing it triggers a soft, no-reason nudge;
+    // it is a floor to reach, not a ceiling to enforce.
+    internDailyFloorHours: (() => {
+        const raw = process.env.INTERN_DAILY_FLOOR_HOURS?.trim();
+        const parsed = Number.parseFloat(raw || '');
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 2;
+    })(),
+    weeklyRecoveryLimit: (() => {
+        const raw = process.env.WEEKLY_RECOVERY_LIMIT?.trim();
+        const parsed = Number.parseInt(raw || '', 10);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 3;
+    })(),
+    // How long after the last heartbeat an abandoned timer is still credited before
+    // the recorded end time is clamped back to that heartbeat.
+    abandonedTimerGraceMinutes: parseMinutesEnv('ABANDONED_TIMER_GRACE_MINUTES', 15),
     authentikEnabled: process.env.AUTHENTIK_ENABLED?.trim().toLowerCase() === 'true',
     authentikIssuerUrl: process.env.AUTHENTIK_ISSUER_URL?.trim() || '',
     authentikClientId: process.env.AUTHENTIK_CLIENT_ID?.trim() || '',

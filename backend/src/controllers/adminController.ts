@@ -1,9 +1,10 @@
 import { Response } from 'express';
 import prisma from '../config/db';
 import { AuthRequest } from '../types/auth';
-import { getGlobalTimerPolicy, normalizeTimerPolicy, validateTimerPolicy } from '../services/timerPolicyService';
+import { getGlobalTimerPolicy, getGlobalTimerPolicyStatus, normalizeTimerPolicy, validateTimerPolicy } from '../services/timerPolicyService';
 import { resolvePasswordPolicy } from '../services/passwordPolicyService';
 import { EMPLOYMENT_TYPES, resolveEmploymentHours } from '../services/employmentService';
+import { getUserWeekWindow, resolveUserTimezone } from '../services/userTimeWindowService';
 
 // ---------------------------------------------------------------------------
 // GET /admin/org-settings  — returns compliance_mode + time_rounding + password_policy + daily_report_recipient
@@ -392,8 +393,8 @@ export const updateTeam = async (req: AuthRequest, res: Response): Promise<void>
 
 export const getTimerPolicy = async (_req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const policy = await getGlobalTimerPolicy();
-        res.status(200).json({ policy });
+        const { policy, lastSweepAt } = await getGlobalTimerPolicyStatus();
+        res.status(200).json({ policy, last_sweep_at: lastSweepAt ? lastSweepAt.toISOString() : null });
     } catch (error) {
         console.error('Failed to get timer policy:', error);
         res.status(500).json({ message: 'Internal server error while loading timer policy' });
@@ -431,6 +432,10 @@ export const updateTimerPolicy = async (req: AuthRequest, res: Response): Promis
                     max_session_duration_hours: nextPolicy.maxSessionDurationHours,
                     allow_resume_after_idle_pause: nextPolicy.allowResumeAfterIdlePause,
                     require_note_on_resume_after_minutes: nextPolicy.requireNoteOnResumeAfterMinutes,
+                    daily_cap_hours: nextPolicy.dailyCapHours,
+                    intern_daily_floor_hours: nextPolicy.internDailyFloorHours,
+                    weekly_recovery_limit: nextPolicy.weeklyRecoveryLimit,
+                    abandoned_timer_grace_minutes: nextPolicy.abandonedTimerGraceMinutes,
                     updated_by: actorId,
                 },
             })
@@ -446,6 +451,10 @@ export const updateTimerPolicy = async (req: AuthRequest, res: Response): Promis
                     max_session_duration_hours: nextPolicy.maxSessionDurationHours,
                     allow_resume_after_idle_pause: nextPolicy.allowResumeAfterIdlePause,
                     require_note_on_resume_after_minutes: nextPolicy.requireNoteOnResumeAfterMinutes,
+                    daily_cap_hours: nextPolicy.dailyCapHours,
+                    intern_daily_floor_hours: nextPolicy.internDailyFloorHours,
+                    weekly_recovery_limit: nextPolicy.weeklyRecoveryLimit,
+                    abandoned_timer_grace_minutes: nextPolicy.abandonedTimerGraceMinutes,
                     created_by: actorId,
                     updated_by: actorId,
                 },
@@ -470,5 +479,97 @@ export const updateTimerPolicy = async (req: AuthRequest, res: Response): Promis
     } catch (error) {
         console.error('Failed to update timer policy:', error);
         res.status(500).json({ message: 'Internal server error while updating timer policy' });
+    }
+};
+
+/**
+ * Grant a user extra recovery (correction) requests for the current week once their
+ * weekly allowance is spent.
+ *
+ * Admin-only and week-scoped by design: the quota exists to make repeated
+ * "the timer wasn't running" claims visible, so lifting it has to be a deliberate,
+ * audited act that expires on its own rather than a setting someone quietly raises.
+ */
+export const grantRecoveryOverride = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const actorId = req.user?.userId;
+        if (!actorId) {
+            res.status(401).json({ message: 'Authentication required' });
+            return;
+        }
+
+        const targetUserId = typeof req.body?.user_id === 'string' ? req.body.user_id.trim() : '';
+        const note = typeof req.body?.note === 'string' && req.body.note.trim() ? req.body.note.trim() : null;
+        const rawExtra = Number(req.body?.extra_requests ?? 1);
+        const extraRequests = Number.isFinite(rawExtra) ? Math.min(Math.max(Math.round(rawExtra), 1), 10) : 1;
+
+        if (!targetUserId) {
+            res.status(400).json({ message: 'user_id is required.' });
+            return;
+        }
+
+        const target = await prisma.user.findFirst({
+            where: { id: targetUserId, organization_id: req.user!.organization_id },
+            select: { id: true, timezone: true, first_name: true, last_name: true },
+        });
+
+        if (!target) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        // The grant is anchored to the target user's week, not the admin's — an admin in
+        // a different timezone must not shift whose week is being topped up.
+        const timezone = resolveUserTimezone(target);
+        const week = getUserWeekWindow(timezone, new Date());
+
+        const grant = await prisma.recoveryOverrideGrant.create({
+            data: {
+                user_id: target.id,
+                organization_id: req.user!.organization_id,
+                granted_by: actorId,
+                week_start: week.start,
+                extra_requests: extraRequests,
+                note,
+            },
+        });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: actorId,
+                    organization_id: req.user!.organization_id,
+                    action: 'recovery_grant_created',
+                    resource: 'recovery_override_grant',
+                    metadata: {
+                        grant_id: grant.id,
+                        target_user_id: target.id,
+                        extra_requests: extraRequests,
+                        week_start: week.start.toISOString(),
+                        note,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write recovery grant audit log:', error);
+        }
+
+        try {
+            await prisma.notification.create({
+                data: {
+                    user_id: target.id,
+                    organization_id: req.user!.organization_id,
+                    message: `An admin granted you ${extraRequests} extra recovery ${extraRequests === 1 ? 'request' : 'requests'} for this week.`,
+                    type: 'alert',
+                },
+            });
+        } catch (error) {
+            console.error('Failed to notify recovery grant recipient:', error);
+        }
+
+        res.status(201).json({ grant });
+    } catch (error) {
+        console.error('Failed to grant recovery override:', error);
+        res.status(500).json({ message: 'Internal server error while granting recovery override' });
     }
 };

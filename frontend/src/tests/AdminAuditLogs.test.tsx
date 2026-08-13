@@ -29,6 +29,9 @@ const mockedApi = api as unknown as MockedApi;
 describe('Admin audit logs', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // The audit feed is Admin-only. /admin itself is reachable by Managers, so the
+        // tab is gated on the stored role — the fixture has to declare one.
+        window.localStorage.setItem('user_role', 'Admin');
 
         mockedApi.get.mockImplementation((url: string) => {
             if (url === '/projects') {

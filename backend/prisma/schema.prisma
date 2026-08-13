@@ -48,6 +48,7 @@ model Organization {
   expense_attachments       ExpenseAttachment[]
   geofence_zones            GeofenceZone[]
   timer_location_events     TimerLocationEvent[]
+  recovery_override_grants  RecoveryOverrideGrant[]
 
   @@index([status, created_at])
 }
@@ -83,6 +84,11 @@ model User {
   employment_type  String? // 'employee' | 'intern' | 'contractor'
   min_weekly_hours Int? // per-user override of the org default target
 
+  // IANA timezone captured from the browser (e.g. "America/Chicago"). Defines the
+  // user's day boundary for daily-cap and weekly recovery-quota maths. NULL falls
+  // back to UTC so existing rows keep working without a backfill.
+  timezone String?
+
   project_members           ProjectMember[]
   time_entries              TimeEntry[]
   active_timers             ActiveTimer[]
@@ -105,6 +111,7 @@ model User {
   expenses                  Expense[]                @relation("ExpenseOwner")
   approved_expenses         Expense[]                @relation("ExpenseApprover")
   timer_location_events     TimerLocationEvent[]
+  recovery_override_grants  RecoveryOverrideGrant[]
 
   @@unique([email, organization_id])
   @@index([organization_id, is_active])
@@ -189,8 +196,16 @@ model TimeEntry {
   status           String       @default("pending") // "pending", "approved", "rejected"
   stop_reason      String?
   auto_stopped     Boolean      @default(false)
-  created_at       DateTime     @default(now())
-  updated_at       DateTime     @updatedAt
+
+  // Set when the user explicitly attested to working past their daily cap.
+  // `overtime_reason` is the justification they typed at the time.
+  over_daily_cap        Boolean   @default(false)
+  overtime_reason       String?
+  // Set when the user acknowledged an auto-stop review card for this entry.
+  auto_stop_reviewed_at DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   user               User              @relation(fields: [user_id], references: [id])
   project            Project?          @relation(fields: [project_id], references: [id])
@@ -265,6 +280,13 @@ model TimerPolicyConfig {
   idle_warning_after_minutes           Int           @default(5)
   idle_pause_after_minutes             Int           @default(10)
   max_session_duration_hours           Decimal       @default(8.0) @db.Decimal(4, 2)
+  daily_cap_hours                      Decimal       @default(8.0) @db.Decimal(4, 2)
+  intern_daily_floor_hours             Decimal       @default(2.0) @db.Decimal(4, 2)
+  weekly_recovery_limit                Int           @default(3)
+  abandoned_timer_grace_minutes        Int           @default(15)
+  /// Last successful run of the stale-timer sweep. Read by the admin policy screen so
+  /// a silently disabled scheduled workflow is visible instead of invisible.
+  last_sweep_at                        DateTime?
   allow_resume_after_idle_pause        Boolean       @default(true)
   require_note_on_resume_after_minutes Int           @default(30)
   created_by                           String?
@@ -274,6 +296,25 @@ model TimerPolicyConfig {
 
   @@unique([scope_type, scope_id])
   @@index([organization_id])
+}
+
+/// Lets an Admin hand a user extra recovery (correction) requests for one week
+/// after they have exhausted the weekly quota. Additive and week-scoped so a
+/// grant never leaks into the following week.
+model RecoveryOverrideGrant {
+  id              String       @id @default(uuid())
+  user_id         String
+  organization_id String
+  organization    Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+  granted_by      String
+  week_start      DateTime // Monday 00:00 in the user's timezone, stored as UTC
+  extra_requests  Int          @default(1)
+  note            String?
+  created_at      DateTime     @default(now())
+
+  user User @relation(fields: [user_id], references: [id])
+
+  @@index([organization_id, user_id, week_start])
 }
 
 model Notification {
@@ -628,13 +669,13 @@ model ScheduledReport {
   schedule_generation_time String @default("06:00")
 
   // ── Pre-generation validation gates ──────────────────────────────────────
-  validation_gates_enabled         Boolean @default(true)
-  validation_gate_zero_entries     Boolean @default(true)
-  validation_gate_window_integrity Boolean @default(true)
+  validation_gates_enabled         Boolean   @default(true)
+  validation_gate_zero_entries     Boolean   @default(true)
+  validation_gate_window_integrity Boolean   @default(true)
   // Weekday indices (0 = Sunday .. 6 = Saturday) that must contain at least one
   // org-wide entry. Defaults to all seven days; narrow it for organisations that
   // legitimately do not log at weekends rather than disabling the gate outright.
-  validation_gate_required_days    Json    @default("[0, 1, 2, 3, 4, 5, 6]")
+  validation_gate_required_days    Json      @default("[0, 1, 2, 3, 4, 5, 6]")
   // Start of the export window an admin was last alerted about. The scheduled-report
   // endpoint is polled hourly and a blocked report stays due for the rest of its
   // generation day, so without this marker one missing day of data would emit an

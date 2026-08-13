@@ -240,10 +240,67 @@ Primary Prisma models:
 - `User`, `Role`
 - `Project`, `ProjectMember`
 - `TimeEntry`, `ActiveTimer`
+- `TimerCorrectionRequest`, `RecoveryOverrideGrant`
+- `TimerPolicyConfig`
 - `Notification`, `AuditLog`
 - `Integration`
 - `CalendarConnection`
 - `ReportCache`
+
+### Timer guardrails (added 2026-08-12)
+
+Four rules constrain how time can be added. All are server-enforced; the UI only
+renders what the server reports.
+
+- **Daily cap.** 8h per calendar day in the *user's own* timezone (`User.timezone`,
+  reported by the browser; falls back to UTC). Enforced on `POST /timers/start`,
+  `/timers/manual`, `/timers/corrections`, and `PUT /timers/:id`. Exceeding it is
+  allowed but requires an attestation — a reason of at least 20 characters plus an
+  acknowledgement — which is stored on the entry as `over_daily_cap` +
+  `overtime_reason` and adds 35 points to its risk score.
+- **Intern daily floor.** 2h. Passing it raises a soft, once-per-day nudge with no
+  justification required. It is a target to reach, not a ceiling. Driven by
+  `User.employment_type`, never by the access role.
+- **Clash detection.** `services/timeOverlapService.ts` is the single overlap check,
+  used by every write path. It considers `pending` *and* `approved` entries plus other
+  `PENDING` correction requests. Half-open ranges, so 09:00–10:00 and 10:00–11:00 do
+  not clash. Returns `409 { code: 'TIME_OVERLAP', conflicts: [...] }`.
+- **Recovered-time quota.** 3 correction requests per Monday-based week per user.
+  Requests 1–2 pass freely; the last one in the allowance demands a 40-character
+  reason plus an acknowledgement; beyond it returns `403 RECOVERY_LIMIT_REACHED`. A
+  rejected request does **not** consume a slot. An Admin can grant extra headroom for
+  one week via `POST /admin/recovery-grants`.
+
+Policy values live on the GLOBAL `TimerPolicyConfig` row and are editable at
+Admin → Policy: `daily_cap_hours`, `intern_daily_floor_hours`,
+`weekly_recovery_limit`, `abandoned_timer_grace_minutes`.
+
+### Abandoned timers
+
+A timer left running on a closed browser is stopped by the sweep at
+`GET /api/v1/cron/idle` with `stop_reason: 'abandoned_timer'`, and its end time is
+**clamped** back to the last heartbeat plus `abandoned_timer_grace_minutes`. Time
+after the last proof of activity is never credited. The same clamping applies to
+`active_duration_limit`.
+
+`backend/vercel.json` can only schedule this daily (Hobby rejects sub-daily cron), so
+the real cadence comes from `.github/workflows/timer-sweep.yml` every 15 minutes —
+the same workaround as the scheduled-reports tick. Each run stamps
+`TimerPolicyConfig.last_sweep_at`; Admin → Policy shows the age and turns red past an
+hour, because **GitHub disables scheduled workflows silently** after 60 days of
+repository inactivity.
+
+All three cap enforcers (inline request guardrail, cron sweep, and the client) now
+compare *counted* time — elapsed minus paused — and a client-initiated cap stop sends
+`{ reason: 'active_duration_limit' }` so it produces the identical record whichever
+enforcer wins the race.
+
+### Audit log visibility
+
+`GET /api/v1/admin/audit-logs` is `requireRole(['Admin'])`. `/admin` itself is open to
+Managers, so the Audit Logs tab and its fetch are both gated on the stored role in
+`frontend/src/pages/Admin.tsx` (`adminOnlyTabs`). Adding another privileged tab means
+adding it to that set, not just relying on the backend to 403.
 
 Initial seeded projects:
 
@@ -297,13 +354,42 @@ npm start
 
 ## 12. Deployment Strategy (Recommended Order)
 
+**Migrations run BEFORE the backend deploy, not after.**
+
+This reverses the order this section used to document, and the old order would have
+caused a full outage. Prisma generates an explicit column list for every query from
+the schema it was built against, so a backend carrying a newer schema than the
+database fails on essentially every request:
+
+```
+Invalid `prisma.timeEntry.findFirst()` invocation:
+The column `TimeEntry.over_daily_cap` does not exist in the current database.
+```
+
+That is the timer, timesheet, approvals and reports all down for the whole window
+between deploy and migrate. Verified empirically on 2026-08-12 by rewinding a local
+database to the pre-release schema and querying it with the new client.
+
+The reverse — an additive migration applied while the *old* backend is still serving
+— is safe: the old client never selects the new columns, and new columns are either
+nullable or defaulted, so its inserts still succeed. That is what makes
+migrate-first correct.
+
+This ordering assumes additive migrations, which is the only kind that should reach
+production. A destructive change (dropping or renaming a column still read by live
+code) cannot be made safe by ordering alone and must be split across two releases:
+ship code that stops using the column, deploy, then drop it.
+
 For safe production rollout:
 
 1. Update backend env vars first.
-2. Deploy backend (`vercel deploy --prod`).
-3. Run DB migration/seed tasks.
+2. **Run DB migrations.**
 - Required for production: `npm run release:migrate`
 - Never run `prisma db push` against production or a shared database.
+- Prove the migration first: `bash scripts/gauntlet.sh --with-db` (fresh provision,
+  zero drift, idempotent re-run). Set `MIGRATION_TEST_DATABASE_URL` to a disposable
+  database if Docker is unavailable.
+3. Deploy backend (`vercel deploy --prod`).
 4. Verify backend health (`/api/v1/health`) and critical auth flows.
 5. Update frontend `VITE_API_URL` if backend URL changed.
 6. Deploy frontend.

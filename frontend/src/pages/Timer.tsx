@@ -1,12 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import TimeClashDialog from '../components/TimeClashDialog';
+import AccessibleDialog from '../components/AccessibleDialog';
 import type {
     ActiveTimerSummary,
     CalendarEventSuggestion,
     CalendarStatus,
     NotificationSummary,
     ProjectSummary,
+    DailyCapConflict,
+    RecoveryUsageSummary,
+    DailyCapSummary,
+    TimeClashConflict,
+    TimeOverlapConflict,
     TimerCorrectionRequestSummary,
     TimeEntrySummary,
     TimerEntriesResponse,
@@ -53,11 +60,20 @@ const extractErrorMessage = (error: unknown, fallback: string) =>
         : fallback;
 
 const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
-const isApiRouteNotFoundError = (error: unknown) => {
-    const message = extractErrorMessage(error, '').toLowerCase();
-    return message.includes('api route not found');
-};
 
+/**
+ * The most recent machine-ended session the user has not yet confirmed.
+ *
+ * Auto-stops are the moments where recorded time and reality are most likely to
+ * disagree — the timer was running on a closed laptop and the end time was trimmed
+ * back to the last heartbeat. Surfacing the newest unconfirmed one gives the person
+ * who was actually there a chance to say "that's right" or ask for a correction,
+ * instead of the discrepancy first surfacing weeks later in payroll.
+ */
+const findUnreviewedAutoStop = (entries: TimeEntrySummary[]): TimeEntrySummary | null =>
+    entries
+        .filter((entry) => entry.auto_stopped && !entry.auto_stop_reviewed_at)
+        .sort((a, b) => new Date(b.end_time).getTime() - new Date(a.end_time).getTime())[0] ?? null;
 const correctionStatusClasses: Record<TimerCorrectionRequestSummary['status'], string> = {
     PENDING: 'bg-amber-100 text-amber-700',
     APPROVED: 'bg-emerald-100 text-emerald-700',
@@ -108,6 +124,13 @@ const Timer: React.FC = () => {
     const [correctionReason, setCorrectionReason] = useState('');
     const [correctionWorkNote, setCorrectionWorkNote] = useState('');
     const [correctionFeedback, setCorrectionFeedback] = useState<string | null>(null);
+    const [recoveryUsage, setRecoveryUsage] = useState<RecoveryUsageSummary | null>(null);
+    const [dailyUsage, setDailyUsage] = useState<DailyCapSummary | null>(null);
+    const [unreviewedAutoStop, setUnreviewedAutoStop] = useState<TimeEntrySummary | null>(null);
+    const [showRecoveryLadder, setShowRecoveryLadder] = useState(false);
+    const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(false);
+    const [clashConflicts, setClashConflicts] = useState<TimeClashConflict[] | null>(null);
+    const [clashMessage, setClashMessage] = useState<string | undefined>(undefined);
     /**
      * Idle warning state — set by TIMER_IDLE_WARNING_EVENT / TIMER_IDLE_COUNTDOWN_EVENT.
      * null means no warning is active.
@@ -181,11 +204,13 @@ const Timer: React.FC = () => {
 
                 setCompletedSeconds(getTodaysCompletedSeconds(resolvedTimerPayload.entries || []));
                 setAiSuggestions(buildTaskSuggestions(resolvedTimerPayload.entries || []));
+                setUnreviewedAutoStop(findUnreviewedAutoStop(resolvedTimerPayload.entries || []));
                 syncFromActiveTimer(resolvedTimerPayload.activeTimer, clearDraft);
             } else {
                 console.error('Failed to fetch timer session data', timerResult.reason);
                 setCompletedSeconds(0);
                 setAiSuggestions([]);
+                setUnreviewedAutoStop(null);
                 syncFromActiveTimer(null, clearDraft);
             }
 
@@ -228,6 +253,22 @@ const Timer: React.FC = () => {
                 setCorrectionRequests(correctionResponse.data.corrections || []);
             } catch {
                 setCorrectionRequests([]);
+            }
+
+            // Read the weekly allowance up front so the form can show where the user
+            // stands before they fill it in, rather than refusing them on submit.
+            try {
+                const quotaResponse = await api.get<{ recovery_usage: RecoveryUsageSummary }>('/timers/recovery-quota');
+                setRecoveryUsage(quotaResponse.data.recovery_usage);
+            } catch {
+                setRecoveryUsage(null);
+            }
+
+            try {
+                const dailyResponse = await api.get<{ daily: DailyCapSummary }>('/timers/daily-usage');
+                setDailyUsage(dailyResponse.data.daily);
+            } catch {
+                setDailyUsage(null);
             }
         } catch (error) {
             console.error('Failed to fetch timer page data', error);
@@ -454,43 +495,97 @@ const Timer: React.FC = () => {
         await handleStopTimer(true);
     };
 
-    const handleSubmitCorrectionRequest = async (event: React.FormEvent) => {
-        event.preventDefault();
+    const handleAcknowledgeAutoStop = async (entryId: string) => {
+        setUnreviewedAutoStop(null);
+        try {
+            await api.post(`/timers/${entryId}/ack-auto-stop`);
+        } catch {
+            // Dismissing the card locally is enough; the flag is a convenience, and a
+            // failure here must not leave the user stuck looking at it.
+        }
+    };
+
+    /** Pre-fill the correction form with the window that was trimmed. */
+    const handleCorrectAutoStop = (entry: TimeEntrySummary) => {
+        const toLocalInput = (iso: string) => {
+            const date = new Date(iso);
+            const pad = (value: number) => String(value).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        };
+
+        setCorrectionStart(toLocalInput(entry.end_time));
+        setCorrectionEnd(toLocalInput(new Date().toISOString()));
+        setCorrectionReason(`Timer was stopped automatically during "${entry.task_description}" but I was still working.`);
+        setUnreviewedAutoStop(null);
+        setSearchParams((current) => {
+            const next = new URLSearchParams(current);
+            next.set('correction', '1');
+            return next;
+        });
+    };
+
+    const submitCorrectionRequest = async (acknowledgedPolicy: boolean) => {
         setCorrectionFeedback(null);
+        setClashConflicts(null);
+
         const payload = {
             requested_start_time: correctionStart ? new Date(correctionStart).toISOString() : '',
             requested_end_time: correctionEnd ? new Date(correctionEnd).toISOString() : '',
             reason: correctionReason,
             work_note: correctionWorkNote,
+            acknowledged_policy: acknowledgedPolicy,
         };
 
         try {
-            await api.post('/timers/corrections', payload);
+            const response = await api.post<{ recovery_usage?: RecoveryUsageSummary }>('/timers/corrections', payload);
+            if (response.data.recovery_usage) {
+                setRecoveryUsage(response.data.recovery_usage);
+            }
             setCorrectionStart('');
             setCorrectionEnd('');
             setCorrectionReason('');
             setCorrectionWorkNote('');
+            setShowRecoveryLadder(false);
             setCorrectionFeedback('Correction request submitted and pending approval. You\'ll be notified once it is reviewed.');
             await loadTimerPageData(false);
         } catch (error) {
-            if (isApiRouteNotFoundError(error)) {
-                try {
-                    await api.post('/timers/correction', payload);
-                    setCorrectionStart('');
-                    setCorrectionEnd('');
-                    setCorrectionReason('');
-                    setCorrectionWorkNote('');
-                    setCorrectionFeedback('Correction request submitted and pending approval. You\'ll be notified once it is reviewed.');
-                    await loadTimerPageData(false);
-                    return;
-                } catch (retryError) {
-                    setCorrectionFeedback(extractErrorMessage(retryError, 'Failed to submit correction request'));
-                    return;
-                }
+            const body = (error as { response?: { data?: unknown } })?.response?.data as
+                | TimeOverlapConflict
+                | (DailyCapConflict & { recovery_usage?: RecoveryUsageSummary })
+                | { code?: string; message?: string; recovery_usage?: RecoveryUsageSummary }
+                | undefined;
+
+            // Clash: show exactly what the requested window collides with, rather than
+            // a generic "overlap detected".
+            if (body && 'code' in body && body.code === 'TIME_OVERLAP') {
+                const overlap = body as TimeOverlapConflict;
+                setClashConflicts(overlap.conflicts);
+                setClashMessage(overlap.message);
+                setShowRecoveryLadder(false);
+                return;
             }
 
+            if (body && 'recovery_usage' in body && body.recovery_usage) {
+                setRecoveryUsage(body.recovery_usage);
+            }
+
+            setShowRecoveryLadder(false);
             setCorrectionFeedback(extractErrorMessage(error, 'Failed to submit correction request'));
         }
+    };
+
+    const handleSubmitCorrectionRequest = async (event: React.FormEvent) => {
+        event.preventDefault();
+
+        // The last request in the weekly allowance goes through an explicit warning
+        // first — the point of the quota is that repeat use is visible and considered,
+        // not that it is silently refused.
+        if (recoveryUsage?.tier === 'final') {
+            setShowRecoveryLadder(true);
+            return;
+        }
+
+        await submitCorrectionRequest(false);
     };
 
     // Keyboard shortcut: Ctrl+Enter to start/stop timer
@@ -534,7 +629,10 @@ const Timer: React.FC = () => {
         }
     };
 
-    const progressPercentage = Math.min((todaysProgress / (8 * 3600)) * 100, 100);
+    // The goal used to be a hardcoded 8h for everyone, so an intern on a 2h daily
+    // expectation still saw an 8h bar. It now comes from the server-resolved policy.
+    const dailyGoalSeconds = dailyUsage?.floorSeconds || dailyUsage?.capSeconds || 8 * 3600;
+    const progressPercentage = Math.min((todaysProgress / dailyGoalSeconds) * 100, 100);
 
     // ---------------------------------------------------------------------------
     // Helpers for idle warning banner display
@@ -619,7 +717,7 @@ const Timer: React.FC = () => {
                     <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
                         <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
                             <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                            {Math.round(progressPercentage)}% of 8h goal
+                            {Math.round(progressPercentage)}% of {formatProgressHours(dailyGoalSeconds)} goal
                         </div>
                         {isActivelyRecording && (
                             <div className="inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-rose-600">
@@ -849,7 +947,7 @@ const Timer: React.FC = () => {
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-slate-500">Daily Goal</span>
-                                    <span className="font-semibold text-slate-900">8h 0m</span>
+                                    <span className="font-semibold text-slate-900">{formatProgressHours(dailyGoalSeconds)}</span>
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
                                     <span className="text-slate-500">Completion</span>
@@ -873,6 +971,27 @@ const Timer: React.FC = () => {
                             </p>
                         </div>
                     </div>
+                    {recoveryUsage && (
+                        <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
+                            recoveryUsage.tier === 'blocked'
+                                ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                : recoveryUsage.tier === 'final'
+                                    ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                    : 'border-slate-200 bg-slate-50 text-slate-600'
+                        }`}>
+                            <p className="font-semibold">
+                                {recoveryUsage.used} of {recoveryUsage.limit} recovery requests used this week
+                                {recoveryUsage.granted_extra > 0 && ` (includes ${recoveryUsage.granted_extra} granted by an admin)`}
+                            </p>
+                            <p className="mt-1 text-xs">
+                                {recoveryUsage.tier === 'blocked'
+                                    ? `You have used your whole allowance. It resets on ${new Date(recoveryUsage.week_end).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}. Ask an admin if you need an exception.`
+                                    : recoveryUsage.tier === 'final'
+                                        ? 'This is your last request this week. Frequent recovery requests are reviewed closely by management and may be rejected.'
+                                        : `Resets on ${new Date(recoveryUsage.week_end).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' })}.`}
+                            </p>
+                        </div>
+                    )}
                     <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={(event) => void handleSubmitCorrectionRequest(event)}>
                         <label className="text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                             Start time
@@ -918,7 +1037,8 @@ const Timer: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-3 md:col-span-2">
                             <button
                                 type="submit"
-                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
+                                disabled={recoveryUsage?.tier === 'blocked'}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                             >
                                 Submit request
                             </button>
@@ -927,6 +1047,62 @@ const Timer: React.FC = () => {
                             )}
                         </div>
                     </form>
+                    <TimeClashDialog
+                        isOpen={Boolean(clashConflicts?.length)}
+                        message={clashMessage}
+                        conflicts={clashConflicts ?? []}
+                        onAdjust={() => setClashConflicts(null)}
+                        onClose={() => setClashConflicts(null)}
+                    />
+
+                    {/* Last request in the allowance: state the policy plainly and make the
+                        user acknowledge it, rather than refusing them without explanation. */}
+                    <AccessibleDialog
+                        isOpen={showRecoveryLadder}
+                        onClose={() => setShowRecoveryLadder(false)}
+                        ariaLabel="Recovery request policy"
+                        panelClassName="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl"
+                    >
+                        <div className="space-y-4">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">Last request this week</p>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                This is recovery request {(recoveryUsage?.used ?? 0) + 1} of {recoveryUsage?.limit ?? 0}
+                            </h2>
+                            <p className="text-sm text-slate-600">
+                                Recovery requests claim time the timer did not record, so management reviews
+                                them closely. Repeated requests are frowned upon and may be rejected. Make sure
+                                your reason explains why the timer was not running.
+                            </p>
+                            <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+                                {correctionReason.trim().length >= (recoveryUsage?.min_reason_length ?? 40)
+                                    ? correctionReason
+                                    : `Your reason needs at least ${recoveryUsage?.min_reason_length ?? 40} characters. It currently has ${correctionReason.trim().length}.`}
+                            </p>
+                            <label className="flex items-start gap-2 text-sm text-slate-700">
+                                <input
+                                    type="checkbox"
+                                    checked={recoveryAcknowledged}
+                                    onChange={(event) => setRecoveryAcknowledged(event.target.checked)}
+                                    className="mt-0.5"
+                                />
+                                <span>I understand this request will be closely reviewed and may be rejected.</span>
+                            </label>
+                            <div className="flex justify-end gap-2">
+                                <button type="button" className="btn btn-outline" onClick={() => setShowRecoveryLadder(false)}>
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary"
+                                    disabled={!recoveryAcknowledged || correctionReason.trim().length < (recoveryUsage?.min_reason_length ?? 40)}
+                                    onClick={() => void submitCorrectionRequest(true)}
+                                >
+                                    Submit anyway
+                                </button>
+                            </div>
+                        </div>
+                    </AccessibleDialog>
+
                     {correctionRequests.length > 0 && (
                         <div className="mt-5 border-t border-slate-100 pt-4">
                             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500">My Correction Requests</h3>
@@ -979,6 +1155,37 @@ const Timer: React.FC = () => {
                     <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
                         <h2 className="text-sm font-bold tracking-wide text-amber-900">Timer Status</h2>
                         <p className="mt-2 text-sm text-amber-700">{timerStatusNotice.message}</p>
+                    </section>
+                )}
+
+                {unreviewedAutoStop && (
+                    <section className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
+                        <h2 className="text-sm font-bold tracking-wide text-indigo-900">We stopped a timer for you</h2>
+                        <p className="mt-2 text-sm text-indigo-800">
+                            “{unreviewedAutoStop.task_description}” was stopped automatically on{' '}
+                            {new Date(unreviewedAutoStop.end_time).toLocaleString([], {
+                                weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                            })}{' '}
+                            and recorded as {formatProgressHours(unreviewedAutoStop.duration)}.
+                            {unreviewedAutoStop.stop_reason === 'abandoned_timer'
+                                && ' The end time was trimmed back to your last confirmed activity.'}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-700"
+                                onClick={() => void handleAcknowledgeAutoStop(unreviewedAutoStop.id)}
+                            >
+                                Looks right
+                            </button>
+                            <button
+                                type="button"
+                                className="rounded-lg border border-indigo-300 px-4 py-2 text-sm font-bold text-indigo-800 hover:bg-indigo-100"
+                                onClick={() => handleCorrectAutoStop(unreviewedAutoStop)}
+                            >
+                                Request a correction
+                            </button>
+                        </div>
                     </section>
                 )}
 

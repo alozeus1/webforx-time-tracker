@@ -129,11 +129,27 @@ Mounted at `/api/v1/timers`.
 | `POST` | `/corrections` | User | Create timer correction request for missed paused time |
 | `GET` | `/corrections/review` | Manager, Admin | List correction requests for review |
 | `POST` | `/corrections/:correctionId/review` | Manager, Admin | Approve/reject correction request |
+| `POST` | `/corrections/purge-resolved` | Manager, Admin | Delete resolved corrections past the retention window |
+| `GET` | `/recovery-quota` | User | Weekly recovered-time allowance and current tier |
+| `GET` | `/daily-usage` | User | Time logged today against the user's daily cap and floor |
 | `PUT` | `/:id` | User | Update permitted entry |
 | `DELETE` | `/:id` | User | Delete permitted entry |
 | `POST` | `/:id/duplicate` | User | Duplicate/resume task context |
+| `POST` | `/:id/ack-auto-stop` | User (own entry) | Confirm an auto-stopped entry looks right |
+| `PATCH` | `/bulk` | User | Bulk edit own entries (approve/reject restricted to Manager, Admin) |
 | `GET` | `/approvals` | Manager, Admin | Pending approval queue |
+| `POST` | `/approvals/bulk` | Manager, Admin | Approve/reject up to 200 pending entries at once |
 | `POST` | `/approvals/:entryId` | Manager, Admin | Approve/reject entry |
+
+Guardrail responses shared by the write endpoints:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 409 | `DAILY_CAP_REACHED` | Would exceed the daily cap. Retry with `overtime_ack: { acknowledged: true, reason }` (reason ≥ 20 chars). |
+| 409 | `TIME_OVERLAP` | Clashes with a pending/approved entry or another pending correction. Body lists the conflicts. |
+| 400 | `OVERTIME_REASON_REQUIRED` | An attestation was sent but its reason was too short. |
+| 400/403 | `RECOVERY_LIMIT_REACHED` | Weekly recovered-time allowance: 400 needs an acknowledgement, 403 is spent. |
+| 423 | — | Entry falls inside a locked payroll period. |
 
 ## Reports API
 
@@ -177,8 +193,15 @@ Timer policy endpoints:
 
 | Method | Route | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/timer-policy` | Admin | Read global timer idle/heartbeat policy |
-| `PUT` | `/timer-policy` | Admin | Update global timer idle/heartbeat policy with server validation |
+| `GET` | `/audit-logs` | Admin | Combined audit + auth event feed (Admin only — see the note below) |
+| `GET` | `/timer-policy` | Admin | Read timer policy, caps, quotas, and `last_sweep_at` |
+| `PUT` | `/timer-policy` | Admin | Update timer policy with server validation |
+| `POST` | `/recovery-grants` | Admin | Grant a user extra recovered-time requests for the current week |
+
+`/admin` is reachable by Managers as well as Admins, but the audit feed is a
+privileged view of every action taken across the app. Both the tab and its fetch are
+gated on the Admin role in `frontend/src/pages/Admin.tsx` (`adminOnlyTabs`); the
+backend `requireRole(['Admin'])` remains the actual enforcement.
 
 ## Cron API
 
@@ -188,7 +211,7 @@ Protected by `CRON_SECRET` in production.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `POST` | `/idle` | Idle/timer guardrail cron |
+| `POST` | `/idle` | Idle/abandoned-timer sweep. Scheduled daily in `backend/vercel.json` (Vercel Hobby rejects sub-daily cron) and every 15 minutes by `.github/workflows/timer-sweep.yml`. Each run stamps `TimerPolicyConfig.last_sweep_at`. |
 | `POST` | `/workload` | Workload/burnout cron |
 | `POST` | `/daily` | Daily notification/report cron |
 | `POST` | `/reset-demo` | Reset demo user's data |

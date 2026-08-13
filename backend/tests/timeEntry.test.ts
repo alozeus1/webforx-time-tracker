@@ -29,13 +29,20 @@ jest.mock('../src/config/db', () => ({
             findUnique: jest.fn(),
             update: jest.fn(),
             deleteMany: jest.fn(),
+            count: jest.fn(),
         },
         timeEntry: {
             create: jest.fn(),
             findFirst: jest.fn(),
             findMany: jest.fn(),
             update: jest.fn(),
+            updateMany: jest.fn(),
             count: jest.fn(),
+            aggregate: jest.fn(),
+        },
+        recoveryOverrideGrant: {
+            aggregate: jest.fn(),
+            create: jest.fn(),
         },
         timeEntryTag: {
             createMany: jest.fn(),
@@ -140,6 +147,18 @@ beforeEach(() => {
     (prisma.timerPolicyConfig.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.user.findUnique as jest.Mock).mockResolvedValue({ organization_id: TEST_ORG_ID });
     (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
+    // Guardrail defaults: a classified-as-employee user, an empty day, an empty
+    // timeline and an unused recovery allowance — i.e. nothing blocks. Tests that
+    // exercise a guardrail override the relevant mock explicitly.
+    (prisma.user.findFirst as jest.Mock).mockResolvedValue({
+        id: 'user-emp-1', organization_id: TEST_ORG_ID, timezone: 'UTC', employment_type: 'employee',
+    });
+    (prisma.timeEntry.aggregate as jest.Mock).mockResolvedValue({ _sum: { duration: 0 } });
+    (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.timerCorrectionRequest.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.timerCorrectionRequest.count as jest.Mock).mockResolvedValue(0);
+    (prisma.recoveryOverrideGrant.aggregate as jest.Mock).mockResolvedValue({ _sum: { extra_requests: 0 } });
+    (prisma.timeEntry.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
     (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
         const tx = {
             activeTimer: {
@@ -159,6 +178,10 @@ beforeEach(() => {
             },
             tag: {
                 findMany: (...args: unknown[]) => (prisma.tag.findMany as jest.Mock)(...args),
+            },
+            timerCorrectionRequest: {
+                update: (...args: unknown[]) => (prisma.timerCorrectionRequest.update as jest.Mock)(...args),
+                findMany: (...args: unknown[]) => (prisma.timerCorrectionRequest.findMany as jest.Mock)(...args),
             },
         };
         return fn(tx);
@@ -767,7 +790,8 @@ describe('Timer correction requests', () => {
         (prisma.$transaction as jest.Mock).mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn({
             timerCorrectionRequest: { update: txCorrectionUpdate },
             timeEntry: {
-                findFirst: jest.fn().mockResolvedValue(null),
+                // findOverlaps reads with findMany; an empty array means "no clash".
+                findMany: jest.fn().mockResolvedValue([]),
                 create: txTimeEntryCreate,
             },
         }));

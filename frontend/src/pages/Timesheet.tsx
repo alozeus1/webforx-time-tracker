@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar as CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Download, XCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, CheckCircle, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
-import type { TimeEntrySummary } from '../types/api';
+import ApprovalQueue from '../components/ApprovalQueue';
+import type { ReviewAction } from '../utils/timeEntryLabels';
+import type { BulkReviewResult, TimeEntrySummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 
 const dayFormatter = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -35,17 +37,6 @@ const formatHoursValue = (hours: number) => {
     }
 
     return `${hours.toFixed(1)}h`;
-};
-
-const formatSecondsValue = (seconds: number) => formatHoursValue(seconds / 3600);
-
-const formatStopReason = (reason?: string | null) => {
-    if (!reason) return null;
-    if (reason === 'active_duration_limit') return '8h cap reached';
-    if (reason === 'idle_timeout') return 'Idle timeout';
-    if (reason === 'heartbeat_missing') return 'Heartbeat missing';
-    if (reason === 'pause_expired') return 'Paused too long';
-    return reason.replace(/_/g, ' ');
 };
 
 const Timesheet: React.FC = () => {
@@ -228,13 +219,37 @@ const Timesheet: React.FC = () => {
         }
     };
 
-    const handleReview = async (entryId: string, action: 'approve' | 'reject') => {
+    const handleReview = async (entryId: string, action: ReviewAction) => {
         try {
             await api.post(`/timers/approvals/${entryId}`, { action });
             setFeedback({ message: `Entry ${action}d successfully`, tone: 'success' });
             await fetchApprovals();
         } catch (error) {
             setFeedback({ message: getApiErrorMessage(error, `Failed to ${action} entry`), tone: 'error' });
+        }
+    };
+
+    const handleBulkReview = async (entryIds: string[], action: ReviewAction) => {
+        try {
+            const response = await api.post<BulkReviewResult>('/timers/approvals/bulk', {
+                entry_ids: entryIds,
+                action,
+            });
+            const { updated, skipped_locked: skippedLocked = [], skipped_not_pending: skippedNotPending = [] } = response.data;
+
+            // Report what was skipped rather than silently under-delivering: a manager
+            // who selects 20 rows and sees "18 approved" needs to know why.
+            const notes: string[] = [];
+            if (skippedLocked.length > 0) notes.push(`${skippedLocked.length} skipped (locked payroll period)`);
+            if (skippedNotPending.length > 0) notes.push(`${skippedNotPending.length} already reviewed`);
+
+            setFeedback({
+                message: `${updated} ${updated === 1 ? 'entry' : 'entries'} ${action}d${notes.length ? ` — ${notes.join(', ')}` : ''}.`,
+                tone: 'success',
+            });
+            await fetchApprovals();
+        } catch (error) {
+            setFeedback({ message: getApiErrorMessage(error, `Failed to ${action} the selected entries`), tone: 'error' });
         }
     };
 
@@ -288,86 +303,12 @@ const Timesheet: React.FC = () => {
             {canReviewApprovals && showApprovals && (
                 <div className="card mb-6">
                     <div className="card-body">
-                        <div className="mb-3 flex items-center justify-between">
-                            <h3 className="text-base font-bold text-slate-900">Pending Approvals</h3>
-                            <span className="text-sm text-slate-500">{pendingApprovals.length} pending</span>
-                        </div>
-                        {approvalsLoading ? (
-                            <p className="py-6 text-sm text-slate-500">Loading approval queue…</p>
-                        ) : pendingApprovals.length === 0 ? (
-                            <p className="py-6 text-sm text-slate-500">No pending entries require review.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-[760px] w-full border-collapse text-left">
-                                    <thead>
-                                        <tr className="border-b border-slate-200 bg-slate-50">
-                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Employee</th>
-                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Task</th>
-                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Risk</th>
-                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Duration</th>
-                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500">Date</th>
-                                            <th className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-slate-500 text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {pendingApprovals.map((entry) => (
-                                            <tr key={entry.id} className="border-b border-slate-100">
-                                                <td className="px-4 py-3 text-sm font-medium text-slate-700">{entry.user.first_name} {entry.user.last_name}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-700">{entry.task_description}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-700">
-                                                    {entry.intelligence ? (
-                                                        <div className="space-y-1">
-                                                            <span className={`inline-flex rounded-full px-2 py-1 text-[11px] font-bold uppercase tracking-wide ${
-                                                                entry.intelligence.level === 'high'
-                                                                    ? 'bg-rose-100 text-rose-700'
-                                                                    : entry.intelligence.level === 'medium'
-                                                                        ? 'bg-amber-100 text-amber-700'
-                                                                        : 'bg-emerald-100 text-emerald-700'
-                                                            }`}>
-                                                                {entry.intelligence.level} risk · {entry.intelligence.score}
-                                                            </span>
-                                                            {entry.intelligence.reasons.length > 0 && (
-                                                                <p className="max-w-[180px] text-xs text-slate-500">
-                                                                    {entry.intelligence.reasons.join(', ')}
-                                                                </p>
-                                                            )}
-                                                            {(entry.auto_stopped || entry.stop_reason) && (
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {entry.auto_stopped && (
-                                                                        <span className="inline-flex rounded-full bg-indigo-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
-                                                                            auto-stopped
-                                                                        </span>
-                                                                    )}
-                                                                    {formatStopReason(entry.stop_reason) && (
-                                                                        <span className="inline-flex rounded-full bg-amber-100 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700">
-                                                                            {formatStopReason(entry.stop_reason)}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">No flags</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-4 py-3 text-sm font-semibold text-slate-700">{formatSecondsValue(entry.duration)}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-500">{new Date(entry.start_time).toLocaleDateString()}</td>
-                                                <td className="px-4 py-3">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button className="btn btn-outline !px-2.5 !py-2 text-rose-600" onClick={() => void handleReview(entry.id, 'reject')}>
-                                                            <XCircle size={14} />
-                                                        </button>
-                                                        <button className="btn btn-outline !px-2.5 !py-2 text-emerald-600" onClick={() => void handleReview(entry.id, 'approve')}>
-                                                            <CheckCircle size={14} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                        <ApprovalQueue
+                            entries={pendingApprovals}
+                            loading={approvalsLoading}
+                            onReviewOne={handleReview}
+                            onReviewBulk={handleBulkReview}
+                        />
                     </div>
                 </div>
             )}

@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import type { Prisma } from '@prisma/client/index';
 import prisma from '../config/db';
 import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
@@ -13,6 +14,23 @@ import { assertProjectBelongsToOrganization, assertTagsBelongToOrganization, nor
 import { verifyToken } from '../services/tokenService';
 import { evaluateClockInGeofence, normalizeTimerLocation } from '../services/geofenceService';
 import { getCorrectionRequestsForReview as getCorrectionRequestsForReviewService, purgeResolvedCorrections } from '../services/correctionRetentionService';
+import {
+    computeCountedSeconds,
+    dailyCapConflictBody,
+    getDailyUsage,
+    OvertimeAckError,
+    parseOvertimeAck,
+    withDayCache,
+    type DailyUsage,
+} from '../services/dailyCapService';
+import { findOverlaps, overlapConflictBody, TimeOverlapError } from '../services/timeOverlapService';
+import {
+    assertRecoveryAllowed,
+    getWeeklyRecoveryUsage,
+    recoveryQuotaBody,
+    RecoveryQuotaError,
+    serializeRecoveryUsage,
+} from '../services/recoveredTimeService';
 
 type GuardrailActiveTimer = {
     id: string;
@@ -26,7 +44,19 @@ type GuardrailActiveTimer = {
     heartbeat_miss_count?: number;
     is_paused: boolean;
     paused_at: Date | null;
+    paused_duration_seconds?: number;
 };
+
+/**
+ * Reasons a client is allowed to declare when stopping a timer. Deliberately narrow:
+ * the client may report that it enforced the session cap, but it cannot invent an
+ * arbitrary stop_reason and thereby control the entry's risk score.
+ */
+const CLIENT_STOPPABLE_REASONS = ['active_duration_limit'] as const;
+
+/** Ceiling on one bulk review request, matching bulkUpdateEntries. */
+const BULK_REVIEW_LIMIT = 200;
+type ClientStopReason = (typeof CLIENT_STOPPABLE_REASONS)[number];
 
 const requireUserId = (req: AuthRequest): string => {
     if (!req.user?.userId) {
@@ -86,7 +116,17 @@ const enforceTimerGuardrails = async ({
         maxPauseMs: env.maxPauseHours * 60 * 60 * 1000,
         maxActiveTimerMs: policy.maxSessionDurationHours * 60 * 60 * 1000,
     };
-    const activeForMs = checkTime.getTime() - new Date(timer.start_time).getTime();
+    // Counted time, not wall-clock: comparing raw elapsed against the cap meant a
+    // session paused for two hours was auto-stopped at six hours of real work.
+    const activeForMs = computeCountedSeconds(
+        {
+            start_time: timer.start_time,
+            paused_duration_seconds: timer.paused_duration_seconds || 0,
+            is_paused: timer.is_paused,
+            paused_at: timer.paused_at,
+        },
+        checkTime,
+    ) * 1000;
 
     if (activeForMs >= thresholds.maxActiveTimerMs) {
         await stopActiveTimerWithReason({
@@ -154,6 +194,109 @@ const enforceTimerGuardrails = async ({
     return 'none';
 };
 
+// ---------------------------------------------------------------------------
+// Daily-cap gate
+// ---------------------------------------------------------------------------
+
+/**
+ * Shared guard for every path that adds time to a day: starting a timer, a manual
+ * entry, a correction request, or an edit that lengthens an entry.
+ *
+ * Returns null when it has already written a response (409 for "you are at your
+ * cap", 400 for a malformed attestation) — callers must return immediately in that
+ * case. Otherwise it returns the day's usage plus the validated attestation, which
+ * the caller stamps onto the row it is about to write.
+ */
+const gateDailyCap = async (
+    req: AuthRequest,
+    res: Response,
+    options: {
+        userId: string;
+        additionalSeconds?: number;
+        at?: Date;
+        excludeEntryId?: string;
+    },
+): Promise<{ usage: DailyUsage; ack: { acknowledged: true; reason: string } | null } | null> => {
+    const user = await prisma.user.findFirst({
+        where: { id: options.userId, organization_id: req.user!.organization_id },
+        select: { id: true, timezone: true, employment_type: true },
+    });
+
+    if (!user) {
+        res.status(404).json({ message: 'User not found' });
+        return null;
+    }
+
+    const policy = await getGlobalTimerPolicy();
+    const activeTimer = await prisma.activeTimer.findFirst({
+        where: { user_id: options.userId, organization_id: req.user!.organization_id },
+    });
+
+    const usage = await getDailyUsage({
+        user,
+        organizationId: req.user!.organization_id,
+        policy,
+        at: options.at,
+        activeTimer,
+        additionalSeconds: options.additionalSeconds,
+        excludeEntryId: options.excludeEntryId,
+    });
+
+    let ack: { acknowledged: true; reason: string } | null = null;
+    try {
+        ack = parseOvertimeAck(req.body?.overtime_ack);
+    } catch (error) {
+        if (error instanceof OvertimeAckError) {
+            res.status(400).json({ code: 'OVERTIME_REASON_REQUIRED', message: error.message });
+            return null;
+        }
+        throw error;
+    }
+
+    // Only 'at_cap'/'over_cap' block. 'approaching' and 'floor_passed' are advisory:
+    // the client shows them, the server never refuses on them.
+    const blocked = usage.state === 'at_cap' || usage.state === 'over_cap';
+    if (blocked && !ack) {
+        res.status(409).json(dailyCapConflictBody(usage));
+        return null;
+    }
+
+    return { usage, ack: blocked ? ack : null };
+};
+
+/**
+ * Reject a write that clashes with time already on the user's timeline.
+ * Returns true when it has responded, so the caller must return.
+ */
+const rejectIfOverlapping = async (
+    req: AuthRequest,
+    res: Response,
+    options: {
+        userId: string;
+        start: Date;
+        end: Date;
+        excludeEntryId?: string;
+        excludeCorrectionId?: string;
+        includeCorrections?: boolean;
+    },
+): Promise<boolean> => {
+    const conflicts = await findOverlaps({
+        organizationId: req.user!.organization_id,
+        userId: options.userId,
+        start: options.start,
+        end: options.end,
+        excludeEntryId: options.excludeEntryId,
+        excludeCorrectionId: options.excludeCorrectionId,
+        includeCorrections: options.includeCorrections,
+    });
+
+    if (conflicts.length > 0) {
+        res.status(409).json(overlapConflictBody(conflicts));
+        return true;
+    }
+    return false;
+};
+
 export const startTimer = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const project_id = typeof req.body?.project_id === 'string' && req.body.project_id.trim() ? req.body.project_id : null;
@@ -175,6 +318,11 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
             res.status(400).json({ message: 'A timer is already running for this user' });
             return;
         }
+
+        // Starting a fresh timer is the main way the old per-session cap was walked
+        // around: auto-stop at 8h, start again, repeat. The daily gate closes that.
+        const capGate = await gateDailyCap(req, res, { userId: user_id });
+        if (!capGate) return;
 
         const geofence = await evaluateClockInGeofence(req.user!.organization_id, location);
         if (!geofence.allowed) {
@@ -209,7 +357,15 @@ export const startTimer = async (req: AuthRequest, res: Response): Promise<void>
                 project_id,
                 task_description,
                 start_time: new Date(),
-                persisted_state: { is_billable, tag_ids },
+                persisted_state: {
+                    is_billable,
+                    tag_ids,
+                    // Carried through to the TimeEntry created at stop, so an
+                    // attested over-cap session stays flagged even though the flag
+                    // is decided hours before the entry exists.
+                    over_daily_cap: Boolean(capGate.ack),
+                    overtime_reason: capGate.ack?.reason ?? null,
+                },
             },
         });
 
@@ -276,6 +432,40 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
+        // Three enforcers can end a capped session — this endpoint (called by the
+        // client-side cap check), the inline server guardrail, and the cron sweeper —
+        // and they used to disagree. A plain stop wrote auto_stopped=false with no
+        // stop_reason, which scores 28 risk points lower than the identical
+        // server-stopped entry, so whether a capped session was flagged came down to
+        // which enforcer won the race. Delegating a reasoned stop to the same service
+        // the other two use makes the outcome identical regardless of who wins.
+        const requestedReason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+        if (CLIENT_STOPPABLE_REASONS.includes(requestedReason as ClientStopReason)) {
+            const stopped = await stopActiveTimerWithReason({
+                userId: user_id,
+                reason: requestedReason as ClientStopReason,
+                triggeredAt: new Date(),
+                organizationId: req.user!.organization_id,
+            });
+
+            if (!stopped) {
+                res.status(404).json({ message: 'No active timer found' });
+                return;
+            }
+
+            emitWebhookEvent('timer.stopped', {
+                time_entry_id: stopped.id,
+                user_id,
+                duration: stopped.duration,
+                project_id: stopped.project_id,
+                auto_stopped: true,
+                stop_reason: requestedReason,
+            }, { organizationId: req.user!.organization_id }).catch(() => {});
+
+            res.status(200).json({ timeEntry: stopped, auto_stopped: true, stop_reason: requestedReason });
+            return;
+        }
+
         const end_time = new Date();
         const rawDuration = Math.floor((end_time.getTime() - new Date(activeTimer.start_time).getTime()) / 1000);
         const pausedSeconds = activeTimer.paused_duration_seconds ?? 0;
@@ -288,6 +478,10 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
 
         const persistedState = (activeTimer.persisted_state as Record<string, unknown>) || {};
         const is_billable = persistedState.is_billable !== false;
+        const overDailyCap = persistedState.over_daily_cap === true;
+        const overtimeReason = typeof persistedState.overtime_reason === 'string'
+            ? persistedState.overtime_reason
+            : null;
 
         const timeEntry = await prisma.$transaction(async (tx) => {
             const entry = await tx.timeEntry.create({
@@ -302,6 +496,8 @@ export const stopTimer = async (req: AuthRequest, res: Response): Promise<void> 
                     entry_type: 'timer',
                     notes,
                     is_billable,
+                    over_daily_cap: overDailyCap,
+                    overtime_reason: overtimeReason,
                 },
             });
 
@@ -466,6 +662,20 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
             throw e;
         }
 
+        // Clash check. This path was previously unguarded, and it is also where the
+        // Workday "recovered suggestions" copilot writes, so it was the easiest way to
+        // double-book a slot that a timer had already recorded.
+        if (await rejectIfOverlapping(req, res, { userId: user_id, start, end })) return;
+
+        // Daily cap. Evaluated on the entry's own day, not today, so backdated manual
+        // entries cannot quietly push a past day over the limit.
+        const capGate = await gateDailyCap(req, res, {
+            userId: user_id,
+            at: start,
+            additionalSeconds: duration,
+        });
+        if (!capGate) return;
+
         // Compliance mode checks (DCAA requires project_id on every entry)
         {
             const { getOrgComplianceMode } = await import('../services/complianceService');
@@ -505,6 +715,8 @@ export const manualEntry = async (req: AuthRequest, res: Response): Promise<void
                     entry_type: 'manual',
                     notes: typeof notes === 'string' && notes.trim() ? notes.trim() : null,
                     is_billable,
+                    over_daily_cap: Boolean(capGate.ack),
+                    overtime_reason: capGate.ack?.reason ?? null,
                 },
             });
 
@@ -573,22 +785,57 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
             return;
         }
 
-        const conflict = await prisma.timeEntry.findFirst({
-            where: {
-                organization_id: req.user!.organization_id,
-                user_id,
-                status: 'approved',
-                start_time: { lt: requestedEndTime },
-                end_time: { gt: requestedStartTime },
-            },
+        // Widened from the original check, which only looked at APPROVED entries and
+        // never at other correction requests — so two overlapping PENDING requests
+        // could both be filed and both approved.
+        if (await rejectIfOverlapping(req, res, {
+            userId: user_id,
+            start: requestedStartTime,
+            end: requestedEndTime,
+        })) return;
+
+        const requestedDurationSeconds = Math.floor((requestedEndTime.getTime() - requestedStartTime.getTime()) / 1000);
+
+        // Recovered time is the least-evidenced way to add hours, so it carries a
+        // weekly allowance with escalating friction rather than a flat block.
+        const policy = await getGlobalTimerPolicy();
+        const requester = await prisma.user.findFirst({
+            where: { id: user_id, organization_id: req.user!.organization_id },
+            select: { id: true, timezone: true, employment_type: true },
         });
 
-        if (conflict) {
-            res.status(409).json({ message: 'Correction request overlaps an approved time entry.' });
+        if (!requester) {
+            res.status(404).json({ message: 'User not found' });
             return;
         }
 
-        const requestedDurationSeconds = Math.floor((requestedEndTime.getTime() - requestedStartTime.getTime()) / 1000);
+        const recoveryUsage = await getWeeklyRecoveryUsage({
+            user: requester,
+            organizationId: req.user!.organization_id,
+            policy,
+        });
+
+        try {
+            assertRecoveryAllowed(recoveryUsage, {
+                reason,
+                acknowledgedPolicy: req.body?.acknowledged_policy,
+            });
+        } catch (error) {
+            if (error instanceof RecoveryQuotaError) {
+                res.status(error.status).json(recoveryQuotaBody(error.usage, error.message));
+                return;
+            }
+            throw error;
+        }
+
+        // A correction adds time to the day it covers, so it is capped like any other write.
+        const capGate = await gateDailyCap(req, res, {
+            userId: user_id,
+            at: requestedStartTime,
+            additionalSeconds: requestedDurationSeconds,
+        });
+        if (!capGate) return;
+
         const correction = await prisma.timerCorrectionRequest.create({
             data: {
                 user_id,
@@ -612,6 +859,10 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
                     correction_request_id: correction.id,
                     timer_session_id: timerSessionId,
                     requested_duration_seconds: requestedDurationSeconds,
+                    recovery_used: recoveryUsage.used + 1,
+                    recovery_limit: recoveryUsage.limit,
+                    recovery_tier: recoveryUsage.tier,
+                    over_daily_cap: Boolean(capGate.ack),
                 },
             },
         });
@@ -671,7 +922,14 @@ export const createCorrectionRequest = async (req: AuthRequest, res: Response): 
             console.error('Failed to create correction request notification:', notificationError);
         }
 
-        res.status(201).json({ correction });
+        res.status(201).json({
+            correction,
+            recovery_usage: serializeRecoveryUsage({
+                ...recoveryUsage,
+                used: recoveryUsage.used + 1,
+                remaining: Math.max(recoveryUsage.limit - (recoveryUsage.used + 1), 0),
+            }),
+        });
     } catch (error) {
         console.error('Failed to create correction request:', error);
         res.status(500).json({ message: 'Internal server error while creating correction request' });
@@ -765,18 +1023,21 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
             });
 
             if (action === 'approve') {
-                const conflict = await tx.timeEntry.findFirst({
-                    where: {
-                        organization_id: req.user!.organization_id,
-                        user_id: correction.user_id,
-                        status: 'approved',
-                        start_time: { lt: correction.requested_end_time },
-                        end_time: { gt: correction.requested_start_time },
-                    },
+                // Re-check inside the transaction: the timeline can have changed
+                // between filing and review. Other PENDING corrections are excluded —
+                // they are not real time yet, and the one being approved must not be
+                // compared against itself.
+                const conflicts = await findOverlaps({
+                    client: tx,
+                    organizationId: req.user!.organization_id,
+                    userId: correction.user_id,
+                    start: correction.requested_start_time,
+                    end: correction.requested_end_time,
+                    includeCorrections: false,
                 });
 
-                if (conflict) {
-                    throw new Error('Correction request overlaps an approved time entry.');
+                if (conflicts.length > 0) {
+                    throw new TimeOverlapError(conflicts);
                 }
 
                 await tx.timeEntry.create({
@@ -823,9 +1084,13 @@ export const reviewCorrectionRequest = async (req: AuthRequest, res: Response): 
 
         res.status(200).json({ correction: updated });
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'Internal server error while reviewing correction request';
+        // Typed error rather than sniffing the message string for "overlaps".
+        if (error instanceof TimeOverlapError) {
+            res.status(409).json(overlapConflictBody(error.conflicts));
+            return;
+        }
         console.error('Failed to review correction request:', error);
-        res.status(message.includes('overlaps') ? 409 : 500).json({ message });
+        res.status(500).json({ message: 'Internal server error while reviewing correction request' });
     }
 };
 
@@ -994,6 +1259,40 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
             return;
         }
 
+        // Daily-cap usage, so the client can raise the soft nudge or the hard
+        // attestation modal without polling a second endpoint.
+        //
+        // Cost note: the database is billed by compute hour and this endpoint runs
+        // every few minutes for every user with the app open, so the completed-seconds
+        // aggregate is served from a short-lived cache carried inside heartbeat_state —
+        // a blob this handler already rewrites on every call. No extra column, no extra
+        // write, and at most one aggregate per user per few heartbeats.
+        const capUser = await prisma.user.findFirst({
+            where: { id: user_id, organization_id: req.user!.organization_id },
+            select: { id: true, timezone: true, employment_type: true },
+        });
+
+        const dailyUsage = capUser
+            ? await getDailyUsage({
+                user: capUser,
+                organizationId: req.user!.organization_id,
+                policy,
+                at: requestReceivedAt,
+                activeTimer,
+                useCache: true,
+            })
+            : null;
+
+        const heartbeatState: Prisma.InputJsonObject = {
+            ...(activeTimer.heartbeat_state as Record<string, unknown> || {}),
+            last_activity_at: validLastClientActivityAt?.toISOString() ?? null,
+            visibility_state: visibilityState,
+            has_focus: hasFocus,
+            browser_activity_state: browserActivityState,
+            active_timer_id: activeTimer.id,
+            received_at: requestReceivedAt.toISOString(),
+        };
+
         await prisma.activeTimer.update({
             where: { id: activeTimer.id },
             data: {
@@ -1002,15 +1301,14 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
                 last_client_activity_at: validLastClientActivityAt,
                 client_visibility: visibilityState,
                 client_has_focus: hasFocus,
-                heartbeat_state: {
-                    ...(activeTimer.heartbeat_state as Record<string, unknown> || {}),
-                    last_activity_at: validLastClientActivityAt?.toISOString() ?? null,
-                    visibility_state: visibilityState,
-                    has_focus: hasFocus,
-                    browser_activity_state: browserActivityState,
-                    active_timer_id: activeTimer.id,
-                    received_at: requestReceivedAt.toISOString(),
-                },
+                heartbeat_state: dailyUsage
+                    ? withDayCache(
+                        heartbeatState,
+                        dailyUsage.localDate,
+                        dailyUsage.completedSeconds,
+                        requestReceivedAt,
+                    )
+                    : heartbeatState,
                 heartbeat_miss_count: 0,
                 idle_warning_shown_at: null,
             },
@@ -1042,6 +1340,18 @@ export const pingTimer = async (req: AuthRequest, res: Response): Promise<void> 
                 idlePauseAfterMinutes: policy.idlePauseAfterMinutes,
                 heartbeatIntervalSeconds: policy.heartbeatIntervalSeconds,
             },
+            // Advisory only — the ping never refuses. The client renders the nudge or
+            // the attestation modal; the write endpoints are what actually enforce.
+            daily: dailyUsage
+                ? {
+                    workedSeconds: dailyUsage.workedSeconds,
+                    capSeconds: dailyUsage.capSeconds,
+                    floorSeconds: dailyUsage.floorSeconds,
+                    remainingSeconds: dailyUsage.remainingSeconds,
+                    state: dailyUsage.state,
+                    localDate: dailyUsage.localDate,
+                }
+                : null,
         });
     } catch (error) {
         console.error('Failed to ping timer:', error);
@@ -1185,6 +1495,267 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
     }
 };
 
+/**
+ * Bulk approve/reject for the manager approval queue.
+ *
+ * Deliberately a separate endpoint rather than an extra action on `PATCH /timers/bulk`:
+ * that one also serves employees editing their own entries, keeps its role guard in the
+ * controller body, sends no notifications, and does not filter to pending — so it can
+ * silently re-flip an entry that was already resolved. This mirrors `reviewTimesheet`
+ * instead, one row at a time semantics applied to a set.
+ */
+export const reviewTimesheetsBulk = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const reviewerId = requireUserId(req);
+        const action = req.body?.action;
+        const rawIds = req.body?.entry_ids;
+
+        if (!['approve', 'reject'].includes(action)) {
+            res.status(400).json({ message: 'Invalid action. Must be approve or reject.' });
+            return;
+        }
+
+        if (!Array.isArray(rawIds) || rawIds.length === 0) {
+            res.status(400).json({ message: 'entry_ids must be a non-empty array.' });
+            return;
+        }
+
+        // Same ceiling as bulkUpdateEntries, so one request cannot lock a large table
+        // range or blow the serverless function's time budget.
+        const entryIds = Array.from(new Set(rawIds.filter((id: unknown): id is string => typeof id === 'string')));
+        if (entryIds.length > BULK_REVIEW_LIMIT) {
+            res.status(400).json({ message: `Bulk review is limited to ${BULK_REVIEW_LIMIT} entries at once.` });
+            return;
+        }
+
+        const nextStatus = action === 'approve' ? 'approved' : 'rejected';
+
+        const entries = await prisma.timeEntry.findMany({
+            where: { id: { in: entryIds }, organization_id: req.user!.organization_id },
+            select: { id: true, user_id: true, task_description: true, start_time: true, status: true },
+        });
+
+        const foundIds = new Set(entries.map((entry) => entry.id));
+        const notFound = entryIds.filter((id) => !foundIds.has(id));
+        const pending = entries.filter((entry) => entry.status === 'pending');
+        const skippedNotPending = entries.filter((entry) => entry.status !== 'pending').map((entry) => entry.id);
+
+        // Payroll-lock check per entry, matching bulkUpdateEntries. A locked entry is
+        // skipped and reported rather than failing the whole batch.
+        const skippedLocked: string[] = [];
+        const editable: typeof pending = [];
+        for (const entry of pending) {
+            try {
+                await assertPeriodNotLocked(req.user!.organization_id, entry.start_time);
+                editable.push(entry);
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'PERIOD_LOCKED') {
+                    skippedLocked.push(entry.id);
+                    continue;
+                }
+                throw error;
+            }
+        }
+
+        if (editable.length === 0) {
+            res.status(skippedLocked.length > 0 ? 423 : 400).json({
+                updated: 0,
+                skipped_locked: skippedLocked,
+                skipped_not_pending: skippedNotPending,
+                not_found: notFound,
+                message: skippedLocked.length > 0
+                    ? 'Every selected entry is inside a locked payroll period.'
+                    : 'No pending entries were selected.',
+            });
+            return;
+        }
+
+        const editableIds = editable.map((entry) => entry.id);
+
+        const updated = await prisma.$transaction(async (tx) => {
+            const result = await tx.timeEntry.updateMany({
+                // org_id repeated here to close the TOCTOU window with the read above.
+                where: { id: { in: editableIds }, organization_id: req.user!.organization_id, status: 'pending' },
+                data: { status: nextStatus },
+            });
+
+            // One notification per affected user per entry, matching what single-entry
+            // review sends. The existing PATCH /timers/bulk path sends none, which is
+            // why people never heard about bulk-approved timesheets.
+            await tx.notification.createMany({
+                data: editable.map((entry) => ({
+                    user_id: entry.user_id,
+                    organization_id: req.user!.organization_id,
+                    message: `Your timesheet for ${entry.task_description} was ${nextStatus} by your manager.`,
+                    type: 'approval_status',
+                })),
+            });
+
+            return result.count;
+        });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id: reviewerId,
+                    organization_id: req.user!.organization_id,
+                    action: action === 'approve' ? 'bulk_approve' : 'bulk_reject',
+                    resource: 'time_entry',
+                    metadata: {
+                        entry_ids: editableIds,
+                        updated_count: updated,
+                        skipped_locked: skippedLocked,
+                        skipped_not_pending: skippedNotPending,
+                    },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write bulk timesheet review audit log:', error);
+        }
+
+        res.status(200).json({
+            updated,
+            skipped_locked: skippedLocked,
+            skipped_not_pending: skippedNotPending,
+            not_found: notFound,
+            message: `${updated} ${updated === 1 ? 'entry' : 'entries'} ${nextStatus}.`,
+        });
+    } catch (error) {
+        console.error('Failed to bulk review timesheets:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+/**
+ * Where the caller stands against their daily limits right now.
+ *
+ * Separate from the `daily` block on the heartbeat response because that one only
+ * exists while a timer is running, whereas the daily-goal bar on /timer and
+ * /dashboard has to render whether or not the user is currently tracking. Not on the
+ * poll path, so it queries directly rather than using the heartbeat cache.
+ */
+export const getDailyUsageSummary = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const user = await prisma.user.findFirst({
+            where: { id: user_id, organization_id: req.user!.organization_id },
+            select: { id: true, timezone: true, employment_type: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        const policy = await getGlobalTimerPolicy();
+        const activeTimer = await prisma.activeTimer.findFirst({
+            where: { user_id, organization_id: req.user!.organization_id },
+        });
+
+        const usage = await getDailyUsage({
+            user,
+            organizationId: req.user!.organization_id,
+            policy,
+            activeTimer,
+        });
+
+        res.status(200).json({
+            daily: {
+                workedSeconds: usage.workedSeconds,
+                capSeconds: usage.capSeconds,
+                floorSeconds: usage.floorSeconds,
+                remainingSeconds: usage.remainingSeconds,
+                state: usage.state,
+                localDate: usage.localDate,
+            },
+        });
+    } catch (error) {
+        console.error('Failed to load daily usage:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+/**
+ * Current weekly recovery allowance, so the correction form can show the user where
+ * they stand *before* they fill it in rather than rejecting them on submit.
+ */
+export const getRecoveryQuota = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const user = await prisma.user.findFirst({
+            where: { id: user_id, organization_id: req.user!.organization_id },
+            select: { id: true, timezone: true },
+        });
+
+        if (!user) {
+            res.status(404).json({ message: 'User not found' });
+            return;
+        }
+
+        const policy = await getGlobalTimerPolicy();
+        const usage = await getWeeklyRecoveryUsage({
+            user,
+            organizationId: req.user!.organization_id,
+            policy,
+        });
+
+        res.status(200).json({ recovery_usage: serializeRecoveryUsage(usage) });
+    } catch (error) {
+        console.error('Failed to load recovery quota:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+/**
+ * Acknowledge an auto-stopped entry ("looks right"), dismissing its review card.
+ * Only the entry's owner can acknowledge — a manager confirming on someone's behalf
+ * would defeat the point of asking the person who was actually there.
+ */
+export const acknowledgeAutoStop = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const user_id = requireUserId(req);
+        const entryId = req.params.id as string;
+
+        const entry = await prisma.timeEntry.findFirst({
+            where: { id: entryId, organization_id: req.user!.organization_id, user_id },
+        });
+
+        if (!entry) {
+            res.status(404).json({ message: 'Time entry not found' });
+            return;
+        }
+
+        if (!entry.auto_stopped) {
+            res.status(400).json({ message: 'This entry was not stopped automatically.' });
+            return;
+        }
+
+        const updated = await prisma.timeEntry.update({
+            where: { id: entry.id, organization_id: req.user!.organization_id },
+            data: { auto_stop_reviewed_at: new Date() },
+        });
+
+        try {
+            await prisma.auditLog.create({
+                data: {
+                    user_id,
+                    organization_id: req.user!.organization_id,
+                    action: 'auto_stop_acknowledged',
+                    resource: 'time_entry',
+                    metadata: { entry_id: entry.id, stop_reason: entry.stop_reason },
+                },
+            });
+        } catch (error) {
+            console.error('Failed to write auto-stop acknowledgement audit log:', error);
+        }
+
+        res.status(200).json(updated);
+    } catch (error) {
+        console.error('Failed to acknowledge auto-stop:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 export const updateEntry = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
@@ -1242,6 +1813,30 @@ export const updateEntry = async (req: AuthRequest, res: Response): Promise<void
             const e = new Date(end_time);
             const dur = Math.floor((e.getTime() - s.getTime()) / 1000);
             if (dur > 0) {
+                // Moving or lengthening an entry can collide with another one, and can
+                // push the day past the cap. Both were previously unchecked here.
+                if (await rejectIfOverlapping(req, res, {
+                    userId: entry.user_id,
+                    start: s,
+                    end: e,
+                    excludeEntryId: entry.id,
+                })) return;
+
+                if (dur > entry.duration) {
+                    const capGate = await gateDailyCap(req, res, {
+                        userId: entry.user_id,
+                        at: s,
+                        additionalSeconds: dur,
+                        excludeEntryId: entry.id,
+                    });
+                    if (!capGate) return;
+
+                    if (capGate.ack) {
+                        data.over_daily_cap = true;
+                        data.overtime_reason = capGate.ack.reason;
+                    }
+                }
+
                 data.start_time = s;
                 data.end_time = e;
                 data.duration = dur;
@@ -1335,6 +1930,21 @@ export const duplicateEntry = async (req: AuthRequest, res: Response): Promise<v
         startOfDay.setHours(9, 0, 0, 0);
         const endTime = new Date(startOfDay.getTime() + entry.duration * 1000);
 
+        // Duplicating drops a copy at 09:00 today, which very often lands on top of
+        // whatever the user actually tracked this morning.
+        if (await rejectIfOverlapping(req, res, {
+            userId: user_id,
+            start: startOfDay,
+            end: endTime,
+        })) return;
+
+        const capGate = await gateDailyCap(req, res, {
+            userId: user_id,
+            at: startOfDay,
+            additionalSeconds: entry.duration,
+        });
+        if (!capGate) return;
+
         const newEntry = await prisma.$transaction(async (tx) => {
             const created = await tx.timeEntry.create({
                 data: {
@@ -1348,6 +1958,8 @@ export const duplicateEntry = async (req: AuthRequest, res: Response): Promise<v
                     entry_type: 'manual',
                     notes: entry.notes,
                     is_billable: entry.is_billable,
+                    over_daily_cap: Boolean(capGate.ack),
+                    overtime_reason: capGate.ack?.reason ?? null,
                 },
             });
 
