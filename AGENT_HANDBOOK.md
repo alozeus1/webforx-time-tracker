@@ -345,13 +345,42 @@ npm start
 
 ## 12. Deployment Strategy (Recommended Order)
 
+**Migrations run BEFORE the backend deploy, not after.**
+
+This reverses the order this section used to document, and the old order would have
+caused a full outage. Prisma generates an explicit column list for every query from
+the schema it was built against, so a backend carrying a newer schema than the
+database fails on essentially every request:
+
+```
+Invalid `prisma.timeEntry.findFirst()` invocation:
+The column `TimeEntry.over_daily_cap` does not exist in the current database.
+```
+
+That is the timer, timesheet, approvals and reports all down for the whole window
+between deploy and migrate. Verified empirically on 2026-08-12 by rewinding a local
+database to the pre-release schema and querying it with the new client.
+
+The reverse — an additive migration applied while the *old* backend is still serving
+— is safe: the old client never selects the new columns, and new columns are either
+nullable or defaulted, so its inserts still succeed. That is what makes
+migrate-first correct.
+
+This ordering assumes additive migrations, which is the only kind that should reach
+production. A destructive change (dropping or renaming a column still read by live
+code) cannot be made safe by ordering alone and must be split across two releases:
+ship code that stops using the column, deploy, then drop it.
+
 For safe production rollout:
 
 1. Update backend env vars first.
-2. Deploy backend (`vercel deploy --prod`).
-3. Run DB migration/seed tasks.
+2. **Run DB migrations.**
 - Required for production: `npm run release:migrate`
 - Never run `prisma db push` against production or a shared database.
+- Prove the migration first: `bash scripts/gauntlet.sh --with-db` (fresh provision,
+  zero drift, idempotent re-run). Set `MIGRATION_TEST_DATABASE_URL` to a disposable
+  database if Docker is unavailable.
+3. Deploy backend (`vercel deploy --prod`).
 4. Verify backend health (`/api/v1/health`) and critical auth flows.
 5. Update frontend `VITE_API_URL` if backend URL changed.
 6. Deploy frontend.
