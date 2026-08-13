@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { captureError } from '../services/observability';
 
 /**
  * Catches render-time errors so one broken component cannot blank the whole app.
@@ -42,6 +43,7 @@ class ErrorBoundary extends React.Component<Props, State> {
         // Keep the console trace — it is how this class of bug gets diagnosed, and
         // swallowing it would trade a blank page for a silent one.
         console.error('[ErrorBoundary] Caught a render error:', error, info.componentStack);
+        captureError(error, { source: 'error-boundary', componentStack: info.componentStack ?? undefined });
     }
 
     private reset = (): void => this.setState({ error: null });

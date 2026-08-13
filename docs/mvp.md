@@ -2,7 +2,7 @@
 ## MVP Product Specification
 
 Product Name: Web Forx Time Tracker  
-Organization: Web Forx Technology Limited  
+Organization: Web Forx Global Inc.
 Purpose: Internal productivity and time tracking platform for remote engineering teams.
 
 ---

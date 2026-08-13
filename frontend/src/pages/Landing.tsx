@@ -174,7 +174,7 @@ const demoTabs: DemoTab[] = [
       rows: [
         { label: 'Platform Engineering', value: '14h 40m', tone: 'primary', trend: '38%' },
         { label: 'EDUSUC', value: '8h 55m', tone: 'success', trend: '23%' },
-        { label: 'Web Forx Technology', value: '7h 10m', tone: 'info', trend: '19%' },
+        { label: 'Web Forx Global Inc.', value: '7h 10m', tone: 'info', trend: '19%' },
       ],
       footer: 'Submission deadline: Friday, 6:00 PM',
     },
@@ -226,7 +226,7 @@ const demoTabs: DemoTab[] = [
     highlights: ['User management', 'Project configuration', 'Organization settings', 'Audit controls'],
     preview: {
       headline: 'Organization Controls',
-      subline: 'Workspace: Web Forx Technology',
+      subline: 'Workspace: Web Forx Global Inc.',
       badges: ['Roles synced', 'Policy mode: strict'],
       rows: [
         { label: 'Pending role changes', value: '2 requests', tone: 'warning', trend: 'Review' },
@@ -294,8 +294,8 @@ const aiFeatures = [
   },
   {
     icon: <AlertTriangle size={20} />,
-    title: 'Burnout Risk Detection',
-    desc: 'Weekly hours are monitored per team member. Alerts surface when anyone approaches healthy workload thresholds — before damage is done.',
+    title: 'Workload & Recovery Signals',
+    desc: 'Weekly logged hours are compared with transparent workload thresholds so teams can plan recovery time and rebalance work.',
   },
   {
     icon: <Zap size={20} />,
@@ -310,20 +310,9 @@ const aiFeatures = [
 ];
 
 const heroMetrics = [
-  { label: 'Daily Entries Logged', value: '25K+' },
-  { label: 'Teams Supported', value: '150+' },
-  { label: 'Avg. Approval Time', value: '< 8 hrs' },
-];
-
-type GalleryTab = 'all' | 'employee' | 'manager' | 'admin';
-
-const galleryImages: Array<{ src: string; caption: string; role: GalleryTab }> = [
-  { src: '/screenshots/dashboard.png', caption: 'Dashboard — daily totals and active timer', role: 'employee' },
-  { src: '/screenshots/workday.png', caption: 'Workday — AI-assisted activity reconstruction', role: 'employee' },
-  { src: '/screenshots/timeline.png', caption: 'Timeline — chronological daily log', role: 'employee' },
-  { src: '/screenshots/reports.png', caption: 'Reports — team analytics and utilization', role: 'manager' },
-  { src: '/screenshots/team.png', caption: 'Team — member directory and activity overview', role: 'manager' },
-  { src: '/screenshots/admin.png', caption: 'Admin — organization controls and audit visibility', role: 'admin' },
+  { label: 'Access Controls', value: 'Role-based' },
+  { label: 'Accountability', value: 'Audit-ready' },
+  { label: 'Reporting', value: 'Export-ready' },
 ];
 
 /* ───────────────────── video modal ───────────────────── */
@@ -437,8 +426,6 @@ const VideoModal: React.FC<{ onClose: () => void; source: string }> = ({ onClose
 const Landing: React.FC = () => {
   const [activeDemo, setActiveDemo] = useState('dashboard');
   const [showVideo, setShowVideo] = useState(false);
-  const [galleryTab, setGalleryTab] = useState<GalleryTab>('all');
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const currentDemo = demoTabs.find((t) => t.key === activeDemo) ?? demoTabs[0];
@@ -454,22 +441,6 @@ const Landing: React.FC = () => {
 
   const openVideo = useCallback(() => setShowVideo(true), []);
   const closeVideo = useCallback(() => setShowVideo(false), []);
-
-  useEffect(() => {
-    if (lightboxIndex === null) return;
-    const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightboxIndex(null);
-      if (e.key === 'ArrowRight') setLightboxIndex((i) => (i === null ? null : (i + 1) % filtered.length));
-      if (e.key === 'ArrowLeft') setLightboxIndex((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length));
-    };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [lightboxIndex, galleryTab]);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
@@ -764,77 +735,12 @@ const Landing: React.FC = () => {
           </div>
         </section>
 
-        {/* ── 7b. Screenshot Gallery ── */}
-        <section className="landing-section section-center" id="gallery">
-          <p className="section-label">In Action</p>
-          <h2 className="section-heading">See the Platform</h2>
-          <p className="section-subheading">Real views from the product — captured from a live workspace.</p>
-
-          <div className="gallery-tabs" role="tablist" aria-label="Screenshot gallery tabs">
-            {(['all', 'employee', 'manager', 'admin'] as GalleryTab[]).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={galleryTab === tab}
-                className={`gallery-tab ${galleryTab === tab ? 'active' : ''}`}
-                onClick={() => setGalleryTab(tab)}
-              >
-                {tab === 'all' ? 'All Views' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          <div className="gallery-grid">
-            {galleryImages
-              .filter((img) => galleryTab === 'all' || img.role === galleryTab)
-              .map((img, idx) => (
-                <button
-                  key={img.src}
-                  type="button"
-                  className="gallery-thumb"
-                  onClick={() => setLightboxIndex(idx)}
-                  aria-label={`View screenshot: ${img.caption}`}
-                >
-                  <img src={img.src} alt={img.caption} loading="lazy" />
-                  <div className="gallery-thumb-caption">{img.caption}</div>
-                </button>
-              ))}
-          </div>
-        </section>
-
-        {lightboxIndex !== null && (() => {
-          const filtered = galleryImages.filter((img) => galleryTab === 'all' || img.role === galleryTab);
-          const current = filtered[lightboxIndex];
-          if (!current) return null;
-          return (
-            <div
-              className="lightbox-backdrop"
-              onClick={() => setLightboxIndex(null)}
-              role="dialog"
-              aria-modal="true"
-              aria-label={current.caption}
-            >
-              <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
-                <button type="button" className="lightbox-close" onClick={() => setLightboxIndex(null)} aria-label="Close">✕</button>
-                <img src={current.src} alt={current.caption} className="lightbox-image" />
-                <p className="lightbox-caption">{current.caption}</p>
-                <div className="lightbox-nav">
-                  <button type="button" onClick={() => setLightboxIndex((i) => (i === null ? null : (i - 1 + filtered.length) % filtered.length))} aria-label="Previous">←</button>
-                  <span>{lightboxIndex + 1} / {filtered.length}</span>
-                  <button type="button" onClick={() => setLightboxIndex((i) => (i === null ? null : (i + 1) % filtered.length))} aria-label="Next">→</button>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-
         {/* ── 8. CTA Banner ── */}
         <section className="cta-banner">
           <h2 className="section-heading">Start Tracking Time Smarter</h2>
           <p className="section-subheading">
-            Join organizations that rely on Web Forx Time Tracker
-            to improve visibility, accountability, and productivity.
+            Use Web Forx Time Tracker to improve visibility, accountability,
+            and reporting across your team.
           </p>
           <div className="cta-actions">
             <Link className="btn btn-lg btn-white" to="/login">
@@ -852,7 +758,7 @@ const Landing: React.FC = () => {
         {/* ── 9. Footer ── */}
         <footer className="landing-footer">
           <div className="landing-footer-copy">
-            &copy; {new Date().getFullYear()} Web Forx. All rights reserved.
+            &copy; {new Date().getFullYear()} Web Forx Global Inc. All rights reserved.
           </div>
           <div className="landing-footer-links">
             <Link to="/login">Sign In</Link>
@@ -864,7 +770,7 @@ const Landing: React.FC = () => {
           </div>
         </footer>
         <div className="landing-trademark">
-          Powered by <strong>Maralito Labs</strong> for <strong>Webforx Technology</strong>
+          <strong>Web Forx Time Tracker</strong> is a product of <strong>Web Forx Global Inc.</strong>
         </div>
       </main>
 

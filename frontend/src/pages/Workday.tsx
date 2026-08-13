@@ -125,7 +125,8 @@ const Workday: React.FC = () => {
                 }),
                 api.get<CalendarStatus>('/calendar/status').catch(() => ({ data: null })),
                 api.get<{ sources: TaskSourceSummary[] }>('/integrations/task-sources').catch(() => ({ data: { sources: [] } })),
-                api.get<{ commits: Array<{ id: string; message: string; repo: string; timestamp: string }> }>('/integrations/github/commits').catch(() => ({ data: { commits: [] } })),
+                api.get<{ commits: Array<{ id: string; message: string; repo: string; timestamp: string }>; readiness?: TaskSourceSummary['readiness'] }>('/integrations/github/commits')
+                    .catch(() => ({ data: { commits: [], readiness: 'error' as const } })),
             ]);
 
             const entryList = (timersResponse.data.entries || []).filter((entry) => isToday(entry.start_time));
@@ -133,7 +134,12 @@ const Workday: React.FC = () => {
             setProjects(projectsResponse.data || []);
             setWellbeing(wellbeingResponse.data || null);
             setCalendarStatus(calendarStatusResponse.data);
-            setTaskSources(taskSourcesResponse.data.sources || []);
+            const taskSourceList = taskSourcesResponse.data.sources || [];
+            setTaskSources(taskSourceList.map((source) => (
+                source.type === 'github' && githubResponse.data.readiness
+                    ? { ...source, readiness: githubResponse.data.readiness }
+                    : source
+            )));
             setGithubCommits(githubResponse.data.commits || []);
             setSelectedShareProject((previous) => previous || projectsResponse.data?.[0]?.id || '');
 
@@ -612,7 +618,7 @@ const Workday: React.FC = () => {
 
                         {wellbeing && (
                             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Burnout & Capacity Forecasting</p>
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Workload & Recovery Forecasting</p>
                                 <h2 className="mt-1 text-lg font-black text-slate-900">Two-Week Load Outlook</h2>
                                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
@@ -625,8 +631,8 @@ const Workday: React.FC = () => {
                                     </div>
                                 </div>
                                 <p className="mt-4 text-sm text-slate-600">
-                                    Current status: <span className="font-semibold text-slate-900">{wellbeing.status.replace(/_/g, ' ')}</span>.
-                                    {wellbeing.hoursUntilBurnout > 0 ? ` About ${wellbeing.hoursUntilBurnout.toFixed(1)}h remain before the burnout threshold.` : ' You are already above the burnout threshold.'}
+                                    Current status: <span className="font-semibold text-slate-900">{{ balanced: 'balanced', approaching_burnout: 'recovery recommended', burnout_risk: 'high workload' }[wellbeing.status]}</span>.
+                                    {wellbeing.hoursUntilBurnout > 0 ? ` About ${wellbeing.hoursUntilBurnout.toFixed(1)}h remain before the workload alert threshold.` : ' Logged hours are already above the workload alert threshold.'}
                                 </p>
                             </div>
                         )}

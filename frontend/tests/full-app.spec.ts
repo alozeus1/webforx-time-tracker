@@ -32,10 +32,20 @@ test.describe('Landing Page', () => {
         // Demo section
         await expect(page.locator('#demo')).toBeVisible();
         await expect(page.locator('text=Explore the Product')).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Try Demo' }).first()).toBeVisible();
+
+        // Public trust claims are capability-backed, and legacy captures with
+        // third-party overlays are not rendered in production.
+        await expect(page.getByText('Role-based', { exact: true })).toBeVisible();
+        await expect(page.getByText('Audit-ready', { exact: true })).toBeVisible();
+        await expect(page.getByText('Export-ready', { exact: true })).toBeVisible();
+        await expect(page.getByText('25K+')).toHaveCount(0);
+        await expect(page.getByText('150+')).toHaveCount(0);
+        await expect(page.locator('#gallery')).toHaveCount(0);
 
         // Footer
-        await expect(page.locator('text=Powered by')).toBeVisible();
-        await expect(page.locator('text=Maralito Labs')).toBeVisible();
+        await expect(page.getByText(/Web Forx Global Inc\. All rights reserved/i)).toBeVisible();
+        await expect(page.getByText(/Web Forx Time Tracker.*product of.*Web Forx Global Inc/i)).toBeVisible();
     });
 
     test('demo walkthrough tabs are interactive', async ({ page }) => {

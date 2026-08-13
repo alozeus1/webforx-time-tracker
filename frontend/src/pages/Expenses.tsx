@@ -5,6 +5,7 @@ import { Check, ExternalLink, Receipt, Plus, Trash2, X } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ExpenseSummary, ProjectSummary } from '../types/api';
 import { getStoredRole } from '../utils/session';
+import { useFeedback } from '../hooks/useFeedback';
 
 const CATEGORIES = ['travel', 'meals', 'supplies', 'software', 'equipment', 'other'];
 const emptyForm = { description: '', category: 'travel', amount: '', currency: 'USD', incurred_on: new Date().toISOString().slice(0, 10), project_id: '', is_billable: false };
@@ -17,6 +18,7 @@ interface UploadedReceipt {
 }
 
 const Expenses: React.FC = () => {
+    const { confirm } = useFeedback();
     const role = getStoredRole();
     const canReview = role === 'Manager' || role === 'Admin';
     const [expenses, setExpenses] = useState<ExpenseSummary[]>([]);
@@ -90,7 +92,7 @@ const Expenses: React.FC = () => {
     };
 
     const remove = async (id: string) => {
-        if (!window.confirm('Delete this expense?')) return;
+        if (!await confirm({ message: 'Delete this expense?', destructive: true, confirmLabel: 'Delete expense' })) return;
         try { await api.delete(`/expenses/${id}`); await loadExpenses(); }
         catch (error) { setFeedback({ tone: 'error', message: getApiErrorMessage(error, 'Failed to delete expense') }); }
     };

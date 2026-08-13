@@ -17,6 +17,64 @@ const formatHoursMetric = (hours: number) => {
 
 const secondsToHours = (seconds: number) => Number((seconds / 3600).toFixed(2));
 
+const CSV_FORMULA_PREFIX = /^[\t\r\n ]*[=+\-@]/;
+
+const escapeCsvCell = (value: unknown): string => {
+    const text = value == null ? '' : String(value);
+    const safeText = CSV_FORMULA_PREFIX.test(text) ? `'${text}` : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+};
+
+const normalizeExportTimeZone = (value: unknown): string | null => {
+    if (typeof value !== 'string' || !value.trim()) {
+        return 'UTC';
+    }
+
+    const timeZone = value.trim();
+    try {
+        new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+        return timeZone;
+    } catch {
+        return null;
+    }
+};
+
+const formatDateInTimeZone = (date: Date, timeZone: string): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+};
+
+const parseExplicitExportWindow = (startAtValue: unknown, endAtValue: unknown) => {
+    const hasStart = typeof startAtValue === 'string' && startAtValue.trim().length > 0;
+    const hasEnd = typeof endAtValue === 'string' && endAtValue.trim().length > 0;
+
+    if (!hasStart && !hasEnd) {
+        return { window: null, error: null };
+    }
+
+    if (!hasStart || !hasEnd) {
+        return { window: null, error: 'Both startAt and endAt are required for a custom export timeframe.' };
+    }
+
+    const startAt = new Date(startAtValue as string);
+    const endAt = new Date(endAtValue as string);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+        return { window: null, error: 'The export timeframe contains an invalid date.' };
+    }
+
+    if (endAt.getTime() <= startAt.getTime()) {
+        return { window: null, error: 'The export end date must be after the start date.' };
+    }
+
+    return { window: { startAt, endAt }, error: null };
+};
+
 const normalizeReportRangeStart = (range: unknown) => {
     const now = new Date();
     const startDate = new Date();
@@ -82,7 +140,25 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
-        const { whereClause } = buildReportWhereClause({ req, includeDateRange: true });
+        const explicitWindow = parseExplicitExportWindow(req.query.startAt, req.query.endAt);
+        if (explicitWindow.error) {
+            res.status(400).json({ message: explicitWindow.error });
+            return;
+        }
+
+        const exportTimeZone = normalizeExportTimeZone(req.query.timeZone);
+        if (!exportTimeZone) {
+            res.status(400).json({ message: 'The export timezone is invalid.' });
+            return;
+        }
+
+        const { whereClause } = buildReportWhereClause({ req, includeDateRange: !explicitWindow.window });
+        if (explicitWindow.window) {
+            whereClause.start_time = {
+                gte: explicitWindow.window.startAt,
+                lt: explicitWindow.window.endAt,
+            };
+        }
 
         const entries = await prisma.timeEntry.findMany({
             where: whereClause,
@@ -93,16 +169,25 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             orderBy: { start_time: 'desc' }
         });
 
-        // Generate CSV content
-        let csvContent = 'Date,Employee,Email,Team,Project,Task,Duration (Hours),Status,Billable Amount ($)\n';
+        const rows: unknown[][] = [[
+            'Date',
+            'Employee',
+            'Email',
+            'Team',
+            'Project',
+            'Task',
+            'Duration (Hours)',
+            'Status',
+            'Billable Amount ($)',
+        ]];
 
         entries.forEach(entry => {
-            const date = new Date(entry.start_time).toLocaleDateString();
-            const name = `"${entry.user.first_name} ${entry.user.last_name}"`;
+            const date = formatDateInTimeZone(new Date(entry.start_time), exportTimeZone);
+            const name = `${entry.user.first_name} ${entry.user.last_name}`;
             const email = entry.user.email;
-            const team = `"${entry.user.team_name || 'Unassigned'}"`;
-            const project = `"${entry.project?.name || 'Unassigned'}"`;
-            const task = `"${entry.task_description}"`;
+            const team = entry.user.team_name || 'Unassigned';
+            const project = entry.project?.name || 'Unassigned';
+            const task = entry.task_description;
             const hours = (entry.duration / 3600).toFixed(2);
             const status = entry.status;
 
@@ -110,10 +195,13 @@ export const exportTimeEntries = async (req: AuthRequest, res: Response): Promis
             const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
             const billable = (parseFloat(hours) * rate).toFixed(2);
 
-            csvContent += `${date},${name},${email},${team},${project},${task},${hours},${status},${billable}\n`;
+            rows.push([date, name, email, team, project, task, hours, status, billable]);
         });
 
-        res.setHeader('Content-Type', 'text/csv');
+        // UTF-8 BOM keeps names and task descriptions readable when opened in Excel.
+        const csvContent = `\uFEFF${rows.map((row) => row.map(escapeCsvCell).join(',')).join('\r\n')}\r\n`;
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename="timesheet_export.csv"');
         res.status(200).send(csvContent);
 
@@ -132,7 +220,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
             return;
         }
 
-        const { whereClause, now, startDate, selectedProjectId, canViewAll, selectedUserId, selectedTeamName } = buildReportWhereClause({ req, includeDateRange: true });
+        const { whereClause, now, startDate, canViewAll, selectedUserId, selectedTeamName } = buildReportWhereClause({ req, includeDateRange: true });
 
         // Fetch entries
         const entries = await prisma.timeEntry.findMany({
@@ -163,23 +251,20 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
 
         entries.forEach(entry => {
             totalDurationSec += entry.duration;
-            const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
-            billableAmount += (entry.duration / 3600) * rate;
+            if (entry.is_billable !== false) {
+                const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
+                billableAmount += (entry.duration / 3600) * rate;
+            }
         });
 
         const totalHours = totalDurationSec / 3600;
-        const activeProjectsCount = await prisma.project.count({
-            where: selectedProjectId
-                ? { id: selectedProjectId, is_active: true, organization_id: req.user!.organization_id }
-                : { is_active: true, organization_id: req.user!.organization_id },
-        });
         let billableSeconds = 0;
         entries.forEach(entry => {
             if (entry.is_billable !== false) {
                 billableSeconds += entry.duration;
             }
         });
-        const avgProductivity = totalDurationSec > 0
+        const billableUtilization = totalDurationSec > 0
             ? Math.round((billableSeconds / totalDurationSec) * 100)
             : 0;
 
@@ -198,6 +283,7 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 percentage: totalHours > 0 ? Math.round((p.hours / totalHours) * 100) : 0
             }))
             .sort((a, b) => b.hours - a.hours);
+        const projectsWorked = projectHoursMap.size;
 
         // Compute Hours Trend (Weekly buckets over the period, including zero-hour weeks)
         const totalDays = Math.max(Math.ceil((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)), 1);
@@ -245,23 +331,23 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         prevEntries.forEach(entry => {
             prevTotalSec += entry.duration;
             if (entry.project_id) prevProjectIds.add(entry.project_id);
-            const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
-            prevBillable += (entry.duration / 3600) * rate;
             if (entry.is_billable !== false) {
+                const rate = parseFloat(entry.user.hourly_rate?.toString() || '0');
+                prevBillable += (entry.duration / 3600) * rate;
                 prevBillableSec += entry.duration;
             }
         });
 
         const prevHours = prevTotalSec / 3600;
-        const prevAvgProd = prevTotalSec > 0 ? Math.round((prevBillableSec / prevTotalSec) * 100) : 0;
+        const prevBillableUtilization = prevTotalSec > 0 ? Math.round((prevBillableSec / prevTotalSec) * 100) : 0;
 
         const pctChange = (current: number, previous: number): string => {
-            if (previous === 0) return current > 0 ? '+100%' : '0%';
+            if (previous === 0) return current > 0 ? 'New' : 'No prior data';
             const change = Math.round(((current - previous) / previous) * 100);
             return change >= 0 ? `+${change}%` : `${change}%`;
         };
 
-        // Compute User Productivity Breakdown
+        // Compute each user's logged-hours attainment against their configured target.
         const userMap = new Map<string, any>();
         entries.forEach(entry => {
             const uId = entry.user.id;
@@ -292,7 +378,6 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         });
 
         const usersList = Array.from(userMap.values());
-        const maxUserHours = Math.max(...usersList.map((user) => user.totalHours), 0);
 
         const userBreakdown = usersList.map(u => {
             let primaryProject = 'Unassigned';
@@ -303,11 +388,14 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                     primaryProject = pName;
                 }
             }
-            const efficiency = maxUserHours > 0 ? Math.round((u.totalHours / maxUserHours) * 100) : 0;
-            // Expected hours scale the employment-type weekly minimum across the
-            // selected period. Under-hours is judged per classification, so an
-            // intern is measured at the intern target — not a blanket 40h.
-            const expectedHours = Number((u.minWeeklyHours * weekCount).toFixed(1));
+            // Prorate the employment-type weekly minimum to the exact selected
+            // period. A 30-day report represents 30/7 weeks, not five full weeks.
+            // Under-hours is judged per classification, so an intern is measured
+            // at the intern target — not a blanket 40h.
+            const expectedHours = Number((u.minWeeklyHours * (periodDays / 7)).toFixed(1));
+            const expectedHoursAttainment = expectedHours > 0
+                ? Math.round((u.totalHours / expectedHours) * 100)
+                : 0;
             const belowMinimum = u.totalHours + 1e-6 < expectedHours;
             return {
                 id: u.id,
@@ -324,8 +412,11 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
                 approved_hours: secondsToHours(u.approvedSec),
                 pending_hours: secondsToHours(u.pendingSec),
                 rejected_hours: secondsToHours(u.rejectedSec),
-                efficiency,
-                status: efficiency >= 85 ? 'On Track' : 'Needs Attention'
+                expectedHoursAttainment,
+                // Deprecated compatibility alias. Remove only after every deployed
+                // client consumes expectedHoursAttainment.
+                efficiency: expectedHoursAttainment,
+                status: belowMinimum ? 'Below Expected' : 'Target Met'
             };
         }).sort((a, b) => parseFloat(b.totalHours) - parseFloat(a.totalHours));
 
@@ -417,13 +508,21 @@ export const getAnalyticsDashboard = async (req: AuthRequest, res: Response): Pr
         res.status(200).json({
             metrics: {
                 totalHours: formatHoursMetric(totalHours),
-                activeProjects: activeProjectsCount,
-                avgProductivity,
+                projectsWorked,
+                // Deprecated compatibility alias. Both values now use the same
+                // selected-period definition so the legacy trend remains valid.
+                activeProjects: projectsWorked,
+                billableUtilization,
+                // Deprecated compatibility alias. This value has always represented
+                // billable utilization, despite the old productivity name.
+                avgProductivity: billableUtilization,
                 billableAmount: billableAmount.toFixed(2),
                 trends: {
                     hours: pctChange(totalHours, prevHours),
-                    projects: pctChange(activeProjectsCount, prevProjectIds.size),
-                    productivity: pctChange(avgProductivity, prevAvgProd),
+                    projectsWorked: pctChange(projectsWorked, prevProjectIds.size),
+                    projects: pctChange(projectsWorked, prevProjectIds.size),
+                    billableUtilization: pctChange(billableUtilization, prevBillableUtilization),
+                    productivity: pctChange(billableUtilization, prevBillableUtilization),
                     billable: pctChange(billableAmount, prevBillable),
                 }
             },

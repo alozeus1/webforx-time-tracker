@@ -24,6 +24,7 @@ import { usePageMetadata } from '../hooks/usePageMetadata';
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { CommandPalette } from './CommandPalette';
+import PwaStatus from './PwaStatus';
 
 interface PausedTimerState {
     taskDescription: string;
@@ -174,7 +175,7 @@ const Layout: React.FC = () => {
             window.removeEventListener(TIMER_DAILY_CAP_EVENT, onDailyCap as EventListener);
             window.removeEventListener(TIMER_DAILY_FLOOR_EVENT, onDailyFloor as EventListener);
         };
-    }, []);
+    }, [location.pathname]);
 
     /**
      * Report the browser's timezone once per session so the server can compute this
@@ -356,6 +357,7 @@ const Layout: React.FC = () => {
 
             <main className="main-content">
                 <Navbar onMenuClick={() => setSidebarOpen(true)} />
+                <PwaStatus />
 
                 {isDemoSession && (
                     <div role="status" style={{

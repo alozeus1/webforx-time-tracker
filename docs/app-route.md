@@ -52,11 +52,9 @@ These routes render inside the main authenticated layout.
 
 | Route | Allowed roles | Purpose |
 | --- | --- | --- |
-| `/admin` | Current code: Admin, Manager. MVP spec: Admin only. | Users, projects, integrations, notifications, audit/auth logs |
+| `/admin` | Admin | Users, projects, integrations, notifications, audit/auth logs |
 | `/webhooks` | Admin | Webhook subscription management |
 | `/geofencing` | Admin | Configure optional allow/deny clock-in location zones |
-
-Note: `/admin` currently allows `Manager` in `frontend/src/App.tsx`. Treat that as an explicit product decision before transfer.
 
 ## Backend API Prefix
 

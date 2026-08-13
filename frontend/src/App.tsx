@@ -2,32 +2,32 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
-import Login from './pages/Login';
-import Landing from './pages/Landing';
-import ForgotPassword from './pages/ForgotPassword';
-import RequestAccess from './pages/RequestAccess';
-import Privacy from './pages/Privacy';
-import Terms from './pages/Terms';
-import Dashboard from './pages/Dashboard';
-import Workday from './pages/Workday';
-import Timer from './pages/Timer';
-import Timeline from './pages/Timeline';
-import Admin from './pages/Admin';
-import Reports from './pages/Reports';
-import Team from './pages/Team';
-import Timesheet from './pages/Timesheet';
-import Integrations from './pages/Integrations';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import Invoices from './pages/Invoices';
-import Templates from './pages/Templates';
-import Webhooks from './pages/Webhooks';
-import ScheduledReports from './pages/ScheduledReports';
-import SharedArtifact from './pages/SharedArtifact';
-import Demo from './pages/Demo';
-import Leave from './pages/Leave';
 import { getStoredRole, getStoredToken } from './utils/session';
 
+const Login = React.lazy(() => import('./pages/Login'));
+const Landing = React.lazy(() => import('./pages/Landing'));
+const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword'));
+const RequestAccess = React.lazy(() => import('./pages/RequestAccess'));
+const Privacy = React.lazy(() => import('./pages/Privacy'));
+const Terms = React.lazy(() => import('./pages/Terms'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const Workday = React.lazy(() => import('./pages/Workday'));
+const Timer = React.lazy(() => import('./pages/Timer'));
+const Timeline = React.lazy(() => import('./pages/Timeline'));
+const Admin = React.lazy(() => import('./pages/Admin'));
+const Reports = React.lazy(() => import('./pages/Reports'));
+const Team = React.lazy(() => import('./pages/Team'));
+const Timesheet = React.lazy(() => import('./pages/Timesheet'));
+const Integrations = React.lazy(() => import('./pages/Integrations'));
+const Profile = React.lazy(() => import('./pages/Profile'));
+const Settings = React.lazy(() => import('./pages/Settings'));
+const Invoices = React.lazy(() => import('./pages/Invoices'));
+const Templates = React.lazy(() => import('./pages/Templates'));
+const Webhooks = React.lazy(() => import('./pages/Webhooks'));
+const ScheduledReports = React.lazy(() => import('./pages/ScheduledReports'));
+const SharedArtifact = React.lazy(() => import('./pages/SharedArtifact'));
+const Demo = React.lazy(() => import('./pages/Demo'));
+const Leave = React.lazy(() => import('./pages/Leave'));
 const Schedule = React.lazy(() => import('./pages/Schedule'));
 const Expenses = React.lazy(() => import('./pages/Expenses'));
 const Geofencing = React.lazy(() => import('./pages/Geofencing'));
@@ -70,13 +70,13 @@ const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
 const RootRedirect: React.FC = () => {
   const token = getStoredToken();
   if (token) return <Navigate to="/dashboard" replace />;
-  return <Landing />;
+  return lazyPage(<Landing />);
 };
 
 const App: React.FC = () => {
   return (
     <BrowserRouter>
-      {/* Outer net: catches throws in eagerly-imported pages and in the Layout shell
+      {/* Outer net: catches throws in the application shell and route setup
           itself, so no route can produce a blank screen. Per-page boundaries inside
           lazyPage handle the lazy routes more granularly. */}
       <ErrorBoundary title="The application hit an unexpected error">
@@ -84,34 +84,34 @@ const App: React.FC = () => {
         {/* Public routes */}
         <Route path="/" element={<RootRedirect />} />
         <Route path="/landing" element={<Navigate to="/" replace />} />
-        <Route path="/login" element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />
-        <Route path="/forgot-password" element={<PublicOnlyRoute><ForgotPassword /></PublicOnlyRoute>} />
-        <Route path="/request-access" element={<PublicOnlyRoute><RequestAccess /></PublicOnlyRoute>} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/share/:token" element={<SharedArtifact />} />
-        <Route path="/demo" element={<Demo />} />
+        <Route path="/login" element={<PublicOnlyRoute>{lazyPage(<Login />)}</PublicOnlyRoute>} />
+        <Route path="/forgot-password" element={<PublicOnlyRoute>{lazyPage(<ForgotPassword />)}</PublicOnlyRoute>} />
+        <Route path="/request-access" element={<PublicOnlyRoute>{lazyPage(<RequestAccess />)}</PublicOnlyRoute>} />
+        <Route path="/privacy" element={lazyPage(<Privacy />)} />
+        <Route path="/terms" element={lazyPage(<Terms />)} />
+        <Route path="/share/:token" element={lazyPage(<SharedArtifact />)} />
+        <Route path="/demo" element={lazyPage(<Demo />)} />
 
         {/* Protected app routes */}
         <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/workday" element={<Workday />} />
-          <Route path="/timer" element={<Timer />} />
-          <Route path="/timeline" element={<Timeline />} />
-          <Route path="/timesheet" element={<Timesheet />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/team" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Team /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin', 'Manager']}><Admin /></ProtectedRoute>} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/invoices" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Invoices /></ProtectedRoute>} />
-          <Route path="/templates" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><Templates /></ProtectedRoute>} />
-          <Route path="/webhooks" element={<ProtectedRoute allowedRoles={['Admin']}><Webhooks /></ProtectedRoute>} />
-          <Route path="/scheduled-reports" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}><ScheduledReports /></ProtectedRoute>} />
-          <Route path="/integrations" element={<Integrations />} />
-          <Route path="/integrations/taiga" element={<Integrations />} />
-          <Route path="/integrations/mattermost" element={<Integrations />} />
-          <Route path="/leave" element={<Leave />} />
+          <Route path="/dashboard" element={lazyPage(<Dashboard />)} />
+          <Route path="/workday" element={lazyPage(<Workday />)} />
+          <Route path="/timer" element={lazyPage(<Timer />)} />
+          <Route path="/timeline" element={lazyPage(<Timeline />)} />
+          <Route path="/timesheet" element={lazyPage(<Timesheet />)} />
+          <Route path="/reports" element={lazyPage(<Reports />)} />
+          <Route path="/team" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}>{lazyPage(<Team />)}</ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['Admin']}>{lazyPage(<Admin />)}</ProtectedRoute>} />
+          <Route path="/settings" element={lazyPage(<Settings />)} />
+          <Route path="/profile" element={lazyPage(<Profile />)} />
+          <Route path="/invoices" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}>{lazyPage(<Invoices />)}</ProtectedRoute>} />
+          <Route path="/templates" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}>{lazyPage(<Templates />)}</ProtectedRoute>} />
+          <Route path="/webhooks" element={<ProtectedRoute allowedRoles={['Admin']}>{lazyPage(<Webhooks />)}</ProtectedRoute>} />
+          <Route path="/scheduled-reports" element={<ProtectedRoute allowedRoles={['Manager', 'Admin']}>{lazyPage(<ScheduledReports />)}</ProtectedRoute>} />
+          <Route path="/integrations" element={lazyPage(<Integrations />)} />
+          <Route path="/integrations/taiga" element={lazyPage(<Integrations />)} />
+          <Route path="/integrations/mattermost" element={lazyPage(<Integrations />)} />
+          <Route path="/leave" element={lazyPage(<Leave />)} />
           <Route path="/schedule" element={lazyPage(<Schedule />)} />
           <Route path="/expenses" element={lazyPage(<Expenses />)} />
           <Route path="/geofencing" element={<ProtectedRoute allowedRoles={['Admin']}>{lazyPage(<Geofencing />)}</ProtectedRoute>} />

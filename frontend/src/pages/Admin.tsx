@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
-import { hasAnyRole } from '../utils/session';
+import { useFeedback } from '../hooks/useFeedback';
 
 const availableTabs = ['projects', 'budgets', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
 
@@ -132,6 +132,7 @@ const getAuditDetails = (log: AuditLogSummary) => {
 };
 
 const Admin: React.FC = () => {
+    const { toast, confirm } = useFeedback();
     const [searchParams, setSearchParams] = useSearchParams();
     const queryTab = searchParams.get('tab');
     const isAdmin = hasAnyRole(['Admin']);
@@ -451,7 +452,7 @@ const Admin: React.FC = () => {
             void fetchAuditLogs();
         } catch (error) {
             console.error('Error reviewing correction request:', error);
-            alert(getApiErrorMessage(error, 'Failed to review correction request.'));
+            toast(getApiErrorMessage(error, 'Failed to review correction request.'), { tone: 'error' });
         }
     }
 
@@ -477,16 +478,16 @@ const Admin: React.FC = () => {
     }
 
     async function handlePurgeResolvedCorrections() {
-        if (!window.confirm(`Permanently delete resolved corrections older than ${CORRECTION_RETENTION_DAYS} days? This cannot be undone.`)) {
+        if (!await confirm({ message: `Permanently delete resolved corrections older than ${CORRECTION_RETENTION_DAYS} days? This cannot be undone.`, destructive: true, confirmLabel: 'Permanently delete' })) {
             return;
         }
         try {
             const res = await api.post<{ deleted: number }>('/timers/corrections/purge-resolved');
             void fetchCorrections();
-            alert(`${res.data.deleted} resolved correction(s) purged.`);
+            toast(`${res.data.deleted} resolved correction(s) purged.`, { tone: 'success' });
         } catch (error) {
             console.error('Error purging resolved corrections:', error);
-            alert(getApiErrorMessage(error, 'Failed to purge resolved corrections.'));
+            toast(getApiErrorMessage(error, 'Failed to purge resolved corrections.'), { tone: 'error' });
         }
     }
 
@@ -540,7 +541,7 @@ const Admin: React.FC = () => {
         try {
             await api.post(`/payroll/${id}/lock`);
             void fetchPayrollPeriods();
-        } catch { alert('Failed to lock period.'); }
+        } catch { toast('Failed to lock period.', { tone: 'error' }); }
     }
 
     async function handleUnlockPeriod(id: string) {
@@ -548,7 +549,7 @@ const Admin: React.FC = () => {
         try {
             await api.post(`/payroll/${id}/unlock`, { notes });
             void fetchPayrollPeriods();
-        } catch { alert('Failed to unlock period.'); }
+        } catch { toast('Failed to unlock period.', { tone: 'error' }); }
     }
 
     // ── Bot config functions ─────────────────────────────────────────────────
@@ -744,7 +745,7 @@ const Admin: React.FC = () => {
     }
 
     async function handleResetBranding() {
-        if (!window.confirm('Reset branding to defaults?')) return;
+        if (!await confirm({ message: 'Reset branding to defaults?', destructive: true, confirmLabel: 'Reset branding' })) return;
         try {
             await api.delete('/branding');
             setBranding({ app_name: '', logo_url: '', favicon_url: '', primary_color: '#4F46E5', secondary_color: '#7C3AED', custom_domain: '', email_from_name: '', email_from_address: '' });
@@ -780,7 +781,7 @@ const Admin: React.FC = () => {
             )));
         } catch (error) {
             console.error('Error updating user team:', error);
-            alert('Failed to update user team.');
+            toast('Failed to update user team.', { tone: 'error' });
         } finally {
             setTeamSavingFor((current) => {
                 const next = new Set(current);
@@ -791,7 +792,7 @@ const Admin: React.FC = () => {
     }
 
     async function handleResetUserMfa(user: UserSummary) {
-        if (!window.confirm(`Reset MFA for ${user.first_name} ${user.last_name}? They will need to set up a new authenticator device.`)) return;
+        if (!await confirm({ message: `Reset MFA for ${user.first_name} ${user.last_name}? They will need to set up a new authenticator device.`, destructive: true, confirmLabel: 'Reset MFA' })) return;
 
         try {
             await api.post(`/users/${user.id}/mfa/reset`);
@@ -800,19 +801,19 @@ const Admin: React.FC = () => {
             )));
         } catch (error) {
             console.error('Error resetting user MFA:', error);
-            alert('Failed to reset MFA for this user.');
+            toast('Failed to reset MFA for this user.', { tone: 'error' });
         }
     }
 
     async function handleSaveRate(userId: string) {
         const rate = parseFloat(editingRateValue);
-        if (isNaN(rate) || rate < 0) { alert('Enter a valid rate (0 or higher).'); return; }
+        if (isNaN(rate) || rate < 0) { toast('Enter a valid rate (0 or higher).', { tone: 'error' }); return; }
         try {
             await api.put(`/users/${userId}`, { hourly_rate: rate });
             setUsers(current => current.map(u => u.id === userId ? { ...u, hourly_rate: rate } : u));
             setEditingRateUserId(null);
         } catch {
-            alert('Failed to save billing rate.');
+            toast('Failed to save billing rate.', { tone: 'error' });
         }
     }
 
@@ -832,7 +833,7 @@ const Admin: React.FC = () => {
             void fetchAuditLogs();
         } catch (error) {
             console.error('Error creating team:', error);
-            alert('Failed to create team.');
+            toast('Failed to create team.', { tone: 'error' });
         }
     }
 
@@ -843,7 +844,7 @@ const Admin: React.FC = () => {
             void fetchAuditLogs();
         } catch (error) {
             console.error('Error updating team:', error);
-            alert('Failed to update team.');
+            toast('Failed to update team.', { tone: 'error' });
         }
     }
 
@@ -911,7 +912,7 @@ const Admin: React.FC = () => {
         const file = e.target.files?.[0];
         if (!file) return;
         if (file.size > 2 * 1024 * 1024) {
-            alert('Logo must be under 2MB');
+            toast('Logo must be under 2MB', { tone: 'error' });
             return;
         }
         const reader = new FileReader();
@@ -947,14 +948,14 @@ const Admin: React.FC = () => {
     };
 
     const handleDeleteProject = async (project: ProjectSummary) => {
-        if (!window.confirm(`Archive project "${project.name}"? This will deactivate it.`)) return;
+        if (!await confirm({ message: `Archive project "${project.name}"? This will deactivate it.`, destructive: true, confirmLabel: 'Archive project' })) return;
         try {
             await api.delete(`/projects/${project.id}`);
             void fetchProjects();
             void fetchBudgets();
             setProjectMenuOpen(null);
         } catch {
-            alert('Failed to archive project.');
+            toast('Failed to archive project.', { tone: 'error' });
         }
     };
 
@@ -979,7 +980,7 @@ const Admin: React.FC = () => {
             void fetchBudgets();
         } catch (error) {
             console.error('Error saving project:', error);
-            alert('Failed to save project.');
+            toast('Failed to save project.', { tone: 'error' });
         }
     };
 

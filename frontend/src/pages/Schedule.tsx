@@ -7,6 +7,7 @@ import { CalendarDays, Plus, Trash2 } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ManagerOperationsResponse, ProjectSummary, ScheduleEntrySummary, UserSummary } from '../types/api';
 import { getStoredRole, getStoredUserProfile } from '../utils/session';
+import { useFeedback } from '../hooks/useFeedback';
 
 const COLORS: Record<ScheduleEntrySummary['entry_type'], string> = {
     shift: '#4f46e5',
@@ -26,6 +27,7 @@ const initialForm = {
 };
 
 const Schedule: React.FC = () => {
+    const { confirm } = useFeedback();
     const role = getStoredRole();
     const profile = getStoredUserProfile();
     const canManage = role === 'Manager' || role === 'Admin';
@@ -123,7 +125,7 @@ const Schedule: React.FC = () => {
     };
 
     const deleteEntry = async () => {
-        if (!form.id || !window.confirm('Delete this schedule entry?')) return;
+        if (!form.id || !await confirm({ message: 'Delete this schedule entry?', destructive: true, confirmLabel: 'Delete entry' })) return;
         try {
             await api.delete(`/schedules/${form.id}`);
             setShowForm(false);

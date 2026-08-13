@@ -13,7 +13,7 @@ jest.mock('../src/utils/outboundHttp', () => ({
 
 import prisma from '../src/config/db';
 import { publicHttpsFetch } from '../src/utils/outboundHttp';
-import { emitWebhookEvent } from '../src/services/webhookService';
+import { deliverWebhookWithRetry, emitWebhookEvent } from '../src/services/webhookService';
 
 const fetchMock = publicHttpsFetch as jest.Mock;
 
@@ -46,5 +46,58 @@ describe('webhook tenant isolation', () => {
         );
         expect(prisma.webhookSubscription.findMany).not.toHaveBeenCalled();
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('retries transient failures within a bounded attempt count', async () => {
+        fetchMock
+            .mockRejectedValueOnce(new Error('request timed out'))
+            .mockResolvedValueOnce({ ok: false, status: 503 })
+            .mockResolvedValueOnce({ ok: true, status: 204 });
+        const sleep = jest.fn().mockResolvedValue(undefined);
+
+        await expect(deliverWebhookWithRetry({
+            subscriptionId: 'sub-1',
+            url: 'https://hooks.example.com/a',
+            body: '{}',
+            signature: 'signature',
+            deliveryId: 'delivery-1',
+        }, { sleep })).resolves.toEqual({ attempts: 3, status: 204 });
+
+        expect(fetchMock).toHaveBeenCalledTimes(3);
+        expect(sleep).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry a permanent client failure', async () => {
+        fetchMock.mockResolvedValue({ ok: false, status: 400 });
+
+        await expect(deliverWebhookWithRetry({
+            subscriptionId: 'sub-1',
+            url: 'https://hooks.example.com/a',
+            body: '{}',
+            signature: 'signature',
+            deliveryId: 'delivery-1',
+        }, { sleep: jest.fn() })).rejects.toMatchObject({
+            attempts: 1,
+            status: 400,
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs exhausted failures by subscription ID without exposing the endpoint URL', async () => {
+        (prisma.webhookSubscription.findMany as jest.Mock).mockResolvedValue([
+            { id: 'sub-secret-path', url: 'https://hooks.example.com/private-token-path', secret: 'secret', events: ['timer.stopped'] },
+        ]);
+        fetchMock.mockResolvedValue({ ok: false, status: 400 });
+        const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        await emitWebhookEvent('timer.stopped', { id: 'entry-a' }, { organizationId: 'org-a' });
+
+        expect(consoleError).toHaveBeenCalledWith('Webhook delivery exhausted', expect.objectContaining({
+            subscriptionId: 'sub-secret-path',
+            attempts: 1,
+            status: 400,
+        }));
+        expect(JSON.stringify(consoleError.mock.calls)).not.toContain('private-token-path');
+        consoleError.mockRestore();
     });
 });

@@ -7,8 +7,12 @@ import ApprovalQueue from '../components/ApprovalQueue';
 import type { ReviewAction } from '../utils/timeEntryLabels';
 import type { BulkReviewResult, TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
+import AccessibleDialog from '../components/AccessibleDialog';
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#0ea5e9', '#ec4899', '#8b5cf6'];
+const EXPORT_PRESET_DAYS = { '7d': 7, '30d': 30, '90d': 90 } as const;
+type ExportPreset = keyof typeof EXPORT_PRESET_DAYS | 'custom';
 
 const formatHoursText = (hours: number) => {
     if (hours <= 0) return '0.0h';
@@ -29,6 +33,26 @@ const toDateInputValue = (date: Date): string => {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+};
+
+const getExportPresetDates = (preset: keyof typeof EXPORT_PRESET_DAYS) => {
+    const endDate = new Date();
+    endDate.setHours(0, 0, 0, 0);
+    const startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() - (EXPORT_PRESET_DAYS[preset] - 1));
+    return {
+        startDate: toDateInputValue(startDate),
+        endDate: toDateInputValue(endDate),
+    };
+};
+
+const toExportBoundary = (dateValue: string, exclusiveEnd = false): string => {
+    const date = parseDateInputValue(dateValue);
+    date.setHours(0, 0, 0, 0);
+    if (exclusiveEnd) {
+        date.setDate(date.getDate() + 1);
+    }
+    return date.toISOString();
 };
 
 const getStartOfWeek = (date: Date): Date => {
@@ -53,6 +77,7 @@ function getTrendClasses(trend: string | undefined): string {
 }
 
 const Reports: React.FC = () => {
+    const reducedMotion = useReducedMotionPreference();
     const [searchParams, setSearchParams] = useSearchParams();
     const initialRange = ['7d', '30d', '90d'].includes(searchParams.get('range') || '') ? (searchParams.get('range') as string) : '30d';
     const initialProjectId = searchParams.get('projectId') || 'all';
@@ -70,6 +95,15 @@ const Reports: React.FC = () => {
     const [projectId, setProjectId] = useState(initialProjectId);
     const [queryUserId, setQueryUserId] = useState(initialQueryUserId);
     const [teamName, setTeamName] = useState(initialTeamName);
+    const initialExportPreset = initialRange as keyof typeof EXPORT_PRESET_DAYS;
+    const initialExportDates = getExportPresetDates(initialExportPreset);
+    const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+    const [exportPreset, setExportPreset] = useState<ExportPreset>(initialExportPreset);
+    const [exportStartDate, setExportStartDate] = useState(initialExportDates.startDate);
+    const [exportEndDate, setExportEndDate] = useState(initialExportDates.endDate);
+    const [isExporting, setIsExporting] = useState(false);
+    const [exportError, setExportError] = useState('');
+    const [exportNotice, setExportNotice] = useState('');
 
     // Daily breakdown (pick a user + a specific day)
     const [focusDate, setFocusDate] = useState(initialFocusDate);
@@ -80,7 +114,7 @@ const Reports: React.FC = () => {
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [users, setUsers] = useState<UserSummary[]>([]);
     const [managedTeams, setManagedTeams] = useState<TeamSummary[]>([]);
-    const [productivityFilter, setProductivityFilter] = useState<'all' | 'top' | 'needs_attention'>('all');
+    const [attainmentFilter, setAttainmentFilter] = useState<'all' | 'target_met' | 'below_expected'>('all');
 
     const canReviewApprovals = hasAnyRole(['Manager', 'Admin']);
     const teamOptions = useMemo(() => {
@@ -102,16 +136,16 @@ const Reports: React.FC = () => {
         [users],
     );
 
-    async function fetchApprovals() {
+    const fetchApprovals = useCallback(async () => {
         try {
             const res = await api.get<{ entries: TimeEntrySummary[] }>('/timers/approvals');
             setPendingApprovals(res.data.entries || []);
         } catch (error) {
             console.error('Failed to fetch approvals:', error);
         }
-    }
+    }, []);
 
-    async function fetchFilterData() {
+    const fetchFilterData = useCallback(async () => {
         try {
             const [projRes, usersRes] = await Promise.all([
                 api.get<ProjectSummary[]>('/projects'),
@@ -126,7 +160,7 @@ const Reports: React.FC = () => {
         } catch (error) {
             console.error('Failed to fetch filter options:', error);
         }
-    }
+    }, [canReviewApprovals]);
 
     const fetchAnalytics = useCallback(async () => {
         setIsLoading(true);
@@ -150,7 +184,7 @@ const Reports: React.FC = () => {
             }
         };
         void init();
-    }, [canReviewApprovals]);
+    }, [canReviewApprovals, fetchApprovals, fetchFilterData]);
 
     useEffect(() => {
         void fetchAnalytics();
@@ -244,35 +278,85 @@ const Reports: React.FC = () => {
         }
     };
 
+    const exportValidationError = useMemo(() => {
+        if (!exportStartDate || !exportEndDate) {
+            return 'Choose both a start date and an end date.';
+        }
+        if (parseDateInputValue(exportStartDate) > parseDateInputValue(exportEndDate)) {
+            return 'The start date must be on or before the end date.';
+        }
+        return '';
+    }, [exportEndDate, exportStartDate]);
+
+    const openExportDialog = () => {
+        const preset = range in EXPORT_PRESET_DAYS ? range as keyof typeof EXPORT_PRESET_DAYS : '30d';
+        const dates = getExportPresetDates(preset);
+        setExportPreset(preset);
+        setExportStartDate(dates.startDate);
+        setExportEndDate(dates.endDate);
+        setExportError('');
+        setExportNotice('');
+        setIsExportDialogOpen(true);
+    };
+
+    const handleExportPresetChange = (preset: ExportPreset) => {
+        setExportPreset(preset);
+        setExportError('');
+        if (preset !== 'custom') {
+            const dates = getExportPresetDates(preset);
+            setExportStartDate(dates.startDate);
+            setExportEndDate(dates.endDate);
+        }
+    };
+
     const handleExport = async () => {
+        if (exportValidationError) {
+            setExportError(exportValidationError);
+            return;
+        }
+
+        setIsExporting(true);
+        setExportError('');
         try {
             const res = await api.get('/reports/export', {
-                params: { range, projectId, queryUserId, teamName },
+                params: {
+                    startAt: toExportBoundary(exportStartDate),
+                    endAt: toExportBoundary(exportEndDate, true),
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                    projectId,
+                    queryUserId,
+                    teamName,
+                },
                 responseType: 'blob',
             });
-            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv;charset=utf-8' }));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', 'timesheet_export.csv');
+            link.setAttribute('download', `timesheet-${exportStartDate}-to-${exportEndDate}.csv`);
             document.body.appendChild(link);
             link.click();
             link.remove();
+            window.URL.revokeObjectURL(url);
+            setIsExportDialogOpen(false);
+            setExportNotice(`CSV exported for ${exportStartDate} through ${exportEndDate}.`);
         } catch (error) {
             console.error('Failed to export report:', error);
-            alert('Export failed. Please try again.');
+            setExportError('Export failed. Please try again.');
+        } finally {
+            setIsExporting(false);
         }
     };
 
     const filteredBreakdown = useMemo(() => {
         const source = analytics?.userBreakdown || [];
-        if (productivityFilter === 'top') {
-            return source.filter((item) => item.efficiency >= 85);
+        if (attainmentFilter === 'target_met') {
+            return source.filter((item) => item.expectedHoursAttainment >= 100);
         }
-        if (productivityFilter === 'needs_attention') {
-            return source.filter((item) => item.efficiency < 85);
+        if (attainmentFilter === 'below_expected') {
+            return source.filter((item) => item.expectedHoursAttainment < 100);
         }
         return source;
-    }, [analytics?.userBreakdown, productivityFilter]);
+    }, [analytics?.userBreakdown, attainmentFilter]);
 
     const autoStoppedPendingApprovals = useMemo(
         () => pendingApprovals.filter((entry) => entry.auto_stopped || entry.stop_reason === 'active_duration_limit'),
@@ -295,13 +379,19 @@ const Reports: React.FC = () => {
                             <p className="text-slate-500 dark:text-slate-400 text-base">Performance analysis for Engineering team projects.</p>
                         </div>
                         <button
-                            onClick={handleExport}
+                            onClick={openExportDialog}
+                            aria-haspopup="dialog"
                             className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all self-start md:self-auto"
                         >
                             <span className="material-symbols-outlined text-lg">download</span>
                             <span>Export CSV</span>
                         </button>
                     </div>
+                    {exportNotice && (
+                        <p role="status" className="mt-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                            {exportNotice}
+                        </p>
+                    )}
 
                     {/* Filter bar — pill-style, below title */}
                     <div className="mt-4 flex flex-wrap gap-2 items-center">
@@ -482,30 +572,30 @@ const Reports: React.FC = () => {
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Active Projects</p>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Projects Worked</p>
                                     <span
-                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.projects)}`}
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.projectsWorked)}`}
                                         title="Compared to previous period"
                                     >
-                                        {analytics?.metrics.trends.projects}
+                                        {analytics?.metrics.trends.projectsWorked}
                                     </span>
                                 </div>
-                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.activeProjects}</h3>
-                                <p className="text-xs text-slate-400 mt-1">Currently active projects</p>
+                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.projectsWorked}</h3>
+                                <p className="text-xs text-slate-400 mt-1">Distinct projects with logged time</p>
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                                 <div className="flex justify-between items-start">
-                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Avg. Productivity</p>
+                                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Billable Utilization</p>
                                     <span
-                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.productivity)}`}
+                                        className={`px-2 py-1 rounded text-xs font-bold ${getTrendClasses(analytics?.metrics.trends.billableUtilization)}`}
                                         title="Compared to previous period"
                                     >
-                                        {analytics?.metrics.trends.productivity}
+                                        {analytics?.metrics.trends.billableUtilization}
                                     </span>
                                 </div>
-                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.avgProductivity}%</h3>
-                                <p className="text-xs text-slate-400 mt-1">Target is 85%</p>
+                                <h3 className="text-2xl font-bold mt-2 text-slate-900 dark:text-white">{analytics?.metrics.billableUtilization}%</h3>
+                                <p className="text-xs text-slate-400 mt-1">Share of logged time marked billable</p>
                             </div>
 
                             <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -640,9 +730,15 @@ const Reports: React.FC = () => {
                                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)', backgroundColor: 'var(--bg-glass, #ffffff)' }}
                                                 formatter={(value) => [formatHoursText(Number(value)), 'Hours']} 
                                             />
-                                            <Bar dataKey="hours" fill="url(#colorHours)" radius={[6, 6, 0, 0]} />
+                                            <Bar dataKey="hours" fill="url(#colorHours)" radius={[6, 6, 0, 0]} isAnimationActive={!reducedMotion} />
                                         </BarChart>
                                 </ResponsiveContainer>
+                                <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                                    <summary className="cursor-pointer font-semibold">Text summary of hours logged</summary>
+                                    <ul className="mt-2 space-y-1">
+                                        {(analytics?.hoursTrend || []).map((point) => <li key={point.name}>{point.name}: {formatHoursText(point.hours)}</li>)}
+                                    </ul>
+                                </details>
                             </div>
 
                             {/* Project Distribution — Recharts Pie */}
@@ -665,6 +761,7 @@ const Reports: React.FC = () => {
                                                     stroke="none"
                                                     label={({ name, percent }: PieLabelRenderProps) => `${name ?? ''} (${((percent ?? 0) * 100).toFixed(0)}%)`}
                                                     labelLine={false}
+                                                    isAnimationActive={!reducedMotion}
                                                 >
                                                     {analytics?.projectDistribution.slice(0, 6).map((_entry, idx) => (
                                                         <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
@@ -674,6 +771,14 @@ const Reports: React.FC = () => {
                                                 <Legend />
                                             </PieChart>
                                     </ResponsiveContainer>
+                                )}
+                                {(analytics?.projectDistribution.length ?? 0) > 0 && (
+                                    <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                                        <summary className="cursor-pointer font-semibold">Text summary of project distribution</summary>
+                                        <ul className="mt-2 space-y-1">
+                                            {analytics?.projectDistribution.slice(0, 6).map((project) => <li key={project.name}>{project.name}: {formatHoursText(project.hours)}</li>)}
+                                        </ul>
+                                    </details>
                                 )}
                             </div>
                         </div>
@@ -700,22 +805,22 @@ const Reports: React.FC = () => {
                         </div>
                         )}
 
-                        {/* User Productivity */}
+                        {/* Expected-hours attainment */}
                         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden mb-8">
                             <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-                                <h4 className="font-bold text-slate-900 dark:text-white">User Productivity Breakdown</h4>
+                                <h4 className="font-bold text-slate-900 dark:text-white">Expected Hours Attainment</h4>
                                 <div className="flex gap-2 items-center">
                                     <span className="text-xs text-slate-500 capitalize">
-                                        {productivityFilter === 'all' ? 'All users' : productivityFilter.replace('_', ' ')}
+                                        {attainmentFilter === 'all' ? 'All users' : attainmentFilter.replace('_', ' ')}
                                     </span>
                                     <button
                                         className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded transition-colors text-slate-500"
-                                        onClick={() => setProductivityFilter((previous) => {
-                                            if (previous === 'all') return 'top';
-                                            if (previous === 'top') return 'needs_attention';
+                                        onClick={() => setAttainmentFilter((previous) => {
+                                            if (previous === 'all') return 'target_met';
+                                            if (previous === 'target_met') return 'below_expected';
                                             return 'all';
                                         })}
-                                        title="Cycle productivity filters"
+                                        title="Cycle expected-hours filters"
                                     >
                                         <span className="material-symbols-outlined text-xl">filter_list</span>
                                     </button>
@@ -732,7 +837,7 @@ const Reports: React.FC = () => {
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Approved h</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Pending h</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Rejected h</th>
-                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efficiency</th>
+                                            <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Expected Hours</th>
                                             <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
@@ -740,7 +845,7 @@ const Reports: React.FC = () => {
                                         {filteredBreakdown.length === 0 ? (
                                             <tr>
                                                 <td colSpan={9} className="px-6 py-8 text-center text-slate-500 text-sm">
-                                                    No users match the selected productivity filter.
+                                                    No users match the selected expected-hours filter.
                                                 </td>
                                             </tr>
                                         ) : filteredBreakdown.map((u) => (
@@ -758,20 +863,25 @@ const Reports: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.teamName || 'Unassigned'}</td>
                                                 <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">{u.primaryProject}</td>
-                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">{formatHoursText(Number(u.totalHours))}</td>
+                                                <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">
+                                                    {formatHoursText(Number(u.totalHours))}
+                                                    {u.expectedHours !== undefined && (
+                                                        <p className="mt-1 text-xs font-normal text-slate-500">of {formatHoursText(u.expectedHours)} expected</p>
+                                                    )}
+                                                </td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-emerald-600 dark:text-emerald-400">{u.approved_hours !== undefined ? formatHoursText(u.approved_hours) : '—'}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-amber-600 dark:text-amber-400">{u.pending_hours !== undefined ? formatHoursText(u.pending_hours) : '—'}</td>
                                                 <td className="px-6 py-4 text-sm font-semibold text-rose-600 dark:text-rose-400">{u.rejected_hours !== undefined ? formatHoursText(u.rejected_hours) : '—'}</td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-2">
                                                         <div className="h-1.5 w-16 rounded-full bg-slate-100 dark:bg-slate-700">
-                                                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(u.efficiency, 100)}%` }}></div>
+                                                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(u.expectedHoursAttainment, 100)}%` }}></div>
                                                         </div>
-                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{u.efficiency}%</span>
+                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{u.expectedHoursAttainment}%</span>
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${u.belowMinimum ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400'}`}>
                                                         {u.status}
                                                     </span>
                                                 </td>
@@ -784,6 +894,113 @@ const Reports: React.FC = () => {
                     </>
                 )}
             </div>
+
+            <AccessibleDialog
+                isOpen={isExportDialogOpen}
+                onClose={() => {
+                    if (!isExporting) setIsExportDialogOpen(false);
+                }}
+                ariaLabelledBy="report-export-title"
+                panelClassName="w-full max-w-lg overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+                closeOnBackdrop={!isExporting}
+            >
+                <div className="border-b border-slate-200 p-5 dark:border-slate-700">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h2 id="report-export-title" className="text-xl font-black text-slate-900 dark:text-white">
+                                Export workspace report
+                            </h2>
+                            <p id="report-export-description" className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                                Select and approve the exact timeframe before downloading the CSV.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsExportDialogOpen(false)}
+                            disabled={isExporting}
+                            aria-label="Close export dialog"
+                            className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                        >
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-5 p-5" aria-describedby="report-export-description">
+                    <label className="block">
+                        <span className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Timeframe</span>
+                        <select
+                            value={exportPreset}
+                            onChange={(event) => handleExportPresetChange(event.target.value as ExportPreset)}
+                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                        >
+                            <option value="7d">Last 7 days</option>
+                            <option value="30d">Last 30 days</option>
+                            <option value="90d">Last 90 days</option>
+                            <option value="custom">Custom date range</option>
+                        </select>
+                    </label>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                            <span className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">Start date</span>
+                            <input
+                                type="date"
+                                value={exportStartDate}
+                                onChange={(event) => {
+                                    setExportPreset('custom');
+                                    setExportStartDate(event.target.value);
+                                    setExportError('');
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-2 block text-sm font-bold text-slate-700 dark:text-slate-200">End date</span>
+                            <input
+                                type="date"
+                                value={exportEndDate}
+                                onChange={(event) => {
+                                    setExportPreset('custom');
+                                    setExportEndDate(event.target.value);
+                                    setExportError('');
+                                }}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 dark:border-slate-600 dark:bg-slate-900 dark:text-white"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-900/60 dark:text-slate-300">
+                        Entries started from <strong>{exportStartDate || '—'}</strong> through <strong>{exportEndDate || '—'}</strong> will be included. Your current user, team, and project filters remain applied.
+                    </div>
+
+                    {(exportError || exportValidationError) && (
+                        <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+                            {exportError || exportValidationError}
+                        </p>
+                    )}
+                </div>
+
+                <div className="flex flex-col-reverse gap-3 border-t border-slate-200 p-5 sm:flex-row sm:justify-end dark:border-slate-700">
+                    <button
+                        type="button"
+                        onClick={() => setIsExportDialogOpen(false)}
+                        disabled={isExporting}
+                        className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExport}
+                        disabled={isExporting || Boolean(exportValidationError)}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                        <span className="material-symbols-outlined text-lg">download</span>
+                        {isExporting ? 'Preparing CSV…' : 'Download CSV'}
+                    </button>
+                </div>
+            </AccessibleDialog>
         </div>
     );
 };

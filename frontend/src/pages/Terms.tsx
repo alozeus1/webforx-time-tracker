@@ -57,7 +57,7 @@ const Terms: React.FC = () => {
             <h2>Data and Content Ownership</h2>
             <p>
               Time entries, project mappings, schedules, expenses, receipts, location verification records, and team records remain owned by the customer organization.
-              Web Forx may process this data only as needed to operate, secure, and improve the service.
+              Web Forx Global Inc. may process this data only as needed to operate, secure, and improve the service.
             </p>
           </section>
 

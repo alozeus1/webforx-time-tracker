@@ -100,15 +100,20 @@ test.describe('Team Manager Permissions', () => {
         await expect(updatedMemberRow).toBeVisible();
         await expect(updatedMemberRow).toContainText('Manager');
 
-        page.once('dialog', async (dialogEvent) => {
-            expect(dialogEvent.message()).toContain('email, time history, and memberships will be retained');
-            await dialogEvent.accept();
-        });
         const deactivateRequestPromise = page.waitForRequest((request) =>
             request.url().endsWith('/api/v1/users/user-3/deactivate') && request.method() === 'POST',
         );
         await page.getByRole('button', { name: /Actions for Mila Carter/ }).click();
         await page.getByRole('button', { name: 'Deactivate' }).click();
+        const confirmation = page.getByRole('alertdialog');
+        await expect(confirmation).toContainText('email, time history, and memberships will be retained');
+        await expect(confirmation.getByRole('button', { name: 'Cancel' })).toBeFocused();
+        await page.keyboard.press('Escape');
+        await expect(confirmation).toBeHidden();
+        await expect(page.getByRole('button', { name: 'Deactivate' })).toBeFocused();
+
+        await page.getByRole('button', { name: 'Deactivate' }).click();
+        await page.getByRole('alertdialog').getByRole('button', { name: 'Deactivate user' }).click();
         await deactivateRequestPromise;
 
         await expect(page.getByText('Mila Carter has been deactivated').first()).toBeVisible();

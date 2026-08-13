@@ -7,13 +7,15 @@ const MANAGER_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJtZ3It
 const mockAnalytics = {
     metrics: {
         totalHours: '42.5',
+        projectsWorked: 2,
         activeProjects: 2,
-        avgProductivity: 85,
+        billableUtilization: 85,
         billableAmount: '5,300',
         trends: {
             hours: '+12%',
+            projectsWorked: '+1',
             projects: '+1',
-            productivity: '+5%',
+            billableUtilization: '+5%',
             billable: '+8%',
         },
     },
@@ -27,23 +29,9 @@ const mockAnalytics = {
     ],
     userBreakdown: [
         { id: 'user-1', name: 'Test User', role: 'Employee', initials: 'TU',
-          primaryProject: 'EDUSUC', totalHours: '42.5', efficiency: 85, status: 'active' },
+          primaryProject: 'EDUSUC', totalHours: '42.5', expectedHours: 40,
+          expectedHoursAttainment: 106, status: 'Target Met' },
     ],
-};
-
-const mockReportEntries = {
-    entries: [
-        {
-            id: 'entry-1',
-            task_description: 'API development',
-            duration: 7200,
-            start_time: '2026-03-20T09:00:00Z',
-            end_time: '2026-03-20T11:00:00Z',
-            project: { name: 'EDUSUC' },
-            user: { first_name: 'Test', last_name: 'User', email: 'test@test.com' },
-        },
-    ],
-    total: 1,
 };
 
 const injectSession = async (page: import('@playwright/test').Page, token = MOCK_TOKEN, role = 'Employee') => {
@@ -53,18 +41,26 @@ const injectSession = async (page: import('@playwright/test').Page, token = MOCK
         localStorage.setItem('user_profile', JSON.stringify({
             id: 'user-1', email: 'test@test.com', first_name: 'Test', last_name: 'User', role: r,
         }));
+        localStorage.setItem('onboarding_completed', 'true');
     }, { tok: token, r: role });
 };
 
 const mockReportsAPIs = async (page: import('@playwright/test').Page) => {
-    // Use a single smart catch-all — glob patterns don't intercept cross-origin requests
-    await page.route('http://localhost:5005/**', (route) => {
+    // Match the API path rather than a specific loopback hostname. Preview
+    // verification may run the frontend on localhost or 127.0.0.1, and the app
+    // deliberately derives the matching local API origin from that hostname.
+    await page.route('**/api/v1/**', (route) => {
         const url = route.request().url();
 
         if (url.includes('/reports/dashboard') || url.includes('/reports/analytics')) {
             route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockAnalytics) });
         } else if (url.includes('/reports/export')) {
-            route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mockReportEntries) });
+            route.fulfill({
+                status: 200,
+                contentType: 'text/csv; charset=utf-8',
+                headers: { 'Content-Disposition': 'attachment; filename="timesheet_export.csv"' },
+                body: 'Date,Employee\r\n2026-03-20,Test User\r\n',
+            });
         } else if (url.includes('/api/v1/projects')) {
             route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
                 { id: 'proj-1', name: 'EDUSUC', hours_burned: 20 },
@@ -124,11 +120,53 @@ test.describe('Reports Page', () => {
         }
     });
 
+    test('labels billable utilization and expected-hours attainment truthfully', async ({ page }) => {
+        await expect(page.getByText('Billable Utilization')).toBeVisible();
+        await expect(page.getByText('Share of logged time marked billable')).toBeVisible();
+        await expect(page.getByText('Projects Worked')).toBeVisible();
+        await expect(page.getByText('Distinct projects with logged time')).toBeVisible();
+        await expect(page.getByText('Expected Hours Attainment')).toBeVisible();
+        await expect(page.getByText('106%')).toBeVisible();
+        await expect(page.getByText('of 40.0h expected')).toBeVisible();
+        await expect(page.getByText('Avg. Productivity')).toHaveCount(0);
+        await expect(page.getByText('Efficiency', { exact: true })).toHaveCount(0);
+    });
+
     test('export button or export-related control is present on reports page', async ({ page }) => {
         await page.waitForTimeout(2000);
         // Just verify the page rendered without crashing — export may be a premium feature
         const body = await page.locator('body').innerText();
         expect(body.length).toBeGreaterThan(10);
+    });
+
+    test('requires timeframe approval and exports the exact selected calendar dates', async ({ page }) => {
+        await page.getByRole('button', { name: 'Export CSV' }).click();
+
+        const dialog = page.getByRole('dialog', { name: 'Export workspace report' });
+        await expect(dialog).toBeVisible();
+        await dialog.getByLabel('Timeframe').selectOption('custom');
+        await dialog.getByLabel('Start date').fill('2026-03-01');
+        await dialog.getByLabel('End date').fill('2026-03-31');
+
+        const expectedBoundaries = await page.evaluate(() => ({
+            startAt: new Date(2026, 2, 1, 0, 0, 0, 0).toISOString(),
+            endAt: new Date(2026, 3, 1, 0, 0, 0, 0).toISOString(),
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }));
+        const exportRequestPromise = page.waitForRequest((request) => request.url().includes('/reports/export'));
+        const downloadPromise = page.waitForEvent('download');
+
+        await dialog.getByRole('button', { name: 'Download CSV' }).click();
+
+        const [exportRequest, download] = await Promise.all([exportRequestPromise, downloadPromise]);
+        const exportUrl = new URL(exportRequest.url());
+        expect(exportUrl.searchParams.get('startAt')).toBe(expectedBoundaries.startAt);
+        expect(exportUrl.searchParams.get('endAt')).toBe(expectedBoundaries.endAt);
+        expect(exportUrl.searchParams.get('timeZone')).toBe(expectedBoundaries.timeZone);
+        expect(exportUrl.searchParams.get('projectId')).toBe('all');
+        expect(download.suggestedFilename()).toBe('timesheet-2026-03-01-to-2026-03-31.csv');
+        await expect(page.getByRole('status')).toContainText('2026-03-01 through 2026-03-31');
+        await expect(dialog).toBeHidden();
     });
 
     test('date filter controls are present or page content is accessible', async ({ page }) => {

@@ -6,6 +6,7 @@ import { getTimerLocationPayload } from '../utils/timerLocation';
 import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
 import { getStoredUserProfile } from '../utils/session';
+import { useFeedback } from '../hooks/useFeedback';
 
 interface ActivityItem {
     id: string;
@@ -73,6 +74,7 @@ const toLocalInputValue = (value: Date) => {
 type BulkEditResult = { updated: number; skipped_locked: string[] };
 
 const Timeline: React.FC = () => {
+    const { confirm } = useFeedback();
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const [entries, setEntries] = useState<TimeEntrySummary[]>([]);
@@ -349,7 +351,7 @@ const Timeline: React.FC = () => {
 
     // Bulk delete
     const handleBulkDelete = async () => {
-        if (!selectedIds.size || !window.confirm(`Delete ${selectedIds.size} entr${selectedIds.size === 1 ? 'y' : 'ies'}?`)) return;
+        if (!selectedIds.size || !await confirm({ message: `Delete ${selectedIds.size} entr${selectedIds.size === 1 ? 'y' : 'ies'}?`, destructive: true, confirmLabel: 'Delete entries' })) return;
         setBulkWorking(true);
         try {
             const res = await api.patch<BulkEditResult & { message: string }>('/timers/bulk', {

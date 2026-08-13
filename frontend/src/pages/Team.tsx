@@ -6,6 +6,8 @@ import { EMPLOYMENT_TYPE_OPTIONS } from '../types/api';
 import { getStoredRole, getStoredUserProfile } from '../utils/session';
 import { parseUserImportCsv, type UserImportCsvRow } from '../utils/userImportCsv';
 import AccessibleDialog from '../components/AccessibleDialog';
+import { useFeedback } from '../hooks/useFeedback';
+import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
 
 interface TeamHoursEntry { name: string; hours: number; }
 
@@ -95,6 +97,8 @@ const buildImportFormDefaults = (roleName: string): ImportFormState => ({
 });
 
 const Team: React.FC = () => {
+    const reducedMotion = useReducedMotionPreference();
+    const { confirm } = useFeedback();
     const [team, setTeam] = useState<UserSummary[]>([]);
     const [managedTeams, setManagedTeams] = useState<TeamSummary[]>([]);
     const [roles, setRoles] = useState<RoleOption[]>([]);
@@ -553,9 +557,11 @@ const Team: React.FC = () => {
 
     const handleDeactivateUser = async (user: UserSummary) => {
         if (!canManageTeam) return;
-        if (!window.confirm(
-            `Deactivate ${user.first_name} ${user.last_name}?\n\nThey will lose access immediately, but their email, time history, and memberships will be retained. You can reactivate them later.`
-        )) return;
+        if (!await confirm({
+            message: `Deactivate ${user.first_name} ${user.last_name}?\n\nThey will lose access immediately, but their email, time history, and memberships will be retained. You can reactivate them later.`,
+            destructive: true,
+            confirmLabel: 'Deactivate user',
+        })) return;
 
         setSaving(true);
         setFeedback(null);
@@ -584,9 +590,11 @@ const Team: React.FC = () => {
             setFeedback({ message: 'Deactivate this user first before permanently deleting them.', tone: 'error' });
             return;
         }
-        const confirmed = window.confirm(
-            `Permanently delete ${user.first_name} ${user.last_name}?\n\nThis is not deactivation. It will permanently wipe their account, time entries, invoices, and project memberships. This cannot be undone.`
-        );
+        const confirmed = await confirm({
+            message: `Permanently delete ${user.first_name} ${user.last_name}?\n\nThis is not deactivation. It will permanently wipe their account, time entries, invoices, and project memberships. This cannot be undone.`,
+            destructive: true,
+            confirmLabel: 'Permanently delete',
+        });
         if (!confirmed) return;
 
         setSaving(true);
@@ -846,9 +854,15 @@ const Team: React.FC = () => {
                                 <XAxis type="number" unit="h" tick={{ fontSize: 11 }} />
                                 <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={100} />
                                 <Tooltip formatter={(value) => [formatHoursText(Number(value)), 'Hours']} />
-                                <Bar dataKey="hours" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={18} />
+                                <Bar dataKey="hours" fill="#6366f1" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={!reducedMotion} />
                             </BarChart>
                     </ResponsiveContainer>
+                    <details className="mt-3 text-xs text-slate-600 dark:text-slate-300">
+                        <summary className="cursor-pointer font-semibold">Text summary of team hours</summary>
+                        <ul className="mt-2 space-y-1">
+                            {teamHours.map((member) => <li key={member.name}>{member.name}: {formatHoursText(member.hours)}</li>)}
+                        </ul>
+                    </details>
                 </div>
             )}
 
