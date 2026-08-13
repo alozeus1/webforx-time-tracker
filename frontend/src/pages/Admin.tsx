@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../services/api';
 import type { ProjectSummary, UserSummary, IntegrationSummary, AuditLogSummary, NotificationSummary, TeamSummary, TimerCorrectionRequestSummary, TimerPolicySummary } from '../types/api';
 import { resolveApiOrigin } from '../utils/apiConfig';
+import { hasAnyRole } from '../utils/session';
 import { useFeedback } from '../hooks/useFeedback';
 
 const availableTabs = ['projects', 'budgets', 'teams', 'users', 'integrations', 'notifications', 'corrections', 'policy', 'audit', 'payroll', 'bots', 'compliance', 'branding'] as const;
@@ -469,11 +470,11 @@ const Admin: React.FC = () => {
 
         try {
             await api.post('/admin/recovery-grants', { user_id: userId, extra_requests: 1, note: note.trim() || null });
-            alert(`Granted ${displayName || 'the user'} one extra recovery request for this week.`);
+            toast(`Granted ${displayName || 'the user'} one extra recovery request for this week.`, { tone: 'success' });
             void fetchAuditLogs();
         } catch (error) {
             console.error('Error granting recovery override:', error);
-            alert(getApiErrorMessage(error, 'Failed to grant the extra recovery request.'));
+            toast(getApiErrorMessage(error, 'Failed to grant the extra recovery request.'), { tone: 'error' });
         }
     }
 
