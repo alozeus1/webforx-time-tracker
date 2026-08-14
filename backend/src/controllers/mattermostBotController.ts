@@ -18,6 +18,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/db';
+import { computeCountedSeconds } from '../services/dailyCapService';
 import { encryptConfig, decryptConfig } from '../utils/crypto';
 import { publicHttpsFetch, validatePublicHttpsUrl } from '../utils/outboundHttp';
 
@@ -309,7 +310,9 @@ export const handleMattermostCommand = async (req: Request, res: Response): Prom
             const timer = await prisma.activeTimer.findFirst({ where: { user_id: user.id, organization_id: org.id } });
             if (!timer) { res.json(mmResponse('⚠️ No active timer found.')); return; }
             const end = new Date();
-            const duration = Math.max(Math.floor((end.getTime() - new Date(timer.start_time).getTime()) / 1000), 1);
+            // Counted time, not wall clock: a timer the user paused in the app must not be
+            // credited for the paused span. Matches how the web stop path bills a session.
+            const duration = Math.max(computeCountedSeconds(timer, end), 1);
             await prisma.$transaction(async (tx) => {
                 await tx.timeEntry.create({
                     data: {
@@ -334,10 +337,14 @@ export const handleMattermostCommand = async (req: Request, res: Response): Prom
         } else if (subCommand === 'status') {
             const timer = await prisma.activeTimer.findFirst({ where: { user_id: user.id, organization_id: org.id } });
             if (!timer) { res.json(mmResponse('⏱️ No active timer running.')); return; }
-            const elapsed = Math.floor((Date.now() - new Date(timer.start_time).getTime()) / 1000);
-            const hrs = Math.floor(elapsed / 3600);
-            const mins = Math.floor((elapsed % 3600) / 60);
-            res.json(mmResponse(`⏱️ **${timer.task_description}** — running ${hrs}h ${mins}m`));
+            // Report counted time. Reporting wall clock told a user whose timer was paused
+            // that it was still running, and the missing hours only showed up on the timesheet.
+            const counted = computeCountedSeconds(timer, new Date());
+            const hrs = Math.floor(counted / 3600);
+            const mins = Math.floor((counted % 3600) / 60);
+            res.json(mmResponse(timer.is_paused
+                ? `⏸️ **${timer.task_description}** — paused at ${hrs}h ${mins}m. Resume it in the Timer app, or use \`/timer stop\` to save it.`
+                : `⏱️ **${timer.task_description}** — running ${hrs}h ${mins}m`));
 
         } else if (subCommand === 'log') {
             const minutesRaw = parseInt(parts[1] ?? '', 10);

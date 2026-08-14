@@ -14,10 +14,13 @@ jest.mock('../src/services/activeTimerService', () => ({
     stopActiveTimerWithReason: jest.fn(),
     pauseActiveTimer: jest.fn(),
     resumeActiveTimer: jest.fn(),
+    // Not a spy: the guardrail's bot-timer exemption is part of what these tests exercise.
+    isBotStartedTimer: jest.requireActual('../src/services/activeTimerService').isBotStartedTimer,
 }));
 
 import prisma from '../src/config/db';
 import { getGlobalTimerPolicy } from '../src/services/timerPolicyService';
+import { pauseActiveTimer, stopActiveTimerWithReason } from '../src/services/activeTimerService';
 import { getActiveTimer } from '../src/controllers/timeEntryController';
 
 const findFirst = prisma.activeTimer.findFirst as jest.Mock;
@@ -107,6 +110,29 @@ describe('GET /timers/active', () => {
         // Re-read after the guardrail changed state.
         expect(findFirst).toHaveBeenCalledTimes(2);
         expect(res.json.mock.calls[0][0]).toEqual({ activeTimer: null });
+    });
+
+    it('does not pause a bot-started timer that has never sent a heartbeat', async () => {
+        // The web poll used to pause a Mattermost-started timer within ~20 minutes: it has
+        // no client, so its silence looked identical to a user who walked away.
+        findFirst.mockResolvedValue({
+            id: 'timer-1',
+            user_id: 'user-1',
+            start_time: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            is_paused: false,
+            last_heartbeat_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+            last_client_activity_at: null,
+            persisted_state: { source: 'mattermost' },
+        });
+
+        const res = buildRes();
+        await getActiveTimer(buildReq() as never, res as never);
+
+        expect(pauseActiveTimer).not.toHaveBeenCalled();
+        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
+        // Guardrail returned 'none', so no re-read was needed.
+        expect(findFirst).toHaveBeenCalledTimes(1);
+        expect(res.json.mock.calls[0][0].activeTimer).not.toBeNull();
     });
 
     it('returns 500 when the lookup fails', async () => {

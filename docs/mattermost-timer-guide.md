@@ -103,6 +103,7 @@ On success the card shows **Linked** and confirms *"Linked to Mattermost account
 - **Stop with nothing running:** ⚠️ `No active timer found.`
 - **Status (running):** ⏱️ `**Writing onboarding docs** — running 0h 27m`
 - **Status (idle):** ⏱️ `No active timer running.`
+- **Status (paused in the app):** ⏸️ `**Writing onboarding docs** — paused at 0h 27m. Resume it in the Timer app, or use /timer stop to save it.`
 - **Log:** ✅ `Logged 45 minutes: **Client call**`
 - **Log with bad input:** `Usage: /timer log <minutes> <description>`
 
@@ -116,6 +117,8 @@ On success the card shows **Linked** and confirms *"Linked to Mattermost account
   - `/timer start` → `/timer stop` creates a normal **timer** entry (noted "Stopped via Mattermost").
   - `/timer log …` creates a **manual** entry (noted "Logged via Mattermost"). Like any manual entry, it may require **manager approval** before it counts on your final timesheet.
 - **The interactive dialog** (`/timer start` with no text, when the bot token is set) lets you type a task and pick from up to 20 active projects, then click **Start Timer**.
+- **No idle auto-pause.** Idle detection relies on heartbeats from the web app, and Mattermost has no way to send them, so a timer started here is never paused for inactivity — it runs until you stop it. Two guardrails still apply: the **8-hour session cap** and the **daily cap**. A timer left running past the session cap is auto-stopped at the cap and flagged for manager review, so stop yours when you finish.
+- **Paused timers.** If you pause a timer in the web app, `/timer status` shows it as paused and `/timer stop` saves only the time it actually counted — the paused span is not billed.
 
 ---
 

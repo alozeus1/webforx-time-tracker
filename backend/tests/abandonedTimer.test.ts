@@ -74,6 +74,27 @@ describe('clamping to proven activity', () => {
         expect(auditMetadata().clamped_to_heartbeat).toBe(true);
     });
 
+    it('does not clamp a bot-started timer back to its phantom heartbeat', async () => {
+        // A Mattermost timer's last_heartbeat_at is simply the moment the row was created,
+        // so clamping to it discarded the entire session bar the grace window. Its proof of
+        // work is the explicit start/stop command, and the session cap still bounds it.
+        (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(makeTimer({
+            persisted_state: { source: 'mattermost' },
+            last_heartbeat_at: START,
+        }));
+
+        await stopActiveTimerWithReason({
+            userId: 'user-1',
+            organizationId: 'org-1',
+            reason: 'active_duration_limit',
+            triggeredAt: new Date('2026-08-12T16:00:00.000Z'),
+        });
+
+        expect(createdEntry().end_time.toISOString()).toBe('2026-08-12T16:00:00.000Z');
+        expect(createdEntry().duration).toBe(8 * 60 * 60);
+        expect(auditMetadata().clamped_to_heartbeat).toBe(false);
+    });
+
     it('clamps a session that hit the active-duration cap the same way', async () => {
         (prisma.activeTimer.findFirst as jest.Mock).mockResolvedValue(makeTimer({
             last_heartbeat_at: new Date('2026-08-12T10:00:00.000Z'),

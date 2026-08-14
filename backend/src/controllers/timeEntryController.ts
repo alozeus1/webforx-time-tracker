@@ -5,7 +5,7 @@ import { env } from '../config/env';
 import { AuthRequest } from '../types/auth';
 import { emitWebhookEvent } from '../services/webhookService';
 import { scoreTimeEntryRisk } from '../services/opsInsightsService';
-import { pauseActiveTimer, resumeActiveTimer, stopActiveTimerWithReason } from '../services/activeTimerService';
+import { pauseActiveTimer, resumeActiveTimer, stopActiveTimerWithReason, isBotStartedTimer } from '../services/activeTimerService';
 import { getGlobalTimerPolicy } from '../services/timerPolicyService';
 import { assertPeriodNotLocked } from '../services/payrollLockService';
 import { assertComplianceAllowsDelete, assertComplianceAllowsEdit, notifyWtdIfNeeded } from '../services/complianceService';
@@ -45,6 +45,7 @@ type GuardrailActiveTimer = {
     is_paused: boolean;
     paused_at: Date | null;
     paused_duration_seconds?: number;
+    persisted_state?: unknown;
 };
 
 /**
@@ -151,6 +152,13 @@ const enforceTimerGuardrails = async ({
                 return 'stopped';
             }
         }
+        return 'none';
+    }
+
+    // Bot-started timers have no client that can send heartbeats, so the checks below
+    // would pause them minutes after they start — see isBotStartedTimer. The session
+    // cap and pause expiry above still apply.
+    if (isBotStartedTimer(timer)) {
         return 'none';
     }
 

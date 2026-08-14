@@ -23,6 +23,31 @@ export type AutoStopReason =
  */
 const CLAMPED_REASONS: AutoStopReason[] = ['active_duration_limit', 'abandoned_timer', 'heartbeat_missing'];
 
+/** Timer sources whose client cannot send heartbeats. */
+const BOT_TIMER_SOURCES = new Set(['mattermost', 'slack', 'teams']);
+
+/**
+ * True when the timer was started from a chat bot rather than a Timer client.
+ *
+ * Nothing in Mattermost or Slack can call `/timers/ping`, so these timers never send a
+ * heartbeat and never report client activity: `last_heartbeat_at` is the moment the row
+ * was created and `last_client_activity_at` stays null forever. Every heartbeat- and
+ * idle-driven rule therefore fires on them by construction — in production a
+ * `/timer start` was reliably paused ~20 minutes in for `missed_heartbeat_threshold`,
+ * after which it accrued nothing and the user only found out when their timesheet was
+ * empty.
+ *
+ * These timers are punch cards: the user proves presence by explicitly starting and
+ * stopping. Heartbeat rules do not apply to them. The session cap, the daily cap and
+ * the approval queue still do, so an unstopped one is still bounded and still reviewed.
+ */
+export const isBotStartedTimer = (timer: { persisted_state?: unknown }): boolean => {
+    const state = timer.persisted_state;
+    if (!state || typeof state !== 'object' || Array.isArray(state)) return false;
+    const source = (state as Record<string, unknown>).source;
+    return typeof source === 'string' && BOT_TIMER_SOURCES.has(source);
+};
+
 export const stopActiveTimerWithReason = async ({
     userId,
     reason,
@@ -47,7 +72,10 @@ export const stopActiveTimerWithReason = async ({
     let endTime = triggeredAt > startTime ? triggeredAt : new Date(startTime.getTime() + 1000);
     let clampedToHeartbeat = false;
 
-    if (CLAMPED_REASONS.includes(reason)) {
+    // A bot timer's "last proof" is the moment it was created, so clamping to it would
+    // trim a whole session down to the grace window. Its proof of work is the explicit
+    // start/stop command, not a heartbeat.
+    if (CLAMPED_REASONS.includes(reason) && !isBotStartedTimer(activeTimer)) {
         const lastProof = activeTimer.last_heartbeat_at
             ?? activeTimer.last_client_activity_at
             ?? activeTimer.last_active_ping;
