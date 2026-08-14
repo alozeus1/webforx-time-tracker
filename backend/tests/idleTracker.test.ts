@@ -22,6 +22,8 @@ jest.mock('../src/services/activeTimerService', () => ({
     stopActiveTimerWithReason: jest.fn(),
     pauseActiveTimer: jest.fn(),
     resumeActiveTimer: jest.fn(),
+    // Not a spy: the worker's bot-timer exemption is part of what these tests exercise.
+    isBotStartedTimer: jest.requireActual('../src/services/activeTimerService').isBotStartedTimer,
 }));
 
 import prisma from '../src/config/db';
@@ -223,5 +225,85 @@ describe('checkIdleTimers', () => {
         expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
         expect(pauseActiveTimer).not.toHaveBeenCalled();
         expect(prisma.notification.create).not.toHaveBeenCalled();
+    });
+
+    // ─── Bot-started timers (no client, therefore no heartbeat) ────────────────
+
+    // Reproduces the production failure: a `/timer start` in Mattermost was paused for
+    // missed heartbeats ~20 minutes later and accrued nothing for the rest of the day.
+    const botTimer = {
+        ...baseTimer,
+        persisted_state: { is_billable: true, tag_ids: [], source: 'mattermost' },
+        // What the row actually looks like: the heartbeat is the creation timestamp and
+        // the client never reports activity.
+        last_heartbeat_at: ago(2 * HOUR),
+        last_active_ping: ago(2 * HOUR),
+        last_client_activity_at: null,
+    };
+
+    it('does not pause a Mattermost-started timer for missed heartbeats', async () => {
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([botTimer]);
+
+        await checkIdleTimers();
+
+        expect(pauseActiveTimer).not.toHaveBeenCalled();
+        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
+        expect(prisma.notification.create).not.toHaveBeenCalled();
+    });
+
+    it('does not treat a silent Slack-started timer as abandoned', async () => {
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
+            ...botTimer,
+            persisted_state: { source: 'slack' },
+            start_time: ago(3 * HOUR),
+            last_heartbeat_at: ago(3 * HOUR),
+            last_active_ping: ago(3 * HOUR),
+        }]);
+
+        await checkIdleTimers();
+
+        expect(stopActiveTimerWithReason).not.toHaveBeenCalled();
+        expect(pauseActiveTimer).not.toHaveBeenCalled();
+    });
+
+    it('still enforces the session cap on a bot-started timer', async () => {
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
+            ...botTimer,
+            start_time: ago(9 * HOUR), // > 8h maxActiveTimerHours
+        }]);
+
+        await checkIdleTimers();
+
+        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
+            reason: 'active_duration_limit',
+        }));
+    });
+
+    it('still expires a bot-started timer the user paused in the app', async () => {
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
+            ...botTimer,
+            is_paused: true,
+            paused_at: ago(5 * HOUR), // > 4h maxPauseHours
+        }]);
+
+        await checkIdleTimers();
+
+        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
+            reason: 'pause_expired',
+        }));
+    });
+
+    it('still applies heartbeat rules to a normal browser timer', async () => {
+        // Guards the exemption: an unsourced timer with the same silence must still pause.
+        (prisma.activeTimer.findMany as jest.Mock).mockResolvedValue([{
+            ...botTimer,
+            persisted_state: {},
+        }]);
+
+        await checkIdleTimers();
+
+        expect(stopActiveTimerWithReason).toHaveBeenCalledWith(expect.objectContaining({
+            reason: 'abandoned_timer',
+        }));
     });
 });

@@ -2,7 +2,7 @@ import cron from 'node-cron';
 import prisma from '../config/db';
 import { env } from '../config/env';
 import { computeCountedSeconds } from '../services/dailyCapService';
-import { stopActiveTimerWithReason, pauseActiveTimer } from '../services/activeTimerService';
+import { stopActiveTimerWithReason, pauseActiveTimer, isBotStartedTimer } from '../services/activeTimerService';
 import { getGlobalTimerPolicy } from '../services/timerPolicyService';
 
 // ---------------------------------------------------------------------------
@@ -69,27 +69,6 @@ const checkIdleTimersEnhanced = async () => {
                 continue;
             }
 
-            // Abandoned: nothing has been heard from this client in a very long time.
-            // Stopping with this reason clamps the recorded end back to the last
-            // heartbeat, so unproven hours are never credited.
-            if (!timer.is_paused) {
-                const lastSignal = timer.last_heartbeat_at ?? timer.last_client_activity_at ?? timer.last_active_ping;
-                const silenceMs = lastSignal
-                    ? now.getTime() - new Date(lastSignal).getTime()
-                    : now.getTime() - new Date(timer.start_time).getTime();
-
-                if (silenceMs >= abandonedAfterMs) {
-                    await stopActiveTimerWithReason({
-                        userId: timer.user_id,
-                        reason: 'abandoned_timer',
-                        triggeredAt: now,
-                        organizationId: timer.organization_id,
-                    });
-                    console.log(`[Worker/Enhanced] Timer auto-stopped (abandoned_timer, silent ${Math.round(silenceMs / 60000)}m) for user ${timer.user_id}`);
-                    continue;
-                }
-            }
-
             // Guard 1: max pause duration — same as legacy path.
             if (timer.is_paused) {
                 if (timer.paused_at) {
@@ -104,6 +83,31 @@ const checkIdleTimersEnhanced = async () => {
                         console.log(`[Worker/Enhanced] Timer auto-stopped (pause_expired, ${Math.round(pausedForMs / 3600000)}h) for user ${timer.user_id}`);
                     }
                 }
+                continue;
+            }
+
+            // Bot-started timers have no client that can send heartbeats, so every check
+            // below reads their silence as inactivity and would pause them minutes after
+            // they start (see isBotStartedTimer). The session cap and pause expiry above
+            // still bound them.
+            if (isBotStartedTimer(timer)) continue;
+
+            // Abandoned: nothing has been heard from this client in a very long time.
+            // Stopping with this reason clamps the recorded end back to the last
+            // heartbeat, so unproven hours are never credited.
+            const lastSignal = timer.last_heartbeat_at ?? timer.last_client_activity_at ?? timer.last_active_ping;
+            const silenceMs = lastSignal
+                ? now.getTime() - new Date(lastSignal).getTime()
+                : now.getTime() - new Date(timer.start_time).getTime();
+
+            if (silenceMs >= abandonedAfterMs) {
+                await stopActiveTimerWithReason({
+                    userId: timer.user_id,
+                    reason: 'abandoned_timer',
+                    triggeredAt: now,
+                    organizationId: timer.organization_id,
+                });
+                console.log(`[Worker/Enhanced] Timer auto-stopped (abandoned_timer, silent ${Math.round(silenceMs / 60000)}m) for user ${timer.user_id}`);
                 continue;
             }
 
@@ -306,24 +310,6 @@ const checkIdleTimersLegacy = async () => {
                 continue;
             }
 
-            if (!timer.is_paused) {
-                const lastSignal = timer.last_heartbeat_at ?? timer.last_client_activity_at ?? timer.last_active_ping;
-                const silenceMs = lastSignal
-                    ? now.getTime() - new Date(lastSignal).getTime()
-                    : now.getTime() - new Date(timer.start_time).getTime();
-
-                if (silenceMs >= abandonedAfterMs) {
-                    await stopActiveTimerWithReason({
-                        userId: timer.user_id,
-                        reason: 'abandoned_timer',
-                        triggeredAt: now,
-                        organizationId: timer.organization_id,
-                    });
-                    console.log(`[Worker] Timer auto-stopped (abandoned_timer, silent ${Math.round(silenceMs / 60000)}m) for user ${timer.user_id}`);
-                    continue;
-                }
-            }
-
             // Guard 1: max pause duration ---
             if (timer.is_paused) {
                 if (timer.paused_at) {
@@ -338,6 +324,25 @@ const checkIdleTimersLegacy = async () => {
                         console.log(`[Worker] Timer auto-stopped (pause_expired, ${Math.round(pausedForMs / 3600000)}h paused) for user ${timer.user_id}`);
                     }
                 }
+                continue;
+            }
+
+            // Bot-started timers never send heartbeats — see isBotStartedTimer.
+            if (isBotStartedTimer(timer)) continue;
+
+            const lastSignal = timer.last_heartbeat_at ?? timer.last_client_activity_at ?? timer.last_active_ping;
+            const silenceMs = lastSignal
+                ? now.getTime() - new Date(lastSignal).getTime()
+                : now.getTime() - new Date(timer.start_time).getTime();
+
+            if (silenceMs >= abandonedAfterMs) {
+                await stopActiveTimerWithReason({
+                    userId: timer.user_id,
+                    reason: 'abandoned_timer',
+                    triggeredAt: now,
+                    organizationId: timer.organization_id,
+                });
+                console.log(`[Worker] Timer auto-stopped (abandoned_timer, silent ${Math.round(silenceMs / 60000)}m) for user ${timer.user_id}`);
                 continue;
             }
 

@@ -17,6 +17,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import prisma from '../config/db';
+import { computeCountedSeconds } from '../services/dailyCapService';
 import { encryptConfig, decryptConfig } from '../utils/crypto';
 import { validatePublicHttpsUrl } from '../utils/outboundHttp';
 
@@ -143,7 +144,8 @@ export const handleSlackCommand = async (req: Request, res: Response): Promise<v
                 return;
             }
             const end = new Date();
-            const duration = Math.max(Math.floor((end.getTime() - new Date(timer.start_time).getTime()) / 1000), 1);
+            // Counted time, not wall clock — see the equivalent note in the Mattermost bot.
+            const duration = Math.max(computeCountedSeconds(timer, end), 1);
             await prisma.$transaction(async (tx) => {
                 await tx.timeEntry.create({
                     data: {
@@ -170,10 +172,12 @@ export const handleSlackCommand = async (req: Request, res: Response): Promise<v
             if (!timer) {
                 res.json({ response_type: 'ephemeral', text: '⏱️ No active timer running.' });
             } else {
-                const elapsed = Math.floor((Date.now() - new Date(timer.start_time).getTime()) / 1000);
-                const hrs = Math.floor(elapsed / 3600);
-                const mins = Math.floor((elapsed % 3600) / 60);
-                res.json({ response_type: 'ephemeral', text: `⏱️ *${timer.task_description}*\nRunning for ${hrs}h ${mins}m` });
+                const counted = computeCountedSeconds(timer, new Date());
+                const hrs = Math.floor(counted / 3600);
+                const mins = Math.floor((counted % 3600) / 60);
+                res.json({ response_type: 'ephemeral', text: timer.is_paused
+                    ? `⏸️ *${timer.task_description}*\nPaused at ${hrs}h ${mins}m — resume it in the Timer app, or use \`/timer stop\` to save it.`
+                    : `⏱️ *${timer.task_description}*\nRunning for ${hrs}h ${mins}m` });
             }
 
         } else if (subCommand === 'log') {
