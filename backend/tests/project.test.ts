@@ -2,6 +2,7 @@ import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import projectRoutes from '../src/routes/projectRoutes';
+import { strictProjectLogoValidationEnabled, validateStrictProjectLogo } from '../src/controllers/projectController';
 
 jest.mock('../src/config/db', () => ({
     __esModule: true,
@@ -85,6 +86,17 @@ describe('GET /api/v1/projects', () => {
     it('returns 401 when unauthenticated', async () => {
         const res = await request(app).get('/api/v1/projects');
         expect(res.status).toBe(401);
+    });
+});
+
+describe('strict project logo validation', () => {
+    it('is disabled by default and validates magic bytes when enabled by an operator', () => {
+        const original = process.env.STRICT_PROJECT_LOGO_VALIDATION;
+        delete process.env.STRICT_PROJECT_LOGO_VALIDATION;
+        expect(strictProjectLogoValidationEnabled()).toBe(false);
+        expect(validateStrictProjectLogo('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')).toMatch(/PNG, JPEG, or WebP/);
+        expect(validateStrictProjectLogo('not-a-data-url')).toMatch(/valid base64/);
+        process.env.STRICT_PROJECT_LOGO_VALIDATION = original;
     });
 });
 
