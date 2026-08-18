@@ -68,3 +68,27 @@ valid, malformed, stale and invalid-signature requests. Mattermost has a
 constant-time static-token comparison, while Teams is a non-mutating stub.
 Mattermost replay prevention needs an integration-compatible design because the
 current payload contract does not supply a signed timestamp or nonce.
+
+## Sensitive route/object matrix
+
+All API routes inherit a 10 MB JSON limit and global 300/15-minute limiter;
+`/auth` additionally has 15/15-minute limiting. A route-specific limit is
+recorded where source proves one. `401` means no/invalid authentication, `403`
+means an authenticated but insufficient role/owner, and `404` is used for an
+inaccessible tenant object where the controller follows the non-enumeration
+contract.
+
+| Routes | Object / roles | Server-side scope and expected denial | Test / residual gap |
+| --- | --- | --- | --- |
+| `POST /projects`, `PUT/DELETE /projects/:id`, `GET /projects*` | Project; read JWT, write Manager/Admin | `findFirst({id, organization_id})` precedes update/delete; unauth 401, lower role 403, cross-org 404 | `project.test.ts` cross-org update; logo validation/serving policy open |
+| `POST /timers/*`, `PUT/DELETE /timers/:id`, `PATCH /timers/bulk` | Timer/time entry; JWT, approvals Manager/Admin | Controller uses authenticated user/org and tenant helpers; beacon validates body access token | Existing timer tests; remaining per-ID BOLA matrix open |
+| correction/approval timer routes | Correction/time entry; Manager/Admin review | JWT router gate plus role middleware; review controller must scope correction/entry org | Existing time-entry/bulk tests; explicit cross-org review test open |
+| reports/export/share/operations | Time/report/invoice artifact; JWT, share/operations Manager/Admin | Export queries include caller organisation; share JWT embeds org and expired/unscoped token 404 | `report.test.ts`; share revocation and operations BOLA open |
+| expenses and receipt-sign/download | Expense/attachment; JWT, review Manager/Admin | tenant `findFirst`; employee ownership for mutation/download; generated receipt key includes org/user | `workforceFeatures.test.ts`; signed-upload content verification is provider/storage dependent |
+| admin teams/policy/org settings/recovery | Team, policy, organisation; JWT, Manager/Admin or Admin | role middleware; team update checks `id + organization_id` | `adminTeamsTenantIsolation.test.ts`; policy/settings per-object tests open |
+| users/groups/projects/tags/templates/schedules | User/team/project/tag/template/schedule; JWT and roles per route | controllers receive authenticated org; create/update must check referenced user/project/team scope | Existing tenant tests; remaining referenced-object matrix open |
+| invoices/payroll/scheduled reports | Financial/report schedule; JWT, Manager/Admin or Admin | router role gates and controller organisation filters | Existing feature/report tests; cross-org ID tests open |
+| integrations/webhooks/bot configuration | Encrypted integration/subscription; JWT, Admin/Manager | integration org filter; webhook/admin config role gate; URL SSRF validator | Integration/webhook tenant tests; provider replay design open |
+| branding/geofence/leave/calendar/ML | Org config/location/leave/calendar data; JWT; Admin/Manager by operation | org-bound controllers; public branding and OAuth callback are explicit exceptions | Existing workforce/auth tests; public branding data-minimisation review open |
+| cron routes | reports/retention/demo actions; service secret | CRON_SECRET router middleware, production 503 if absent | cron config check; compare is not constant-time and should be assessed separately |
+| `/uploads/projects/:generated-name` | Local project-logo bytes; public static route | no application ownership check; filename is generated, not caller-provided | **SEC-08**; production intent/storage and existing asset compatibility unknown |

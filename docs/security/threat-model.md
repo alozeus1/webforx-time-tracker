@@ -40,5 +40,30 @@ limit changes an existing admin workflow. Treat it as a reviewed medium-risk
 compatibility decision requiring a preview test and explicit rollout plan, not a
 silent hardening change.
 
+## Project-logo lifecycle and compatible policy
+
+Evidence: Admin uses `FileReader.readAsDataURL`, advertises PNG/JPG/SVG and
+checks 2 MB client-side. The API accepts a data URL, selects an extension from
+the declared media type, writes local files under `uploads/projects` outside
+Vercel, otherwise stores the data URL in PostgreSQL, then returns `logo_url`.
+Express exposes `/uploads` as a public static route. Bytes are not transformed,
+magic-byte checked, virus scanned, deleted on replacement, or given explicit
+cache/content-disposition headers by application code.
+
+Recommended compatible policy: retain existing assets unchanged; introduce an
+off-by-default `PROJECT_LOGO_STRICT_VALIDATION` setting after preview evidence.
+When enabled, accept only PNG/JPEG/WebP data with decoded size <=2 MB and
+verified magic bytes; retain existing SVG/data URLs for reads, but reject new
+SVG uploads only after production inventory confirms no required clients/assets.
+Serve future private logos through an authenticated org-scoped route, or keep
+them explicitly public only after product approval with `nosniff`, image content
+type, and conservative cache policy. Storage migration, conversion and deletion
+remain out of scope.
+
+Compatibility prerequisites that cannot be learned without prohibited production
+data/config access: existing SVG/oversized records, intended public visibility,
+production local-storage viability, CDN/object-store path, cache policy, and
+whether any external client uses direct data URLs.
+
 No finding is marked remediated until a reproducible automated test or provider
 configuration evidence is recorded.
