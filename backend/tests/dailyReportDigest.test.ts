@@ -1,12 +1,14 @@
-process.env.RESEND_API_KEY = 're_test_reports';
+process.env.AWS_SES_SMTP_ENDPOINT = 'smtp.test.amazonaws.com';
+process.env.AWS_SMTP_USERNAME = 'test-user';
+process.env.AWS_SMTP_PASSWORD = 'test-pass';
 process.env.EMAIL_FROM = 'Web Forx Reports <reports@webforxtech.com>';
 
 const mockSend = jest.fn();
 
-jest.mock('resend', () => ({
-    Resend: jest.fn().mockImplementation(() => ({
-        emails: { send: mockSend },
-    })),
+jest.mock('nodemailer', () => ({
+    __esModule: true,
+    default: { createTransport: () => ({ sendMail: mockSend }) },
+    createTransport: () => ({ sendMail: mockSend }),
 }));
 
 jest.mock('../src/config/db', () => ({
@@ -29,7 +31,7 @@ import { generateAndEmailDailyReport } from '../src/services/reporterService';
 
 beforeEach(() => {
     jest.clearAllMocks();
-    mockSend.mockResolvedValue({ data: { id: 'email-1' }, error: null });
+    mockSend.mockResolvedValue({ messageId: 'email-1' });
     (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.user.findMany as jest.Mock).mockResolvedValue([]);
 });

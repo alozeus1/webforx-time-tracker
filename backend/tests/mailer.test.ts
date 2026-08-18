@@ -4,17 +4,22 @@
  * Context: on 2026-08-10 the weekly compliance report generated correctly, passed its
  * validation gates, and was then refused by Resend ("The webforxtech.com domain is not
  * verified"). Nothing was emailed, and the n8n workflow downstream published a
- * "0 members tracked" report off a stale PDF. WFT is moving to AWS SES SMTP.
+ * "0 members tracked" report off a stale PDF.
  *
- * The behaviour that matters here is not "does it send" but "does a failure to send
- * reliably throw" — the Resend SDK reports API errors in its RESOLVED value, so an
- * awaited send succeeding is not evidence of delivery.
+ * The SES migration that followed kept Resend as a fallback, and THAT is what cost the
+ * 2026-08-10 and 2026-08-17 windows: the SES variables were never added to the deployed
+ * environment, so `getMailProvider()` quietly fell through to Resend and hit the same
+ * rejection. The fallback made a missing-config bug look like a vendor bug.
+ *
+ * SES SMTP is now the only transport. The behaviours pinned below are therefore:
+ * (a) missing or partial SMTP config resolves to 'none' and THROWS — never to
+ * something that looks configured, and never a silent no-op; and (b) a stale
+ * RESEND_API_KEY in the environment changes nothing.
  */
 
 type SmtpConfig = Record<string, unknown>;
 
 const mockSendMail = jest.fn();
-const mockResendSend = jest.fn();
 
 // The transport config is captured here rather than read back off
 // `mockCreateTransport.mock.calls[0][0]`. A zero-arg `jest.fn()` types its arguments as
@@ -31,10 +36,6 @@ jest.mock('nodemailer', () => ({
     __esModule: true,
     default: { createTransport: (config: SmtpConfig) => mockCreateTransport(config) },
     createTransport: (config: SmtpConfig) => mockCreateTransport(config),
-}));
-
-jest.mock('resend', () => ({
-    Resend: jest.fn().mockImplementation(() => ({ emails: { send: mockResendSend } })),
 }));
 
 const ENV_KEYS = [
@@ -60,7 +61,6 @@ beforeEach(() => {
     for (const k of ENV_KEYS) delete process.env[k];
     process.env.EMAIL_FROM = 'Web Forx Reports <reports@webforxtech.com>';
     mockSendMail.mockResolvedValue({ messageId: 'ses-1' });
-    mockResendSend.mockResolvedValue({ data: { id: 'r-1' }, error: null });
 });
 
 afterEach(() => {
@@ -77,45 +77,48 @@ const withSes = () => {
 
 const message = { to: ['ops@webforxtech.com'], subject: 'Weekly', html: '<p>hi</p>' };
 
-describe('provider selection', () => {
-    it('prefers SES SMTP when SMTP credentials are present, even if Resend is also set', async () => {
+describe('transport selection', () => {
+    it('selects SES SMTP when all three SMTP credentials are present', async () => {
         withSes();
-        process.env.RESEND_API_KEY = 're_still_set';
         const mailer = await loadMailer();
 
         expect(mailer.getMailProvider()).toBe('ses-smtp');
         await mailer.sendMail(message);
 
         expect(mockSendMail).toHaveBeenCalledTimes(1);
-        expect(mockResendSend).not.toHaveBeenCalled();
     });
 
-    it('falls back to Resend when SMTP is not configured, so the migration is reversible', async () => {
-        process.env.RESEND_API_KEY = 're_test';
-        const mailer = await loadMailer();
-
-        expect(mailer.getMailProvider()).toBe('resend');
-        await mailer.sendMail(message);
-
-        expect(mockResendSend).toHaveBeenCalledTimes(1);
-        expect(mockSendMail).not.toHaveBeenCalled();
-    });
-
-    it('reports "none" and throws when neither is configured, rather than silently no-oping', async () => {
+    it('reports "none" and throws when SMTP is not configured, rather than silently no-oping', async () => {
         const mailer = await loadMailer();
 
         expect(mailer.getMailProvider()).toBe('none');
-        await expect(mailer.sendMail(message)).rejects.toThrow(/No email provider is configured/);
+        await expect(mailer.sendMail(message)).rejects.toThrow(/No email transport is configured/);
     });
 
-    it('does not treat a partially configured SMTP block as usable', async () => {
-        // Endpoint set but no credentials — this must NOT select SES and then fail at
-        // send time with an opaque auth error.
-        process.env.AWS_SES_SMTP_ENDPOINT = 'smtp.example.amazonaws.com';
-        process.env.RESEND_API_KEY = 're_test';
+    it('REGRESSION: a leftover RESEND_API_KEY does not make an unconfigured env look usable', async () => {
+        // The 2026-08-17 defect in one assertion. With the old fallback this returned
+        // 'resend' and the weekly report died against an unverified domain, so the
+        // symptom pointed at a vendor instead of at four missing Vercel variables.
+        // There is no fallback now: no SMTP config means no transport, loudly.
+        process.env.RESEND_API_KEY = 're_left_over_from_the_old_vendor';
         const mailer = await loadMailer();
 
-        expect(mailer.getMailProvider()).toBe('resend');
+        expect(mailer.getMailProvider()).toBe('none');
+        await expect(mailer.sendMail(message)).rejects.toThrow(/No email transport is configured/);
+        expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['endpoint only', { AWS_SES_SMTP_ENDPOINT: 'smtp.example.amazonaws.com' }],
+        ['endpoint + username, no password', { AWS_SES_SMTP_ENDPOINT: 'smtp.example.amazonaws.com', AWS_SMTP_USERNAME: 'user' }],
+        ['credentials but no endpoint', { AWS_SMTP_USERNAME: 'user', AWS_SMTP_PASSWORD: 'pass' }],
+    ])('does not treat a partially configured SMTP block as usable (%s)', async (_label, vars) => {
+        // A half-filled block must not select SES and then fail at send time with an
+        // opaque auth or DNS error — that is much harder to diagnose than "not configured".
+        Object.assign(process.env, vars);
+        const mailer = await loadMailer();
+
+        expect(mailer.getMailProvider()).toBe('none');
     });
 });
 
@@ -176,17 +179,23 @@ describe('failure semantics', () => {
         await expect(mailer.sendMail(message)).rejects.toThrow(/SES SMTP error: 554 Message rejected/);
     });
 
-    it('REGRESSION: throws when Resend reports an error in its RESOLVED value', async () => {
-        // This is the exact shape of the 2026-08-10 outage. The promise resolves, so
-        // without an explicit check the caller would record the report as delivered.
-        process.env.RESEND_API_KEY = 're_test';
-        mockResendSend.mockResolvedValueOnce({
-            data: null,
-            error: { name: 'validation_error', message: 'The webforxtech.com domain is not verified.' },
-        });
+    it('surfaces a 535 auth failure verbatim, since it usually means the wrong SES password', async () => {
+        // The SES SMTP password is derived from an AWS secret access key, not equal to
+        // one. Pasting the secret key yields exactly this, and it reads like a network
+        // fault unless the original text survives.
+        withSes();
+        mockSendMail.mockRejectedValueOnce(new Error('535 Authentication Credentials Invalid'));
         const mailer = await loadMailer();
 
         await expect(mailer.sendMail(message))
-            .rejects.toThrow('Resend error [validation_error]: The webforxtech.com domain is not verified.');
+            .rejects.toThrow('SES SMTP error: 535 Authentication Credentials Invalid');
+    });
+
+    it('resolves only when SES accepted the message', async () => {
+        withSes();
+        const mailer = await loadMailer();
+
+        await expect(mailer.sendMail(message)).resolves.toBeUndefined();
+        expect(mockSendMail).toHaveBeenCalledTimes(1);
     });
 });

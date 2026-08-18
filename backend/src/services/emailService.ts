@@ -2,10 +2,10 @@ import { env } from '../config/env';
 import { getMailProvider, sendMail } from './mailer';
 
 /**
- * Outbound mail now goes through services/mailer.ts (AWS SES SMTP, with Resend kept
- * only as a rollback path). The two helpers below keep the existing call shape in this
- * file — `getClient()` still returns null when no provider is configured, so every
- * sender's "log in development and return" fallback behaves exactly as before.
+ * Outbound mail goes through services/mailer.ts (AWS SES SMTP — the only transport).
+ * The two helpers below keep the existing call shape in this file — `getClient()`
+ * still returns null when no transport is configured, so every sender's "log in
+ * development and return" fallback behaves exactly as before.
  */
 type MailerHandle = { provider: string };
 
@@ -17,10 +17,8 @@ const getClient = (): MailerHandle | null => {
 /**
  * Normalises delivery failures into thrown errors.
  *
- * This matters more than it looks: the Resend SDK reports API-level failures in its
- * RESOLVED value rather than by rejecting, so awaiting a send is not evidence anything
- * was delivered. `sendMail` throws on both transports, so callers can rely on ordinary
- * async/await error handling.
+ * `sendMail` rejects on any SES failure, so callers can rely on ordinary async/await
+ * error handling and a resolved promise genuinely means SES accepted the message.
  */
 const send = async (
     _client: MailerHandle,
@@ -192,7 +190,7 @@ export const sendMfaResetNotificationEmail = async (opts: MfaResetNotificationEm
     const client = getClient();
     if (!client) {
         if (env.nodeEnv === 'development') {
-            console.log(`[email:dev] MFA reset notification skipped (no RESEND_API_KEY) — ${opts.to}`);
+            console.log(`[email:dev] MFA reset notification skipped (no email transport configured) — ${opts.to}`);
         }
         return;
     }
@@ -228,7 +226,7 @@ export interface AccessRequestNotificationOptions {
 export const sendAccessRequestNotification = async (opts: AccessRequestNotificationOptions): Promise<void> => {
     const client = getClient();
     if (!client) {
-        console.log(`[email:dev] Access request notification skipped (no RESEND_API_KEY) — ${opts.workEmail} from ${opts.company}`);
+        console.log(`[email:dev] Access request notification skipped (no email transport configured) — ${opts.workEmail} from ${opts.company}`);
         return;
     }
 
@@ -267,7 +265,7 @@ export interface AccessRequestReceiptOptions {
 export const sendAccessRequestReceipt = async (opts: AccessRequestReceiptOptions): Promise<void> => {
     const client = getClient();
     if (!client) {
-        console.log(`[email:dev] Access request receipt skipped (no RESEND_API_KEY) — ${opts.to}`);
+        console.log(`[email:dev] Access request receipt skipped (no email transport configured) — ${opts.to}`);
         return;
     }
 

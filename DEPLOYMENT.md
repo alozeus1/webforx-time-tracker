@@ -28,7 +28,14 @@ TIMER_ENHANCED_ACTIVITY_DETECTION=false
 # Grace window (minutes) before a hidden_connected session triggers a soft idle warning.
 # No timer pause — notification nudge only. Must match VITE_HIDDEN_CONNECTED_GRACE_MINUTES.
 HIDDEN_CONNECTED_GRACE_MINUTES=10
-RESEND_API_KEY="<RESEND_API_KEY>"
+# Outbound email — AWS SES SMTP. All four are REQUIRED in a deployed environment;
+# there is no fallback provider. Omitting them is what silently lost the 2026-08-10
+# and 2026-08-17 weekly report windows. AWS_SMTP_PASSWORD is the SES *SMTP password*
+# (SES console -> "Create SMTP credentials"), NOT an AWS secret access key.
+AWS_SES_SMTP_ENDPOINT="email-smtp.<region>.amazonaws.com"
+AWS_SES_SMTP_PORT="587"
+AWS_SMTP_USERNAME="<SES_SMTP_USERNAME>"
+AWS_SMTP_PASSWORD="<SES_SMTP_PASSWORD>"
 EMAIL_FROM="Web Forx Time Tracker <noreply@webforxtech.com>"
 EXECUTIVE_REPORT_TEMPLATE_ENABLED=true
 REPORT_COMPANY_LOGO_PATH="<OPTIONAL_ABSOLUTE_COMPANY_LOGO_PATH>"
@@ -176,7 +183,10 @@ vercel env add CRON_SECRET production
 vercel env add CORS_ORIGIN production
 vercel env add FRONTEND_URL production
 vercel env add ENABLE_BACKGROUND_WORKERS production
-vercel env add RESEND_API_KEY production
+vercel env add AWS_SES_SMTP_ENDPOINT production
+vercel env add AWS_SES_SMTP_PORT production
+vercel env add AWS_SMTP_USERNAME production
+vercel env add AWS_SMTP_PASSWORD production
 vercel env add EMAIL_FROM production
 vercel env add EXECUTIVE_REPORT_TEMPLATE_ENABLED production
 vercel env add REPORT_COMPANY_LOGO_PATH production
@@ -188,6 +198,45 @@ vercel env add EXPENSE_RECEIPT_BUCKET production
 vercel env add EXPENSE_RECEIPT_REGION production
 # Set EXPENSE_RECEIPT_ENDPOINT only for an S3-compatible non-AWS provider.
 ```
+
+#### Email transport (AWS SES) — verify before trusting scheduled reports
+
+Scheduled reports are the only feature that fails *silently* when mail is
+misconfigured: `processDueScheduledReports()` builds the PDF, then the send throws,
+and the sole outward symptom is a red **Scheduled Reports Tick** run — on Mondays
+only, because the weekly job is the only caller that runs then. Six green days do
+not mean email works.
+
+After setting the variables above, confirm all four:
+
+1. **Domain identity verified.** `webforxtech.com` shows *Verified* in SES with DKIM
+   records published. An unverified domain is what caused the 2026-08-10 failure.
+2. **Out of the SES sandbox.** In sandbox, every recipient must be individually
+   verified — including `admin@webforxtech.com`. Request production access if the
+   account still shows sandbox.
+3. **`EMAIL_FROM` sits under a verified identity.** A verified domain does not
+   authorise a `From:` on some other domain; SES answers `554 ... not authorized`.
+4. **The password is the SMTP password.** Derived from an AWS secret access key via
+   the SES console — not the secret key itself. Using the key yields `535
+   Authentication Credentials Invalid`, which reads like a network fault in logs.
+
+Prove it end to end rather than inferring it:
+
+```bash
+curl -sS -H "Authorization: Bearer $CRON_SECRET" \
+  "$API_BASE_URL/cron/scheduled-reports" | jq
+```
+
+`{"status":"success"}` with `sent > 0` means a real email left SES.
+`{"status":"partial_failure"}` returns HTTP 500 and carries the SMTP error verbatim.
+`{"status":"validation_blocked"}` is HTTP 200 and is a *correct* outcome — a gate
+suppressed the report and admins were alerted.
+
+**Recovery window.** A weekly report stays due for the whole local Monday: due-ness
+is `isGenerationDue()` (Monday, at or past the slot) and idempotency compares
+`last_sent_at` against the window's exclusive end. Repair delivery before 23:59:59
+Monday in the report's reporting timezone and the next hourly tick sends that week
+automatically. After that the window is unreachable and needs a manual send.
 
 Deploy backend:
 ```bash
