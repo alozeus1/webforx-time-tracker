@@ -91,8 +91,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 
 const TEST_ORG_ID = 'org-1';
 
-const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: TEST_ORG_ID }, JWT_SECRET);
+const makeToken = (userId: string, role: string, organizationId = TEST_ORG_ID) =>
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: organizationId }, JWT_SECRET);
 
 const app = express();
 app.use(express.json());
@@ -583,6 +583,22 @@ describe('POST /api/v1/timers/approvals/:entryId', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/invalid action/i);
+    });
+
+    it('fails closed for unauthenticated, lower-role, and foreign-org approval attempts', async () => {
+        const unauthenticated = await request(app).post('/api/v1/timers/approvals/foreign-entry').send({ action: 'approve' });
+        const employee = await request(app).post('/api/v1/timers/approvals/foreign-entry').set('Authorization', `Bearer ${employeeToken}`).send({ action: 'approve' });
+        (prisma.timeEntry.findFirst as jest.Mock).mockResolvedValue(null);
+        const foreign = await request(app).post('/api/v1/timers/approvals/foreign-entry')
+            .set('Authorization', `Bearer ${makeToken('manager-2', 'Manager', 'org-2')}`)
+            .set('X-Organization-Id', TEST_ORG_ID).set('X-Role', 'Admin')
+            .send({ action: 'approve' });
+        expect(unauthenticated.status).toBe(401);
+        expect(employee.status).toBe(403);
+        expect(foreign.status).toBe(404);
+        expect(prisma.timeEntry.findFirst).toHaveBeenCalledWith({ where: { id: 'foreign-entry', organization_id: 'org-2' } });
+        expect(prisma.timeEntry.update).not.toHaveBeenCalled();
+        expect(prisma.auditLog.create).not.toHaveBeenCalled();
     });
 });
 
