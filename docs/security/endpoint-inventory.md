@@ -50,6 +50,10 @@ organisation. It then requires a non-reviewer to be the owner before updating.
 `backend/tests/workforceFeatures.test.ts` asserts a cross-organisation request
 returns `404` and never reaches the update operation.
 
+`PUT /api/v1/projects/:id` likewise fetches by project ID plus caller
+organisation before mutation. `backend/tests/project.test.ts` asserts a
+cross-organisation admin receives `404` and cannot reach the update operation.
+
 ### Reviewed public-token boundary
 
 `GET /api/v1/public/share/:token` verifies the JWT and rejects a token without

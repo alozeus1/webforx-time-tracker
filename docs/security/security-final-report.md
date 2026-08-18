@@ -56,3 +56,12 @@ or sensitive runtime topology.
 - Evidence: `auditMiddleware.test.ts` passed; backend typecheck passed.
 - Residual risk: existing direct error logging and every future route-specific
   audit payload still need review; this middleware is not currently mounted.
+
+## Iteration 6 — Project object isolation regression
+
+- Finding: project mutation is a high-value cross-organisation object boundary.
+- Change: added a negative route test for a different-organisation admin.
+- Evidence: `project.test.ts` passed (11 tests); full non-database gauntlet
+  passed (backend 45/445; frontend 25/125).
+- Residual risk: the project-logo size/SVG/static-serving policy needs an
+  explicit compatibility decision before enforcement.

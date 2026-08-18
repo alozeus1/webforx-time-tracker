@@ -32,10 +32,13 @@
 - Iteration 5: generic audit middleware now persists field names only, with a
   payload-redaction regression test and passing backend typecheck. It is not
   currently mounted; direct audit event metadata remains separately reviewed.
+- Iteration 6: project update cross-organisation BOLA test passed (`404`,
+  scoped lookup, no mutation). Full non-database gauntlet passed (backend
+  45/445; frontend 25/125). Project-logo format/size/static policy is open.
 - Changed paths since baseline: `docs/security/*`,
   `backend/src/controllers/mattermostBotController.ts`, and
   `backend/tests/mattermostBotSecurity.test.ts`.
 - Next actions:
-  1. Commit audit payload minimisation and evidence.
+  1. Commit project BOLA evidence and Phase 1 observations.
   2. Complete detailed route inventory and object-scope evidence.
-  3. Assess project-logo/static upload compatibility and data exposure.
+  3. Design preview-safe project-logo upload policy with rollback.

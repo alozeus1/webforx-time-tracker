@@ -31,5 +31,14 @@ third-party callbacks, compromised accounts, and malicious dependencies.
 4. Review public documentation/static/upload/share surfaces for metadata or
    access-control leakage.
 
+## Compatibility-sensitive upload observation
+
+Project logo uploads are client-limited to 2 MB and include SVG in the advertised
+format list; the API's global JSON ceiling is 10 MB and local deployment can
+serve persisted logos from `/uploads`. Restricting SVG or tightening the server
+limit changes an existing admin workflow. Treat it as a reviewed medium-risk
+compatibility decision requiring a preview test and explicit rollout plan, not a
+silent hardening change.
+
 No finding is marked remediated until a reproducible automated test or provider
 configuration evidence is recorded.
