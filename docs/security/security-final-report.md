@@ -65,3 +65,23 @@ or sensitive runtime topology.
   passed (backend 45/445; frontend 25/125).
 - Residual risk: the project-logo size/SVG/static-serving policy needs an
   explicit compatibility decision before enforcement.
+
+## Final branch verification — SHA `0258514`
+
+- Canonical non-database gauntlet: `bash scripts/gauntlet.sh`, run from
+  2026-08-18T15:05:37Z to 2026-08-18T15:07:17Z, exited `0`. Backend: 45 Jest
+  suites / 447 tests; frontend: 25 Vitest files / 125 tests. Formatting, lint,
+  type-check, production builds, and cron checks passed.
+- Final supplementary gates, run at SHA `025851401687ff453efaf9d08ca28f33ec8a843c`
+  from 2026-08-18T15:10:29Z to 2026-08-18T15:10:34Z: desktop validation
+  passed (5 tests); production audit guards passed for `desktop`, `backend`,
+  and `frontend` (0 advisories each); repository secret-pattern scan passed.
+- Warning: Jest retained its unchanged post-pass worker teardown warning; no
+  assertion failure or security-test omission was observed.
+- Deferred gates: migration replay needs an isolated database and Playwright
+  needs the local preview stack. They are preview/merge gates, not blockers to
+  pushing this default-off branch for review.
+- Readiness: branch review **ready**; preview deployment requires the deferred
+  preview checks; strict-logo activation is **not ready** until aggregate logo
+  metadata and the documented preview plan succeed; production deployment is
+  **not authorized**.

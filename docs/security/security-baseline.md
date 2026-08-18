@@ -1,7 +1,7 @@
 # Security baseline
 
-**Baseline commit:** `d0b3828b6f0aaf05a93cc4560dbc5ce3320bd9bb`  
-**Working branch:** `security/zero-trust-endpoint-hardening`  
+**Baseline commit:** `d0b3828b6f0aaf05a93cc4560dbc5ce3320bd9bb`
+**Working branch:** `security/zero-trust-endpoint-hardening`
 **Recorded:** 2026-08-18
 
 ## Architecture and trust boundaries
