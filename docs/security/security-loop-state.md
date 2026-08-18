@@ -1,0 +1,30 @@
+# Security loop state
+
+- Baseline commit: `d0b3828b6f0aaf05a93cc4560dbc5ce3320bd9bb`
+- Branch: `security/zero-trust-endpoint-hardening`
+- Recorded: 2026-08-18
+- Phase: 1 inventory/control iteration in progress; Phase 0 baseline complete.
+- Completed: branch created; unrelated untracked SES artifacts preserved; source
+  architecture, route mounts, auth/CSRF/cookie/security-header controls, CI gates,
+  and test inventory inspected.
+- Reusable evidence: `rg` route inventory from `backend/src/routes/*.ts`; release
+  gates are `scripts/gauntlet.sh` and `.github/workflows/release-guards.yml`.
+- Baseline validation: `bash scripts/gauntlet.sh` passed (backend 42/437;
+  frontend 25/125); desktop validation passed (5/5); all three audit guards
+  passed. Backend Jest emitted its known post-pass open-handle warning. Database
+  replay and browser E2E remain pending isolated prerequisites.
+- Open risks: SEC-01 browser bearer token storage; SEC-02 external callback
+  verification/replay; SEC-03 public documentation/static/share surface; SEC-04
+  handler-level tenant/object predicates; SEC-05 operator-only edge controls;
+  SEC-06 costly-route quotas/idempotency.
+- Iteration 1: Mattermost callback token comparisons now use a shared
+  constant-time helper. Targeted test and backend typecheck passed; replay
+  resistance remains open because current callback data lacks timestamp/nonce
+  evidence.
+- Changed paths since baseline: `docs/security/*`,
+  `backend/src/controllers/mattermostBotController.ts`, and
+  `backend/tests/mattermostBotSecurity.test.ts`.
+- Next actions:
+  1. Commit the baseline documentation and Mattermost callback comparison.
+  2. Trace and test public callback replay boundaries, including Slack and Teams.
+  3. Trace sensitive object identifiers and add smallest BOLA regression tests.
