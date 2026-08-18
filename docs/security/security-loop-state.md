@@ -23,10 +23,13 @@
   evidence.
 - Iteration 2: expense update cross-organisation BOLA test passed; it asserts a
   tenant-scoped lookup, `404`, and no mutation. Other object routes remain open.
+- Iteration 3: public share tokens without tenant scope now have a fail-closed
+  regression test. Full non-database gauntlet passed (backend 43/440;
+  frontend 25/125); expected prerequisites still block migration replay/E2E.
 - Changed paths since baseline: `docs/security/*`,
   `backend/src/controllers/mattermostBotController.ts`, and
   `backend/tests/mattermostBotSecurity.test.ts`.
 - Next actions:
-  1. Commit the expense object-isolation regression and documentation.
+  1. Commit the public-share regression and validation evidence.
   2. Trace and test public callback replay boundaries, including Slack and Teams.
   3. Trace remaining sensitive object identifiers and add BOLA regressions.

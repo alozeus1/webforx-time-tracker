@@ -25,3 +25,13 @@ or sensitive runtime topology.
 - Evidence: `workforceFeatures.test.ts` passed (7 tests); backend typecheck
   passed. The test proves `404`, tenant-scoped lookup and no update.
 - Residual risk: other sensitive object routes still require the same review.
+
+## Iteration 3 — Public share tenant-scope regression
+
+- Finding: public share tokens must not retrieve artifacts without tenant scope.
+- Change: added a legacy-token test asserting generic `404` before any data
+  query. No public API response or token format changed.
+- Evidence: targeted report test passed (10 tests); full non-database gauntlet
+  passed (backend 43/440; frontend 25/125).
+- Residual risk: public Swagger/static uploads and token revocation policy still
+  require compatibility review.

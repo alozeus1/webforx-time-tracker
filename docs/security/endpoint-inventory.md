@@ -39,3 +39,9 @@ test reference. Unknowns remain explicitly open rather than inferred from UI.
 organisation. It then requires a non-reviewer to be the owner before updating.
 `backend/tests/workforceFeatures.test.ts` asserts a cross-organisation request
 returns `404` and never reaches the update operation.
+
+### Reviewed public-token boundary
+
+`GET /api/v1/public/share/:token` verifies the JWT and rejects a token without
+an embedded organisation ID with a generic `404` before fetching data.
+`backend/tests/report.test.ts` covers this legacy-token fail-closed behavior.
