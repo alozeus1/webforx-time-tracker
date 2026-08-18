@@ -38,6 +38,9 @@ retention jobs.
   (`backend/src/middlewares/csrf.ts`, `backend/src/config/cookies.ts`).
 - Cron shared-secret gate, provider-specific Slack HMAC verification and
   integration configuration encryption paths.
+- Request telemetry contains correlation ID, route, status, latency, user agent
+  and IP without request payloads. Generic audit middleware records bounded
+  field names only; route-specific audit events use curated metadata.
 - Pinned GitHub Actions, dependency audit guard, secret-pattern scan, CodeQL,
   Prisma migration guard, backend/frontend/desktop validation.
 

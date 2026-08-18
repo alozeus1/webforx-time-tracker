@@ -46,3 +46,13 @@ or sensitive runtime topology.
   passed.
 - Residual risk: Slack's five-minute signed window is not a durable replay
   ledger; Mattermost lacks timestamped callback metadata.
+
+## Iteration 5 — Audit payload minimisation
+
+- Finding: the generic audit middleware would persist entire non-GET request
+  bodies and query values if used.
+- Change: it now stores only bounded query/body field names. Route-specific
+  audit events remain responsible for deliberately curated metadata.
+- Evidence: `auditMiddleware.test.ts` passed; backend typecheck passed.
+- Residual risk: existing direct error logging and every future route-specific
+  audit payload still need review; this middleware is not currently mounted.

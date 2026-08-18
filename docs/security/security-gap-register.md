@@ -8,6 +8,7 @@
 | SEC-04 | Router authentication and role gates are present | Handler-level organisation/object scope is not proven across all identifiers; **High pending evidence** | Expense update cross-org scope is now tested; trace remaining sensitive controllers; Open | `workforceFeatures.test.ts` BOLA regression plus additional cross-object tests; revert focused predicate change |
 | SEC-05 | HSTS/CSP configured in source and Vercel config | Edge TLS, certificate, WAF, at-rest encryption, DB network controls not source-verifiable; **Medium operator evidence** | Operator verification checklist; Open | Read-only provider evidence; configuration rollback owned by operator |
 | SEC-06 | Global/auth rate limiting exists | Route-specific quotas, idempotency and resource limits need evidence for reports, exports, timers, uploads and webhooks; **Medium** | Assess high-cost mutations; Open | Local integration/load-safe tests; staged report-only rollout if provider control |
+| SEC-07 | Generic audit middleware is available for future route use | It previously persisted whole query/body values; **Resolved locally** | Record only bounded field names, never request values; security owner; Implemented | `auditMiddleware.test.ts`; no route contract change; revert middleware commit |
 
 Severity is provisional until handler and configuration evidence is complete. No
 production-risk acceptance has been requested or granted.

@@ -29,10 +29,13 @@
 - Iteration 4: Slack callback timestamps now require a strict safe integer
   before five-minute HMAC verification. Targeted tests (3) and backend typecheck
   passed. Mattermost replay remains a design-level residual risk.
+- Iteration 5: generic audit middleware now persists field names only, with a
+  payload-redaction regression test and passing backend typecheck. It is not
+  currently mounted; direct audit event metadata remains separately reviewed.
 - Changed paths since baseline: `docs/security/*`,
   `backend/src/controllers/mattermostBotController.ts`, and
   `backend/tests/mattermostBotSecurity.test.ts`.
 - Next actions:
-  1. Commit Slack callback validation and updated boundary evidence.
+  1. Commit audit payload minimisation and evidence.
   2. Complete detailed route inventory and object-scope evidence.
   3. Assess project-logo/static upload compatibility and data exposure.

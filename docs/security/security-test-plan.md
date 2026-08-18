@@ -10,6 +10,7 @@
 | Browser headers/CORS | CSP and API tests | Preview header inspection; edge configuration evidence |
 | Reports/files/webhooks | New ownership and signed URL tests | Non-production storage and recipients only |
 | Dependencies/secrets | audit guard, CI secret scan, CodeQL | Approved history scan only if authorised |
+| Audit payload hygiene | `auditMiddleware.test.ts` verifies no request values reach audit metadata | Review new route-specific audit metadata before merge |
 
 Expected negative outcomes are safe `401`, `403`, `404`, `409`, or `429` without
 resource existence or sensitive data leakage.
