@@ -32,3 +32,10 @@ rg -n --glob 'backend/src/routes/*.ts' 'router\.(get|post|put|patch|delete|use)\
 Phase 1 expands each route into handler, request/response schema, size limit,
 data objects, ownership predicate, rate/replay behaviour, audit expectation and
 test reference. Unknowns remain explicitly open rather than inferred from UI.
+
+### Reviewed object boundary
+
+`PUT /api/v1/expenses/:expenseId` first queries by both expense ID and caller
+organisation. It then requires a non-reviewer to be the owner before updating.
+`backend/tests/workforceFeatures.test.ts` asserts a cross-organisation request
+returns `404` and never reaches the update operation.

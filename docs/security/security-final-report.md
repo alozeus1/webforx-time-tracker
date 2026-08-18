@@ -16,3 +16,12 @@ or sensitive runtime topology.
 - Residual risk: this cannot provide replay resistance because the current
   callback contract supplies no signed timestamp/nonce evidence. No deployment
   has occurred.
+
+## Iteration 2 — Expense object isolation regression
+
+- Finding: expense updates are a restricted cross-organisation object boundary.
+- Change: added a negative integration-style route test for a caller from a
+  different organisation.
+- Evidence: `workforceFeatures.test.ts` passed (7 tests); backend typecheck
+  passed. The test proves `404`, tenant-scoped lookup and no update.
+- Residual risk: other sensitive object routes still require the same review.

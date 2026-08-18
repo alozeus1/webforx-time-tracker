@@ -21,10 +21,12 @@
   constant-time helper. Targeted test and backend typecheck passed; replay
   resistance remains open because current callback data lacks timestamp/nonce
   evidence.
+- Iteration 2: expense update cross-organisation BOLA test passed; it asserts a
+  tenant-scoped lookup, `404`, and no mutation. Other object routes remain open.
 - Changed paths since baseline: `docs/security/*`,
   `backend/src/controllers/mattermostBotController.ts`, and
   `backend/tests/mattermostBotSecurity.test.ts`.
 - Next actions:
-  1. Commit the baseline documentation and Mattermost callback comparison.
+  1. Commit the expense object-isolation regression and documentation.
   2. Trace and test public callback replay boundaries, including Slack and Teams.
-  3. Trace sensitive object identifiers and add smallest BOLA regression tests.
+  3. Trace remaining sensitive object identifiers and add BOLA regressions.

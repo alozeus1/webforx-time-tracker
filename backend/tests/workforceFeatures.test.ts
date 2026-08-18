@@ -21,7 +21,7 @@ jest.mock('../src/config/db', () => ({
 import prisma from '../src/config/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
-const token = (userId: string, role: string) => jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: 'org-1' }, JWT_SECRET);
+const token = (userId: string, role: string, organizationId = 'org-1') => jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: organizationId }, JWT_SECRET);
 const employeeToken = token('employee-1', 'Employee');
 const managerToken = token('manager-1', 'Manager');
 const adminToken = token('admin-1', 'Admin');
@@ -86,6 +86,20 @@ describe('expense routes', () => {
 
         expect(response.status).toBe(200);
         expect(prisma.expense.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'approved', reviewed_by: 'manager-1' }) }));
+    });
+
+    it('does not reveal or update an expense outside the caller organisation', async () => {
+        (prisma.expense.findFirst as jest.Mock).mockResolvedValue(null);
+        const response = await request(app)
+            .put('/api/v1/expenses/expense-from-another-org')
+            .set('Authorization', `Bearer ${token('employee-2', 'Employee', 'org-2')}`)
+            .send({ description: 'Attempted cross-tenant edit' });
+
+        expect(response.status).toBe(404);
+        expect(prisma.expense.findFirst).toHaveBeenCalledWith({
+            where: { id: 'expense-from-another-org', organization_id: 'org-2' },
+        });
+        expect(prisma.expense.update).not.toHaveBeenCalled();
     });
 });
 
