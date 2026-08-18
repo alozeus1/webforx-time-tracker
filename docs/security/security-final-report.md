@@ -35,3 +35,14 @@ or sensitive runtime topology.
   passed (backend 43/440; frontend 25/125).
 - Residual risk: public Swagger/static uploads and token revocation policy still
   require compatibility review.
+
+## Iteration 4 — Slack callback timestamp validation
+
+- Finding: the Slack signature helper accepted non-numeric timestamp text until
+  HMAC comparison, rather than rejecting malformed metadata directly.
+- Change: added strict numeric/safe-integer validation before stale-window and
+  HMAC checks, with valid, malformed, stale and invalid-signature tests.
+- Evidence: `slackBotSecurity.test.ts` passed (3 tests); backend typecheck
+  passed.
+- Residual risk: Slack's five-minute signed window is not a durable replay
+  ledger; Mattermost lacks timestamped callback metadata.

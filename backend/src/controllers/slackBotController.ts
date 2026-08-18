@@ -27,9 +27,13 @@ import { validatePublicHttpsUrl } from '../utils/outboundHttp';
 
 const SLACK_SIGNING_VERSION = 'v0';
 
-function verifySlackSignature(signingSecret: string, rawBody: string, timestamp: string, signature: string): boolean {
+export const verifySlackSignature = (signingSecret: string, rawBody: string, timestamp: string, signature: string): boolean => {
     // Reject stale requests (> 5 minutes)
-    const age = Math.abs(Date.now() / 1000 - parseInt(timestamp, 10));
+    if (!/^\d+$/.test(timestamp)) return false;
+    const epochSeconds = Number(timestamp);
+    if (!Number.isSafeInteger(epochSeconds)) return false;
+
+    const age = Math.abs(Math.floor(Date.now() / 1000) - epochSeconds);
     if (age > 300) return false;
 
     const baseString = `${SLACK_SIGNING_VERSION}:${timestamp}:${rawBody}`;
@@ -38,7 +42,7 @@ function verifySlackSignature(signingSecret: string, rawBody: string, timestamp:
     const signatureBuffer = Buffer.from(signature);
     if (expectedBuffer.length !== signatureBuffer.length) return false;
     return crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
-}
+};
 
 interface SlackConfig {
     signing_secret: string;

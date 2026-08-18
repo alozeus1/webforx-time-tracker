@@ -26,10 +26,13 @@
 - Iteration 3: public share tokens without tenant scope now have a fail-closed
   regression test. Full non-database gauntlet passed (backend 43/440;
   frontend 25/125); expected prerequisites still block migration replay/E2E.
+- Iteration 4: Slack callback timestamps now require a strict safe integer
+  before five-minute HMAC verification. Targeted tests (3) and backend typecheck
+  passed. Mattermost replay remains a design-level residual risk.
 - Changed paths since baseline: `docs/security/*`,
   `backend/src/controllers/mattermostBotController.ts`, and
   `backend/tests/mattermostBotSecurity.test.ts`.
 - Next actions:
-  1. Commit the public-share regression and validation evidence.
-  2. Trace and test public callback replay boundaries, including Slack and Teams.
-  3. Trace remaining sensitive object identifiers and add BOLA regressions.
+  1. Commit Slack callback validation and updated boundary evidence.
+  2. Complete detailed route inventory and object-scope evidence.
+  3. Assess project-logo/static upload compatibility and data exposure.

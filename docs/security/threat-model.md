@@ -14,7 +14,7 @@ third-party callbacks, compromised accounts, and malicious dependencies.
 | --- | --- | --- |
 | Browser → API | Token theft, CSRF, CORS abuse, BOLA | JWT, CSRF for cookies, CORS; assess bearer token browser storage and per-object predicates |
 | API → database | Cross-organisation reads/writes, injection | Prisma; trace controller predicates and tenant tests |
-| Provider callback → API | Forgery, replay, body parsing mismatch | Slack HMAC/raw body; inspect Mattermost/Teams parity and replay storage |
+| Provider callback → API | Forgery, replay, body parsing mismatch | Slack raw-body HMAC plus strict five-minute timestamp; Mattermost static token needs replay-design decision; Teams is non-mutating |
 | Cron → API | Unauthorised destructive/report triggers | Required production shared secret; assess constant-time comparison and endpoint scope |
 | API → external URLs/storage | SSRF, credential disclosure, unsafe redirect/upload | outbound URL validator and signed receipt paths; test private-address/redirect behaviour |
 | CI/deploy → runtime | secret exposure, dependency compromise, unsafe deploy | pinned actions, audits, scans; provider configuration needs operator evidence |
@@ -23,8 +23,9 @@ third-party callbacks, compromised accounts, and malicious dependencies.
 
 1. Confirm object/organisation scope for timer, report, expense, payroll, share,
    receipt and admin object identifiers (High if any predicate is missing).
-2. Verify public callback authenticity and replay controls, including the Teams
-   stub and Mattermost flow (High if state-changing without verification).
+2. Mattermost uses a static shared token, not a signed timestamped callback;
+   preserve the current integration but design replay protection before relying
+   on it for high-impact actions (Medium residual).
 3. Reduce bearer-token exposure in browser storage through a compatibility-safe
    design; do not change active authentication flow without a tested migration.
 4. Review public documentation/static/upload/share surfaces for metadata or

@@ -21,6 +21,16 @@ register.
 | `/api/v1/cron` | sweep, daily/scheduled reports, retention, demo reset | service-to-service | Constant shared-secret comparison; production fails closed when absent |
 | `/uploads` | static files | internal/public exposure review | Static upload directory; access-control and listing behaviour require handler/storage review |
 
+## Authentication classification rule
+
+Route-file-wide middleware is not sufficient to classify a declaration that
+appears *before* `router.use(...)`. Public exceptions are therefore recorded
+explicitly: calendar OAuth callback, timer pause beacon (body-carried signed
+access token), public branding/share/signup/contact, and Slack/Mattermost/Teams
+callback routes. All other entries are either individually JWT-gated or inherit
+their router's JWT gate. The bot admin configuration routes inherit the later
+JWT + Admin middleware.
+
 ## Inventory coverage and next evidence
 
 The source route declaration list is reproducible with:
@@ -45,3 +55,12 @@ returns `404` and never reaches the update operation.
 `GET /api/v1/public/share/:token` verifies the JWT and rejects a token without
 an embedded organisation ID with a generic `404` before fetching data.
 `backend/tests/report.test.ts` covers this legacy-token fail-closed behavior.
+
+### Reviewed callback boundary
+
+Slack receives raw form data and requires an HMAC signature plus an unsigned,
+strictly numeric timestamp no older than five minutes. The test suite covers
+valid, malformed, stale and invalid-signature requests. Mattermost has a
+constant-time static-token comparison, while Teams is a non-mutating stub.
+Mattermost replay prevention needs an integration-compatible design because the
+current payload contract does not supply a signed timestamp or nonce.
