@@ -4,7 +4,6 @@ import express from 'express';
 const mockEnv = {
     nodeEnv: 'test',
     jwtSecret: 'test-secret',
-    resendApiKey: '',
     emailFrom: 'test@webforxtech.com',
 };
 

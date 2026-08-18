@@ -1,12 +1,14 @@
-process.env.RESEND_API_KEY = 're_test_reports';
+process.env.AWS_SES_SMTP_ENDPOINT = 'smtp.test.amazonaws.com';
+process.env.AWS_SMTP_USERNAME = 'test-user';
+process.env.AWS_SMTP_PASSWORD = 'test-pass';
 process.env.EMAIL_FROM = 'Web Forx Reports <reports@webforxtech.com>';
 
 const mockSend = jest.fn();
 
-jest.mock('resend', () => ({
-    Resend: jest.fn().mockImplementation(() => ({
-        emails: { send: mockSend },
-    })),
+jest.mock('nodemailer', () => ({
+    __esModule: true,
+    default: { createTransport: () => ({ sendMail: mockSend }) },
+    createTransport: () => ({ sendMail: mockSend }),
 }));
 
 jest.mock('../src/config/db', () => ({
@@ -74,7 +76,7 @@ const baseSchedule = {
 
 beforeEach(() => {
     jest.clearAllMocks();
-    mockSend.mockResolvedValue({ data: { id: 'email-1' }, error: null });
+    mockSend.mockResolvedValue({ messageId: 'email-1' });
     (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue(fullWeekEntries());
     (prisma.scheduledReport.update as jest.Mock).mockResolvedValue({});
     // resolveOrganizationAdmins and fetchDefaulters both call user.findMany, so the
@@ -173,10 +175,7 @@ describe('scheduled report delivery', () => {
     });
 
     it('keeps due schedules unsent when the email provider rejects delivery', async () => {
-        mockSend.mockResolvedValueOnce({
-            data: null,
-            error: { name: 'validation_error', message: 'domain is not verified' },
-        });
+        mockSend.mockRejectedValueOnce(new Error('554 Message rejected: domain is not verified'));
         (prisma.scheduledReport.findMany as jest.Mock).mockResolvedValue([{ id: 'schedule-failing', ...baseSchedule }]);
 
         const result = await processDueScheduledReports(monday);
@@ -184,7 +183,7 @@ describe('scheduled report delivery', () => {
         expect(result.failed).toBe(1);
         expect(result.failures[0]).toEqual({
             id: 'schedule-failing',
-            message: 'Resend error [validation_error]: domain is not verified',
+            message: 'SES SMTP error: 554 Message rejected: domain is not verified',
         });
         expect(prisma.scheduledReport.update).not.toHaveBeenCalled();
     });
@@ -279,14 +278,12 @@ describe('validation gates during delivery', () => {
         expect(mockSend).toHaveBeenCalledTimes(1);
     });
 
-    it('does not record the alert marker when Resend rejects the alert', async () => {
-        // Regression (Codex review): Resend reports API-level failures in the resolved
-        // value, not by rejecting. Recording the marker on a failed send would suppress
-        // every retry and the blocked report would lose its only notification.
-        mockSend.mockResolvedValueOnce({
-            data: null,
-            error: { name: 'validation_error', message: 'domain is not verified' },
-        });
+    it('does not record the alert marker when the alert email fails to send', async () => {
+        // Regression (Codex review): recording the marker on a failed send would
+        // suppress every retry and the blocked report would lose its only
+        // notification. Originally written against Resend's resolved-value error
+        // reporting; SES rejects properly, but the marker rule is what is under test.
+        mockSend.mockRejectedValueOnce(new Error('554 Message rejected: domain is not verified'));
         (prisma.scheduledReport.findMany as jest.Mock).mockResolvedValue([{ id: 'schedule-alertfail', ...baseSchedule }]);
         (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue(
             fullWeekEntries().filter((entry) => !entry.start_time.toISOString().startsWith('2026-03-30')),
@@ -361,7 +358,7 @@ describe('generation timing', () => {
 
         for (const hour of [0, 6, 12, 18, 23]) {
             jest.clearAllMocks();
-            mockSend.mockResolvedValue({ data: { id: 'e' }, error: null });
+            mockSend.mockResolvedValue({ messageId: 'e' });
             (prisma.scheduledReport.findMany as jest.Mock).mockResolvedValue([{ id: 'schedule-sunday', ...baseSchedule }]);
 
             const sunday = new Date(Date.UTC(2026, 3, 5, hour, 0, 0)); // 2026-04-05 is a Sunday

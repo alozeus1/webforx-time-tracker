@@ -67,8 +67,8 @@ export type ScheduledReportRunResult = {
 };
 
 /**
- * True when an email provider is configured (AWS SES SMTP, or Resend as fallback).
- * Delivery itself goes through services/mailer.ts, which throws on failure for both.
+ * True when the email transport is configured (AWS SES SMTP).
+ * Delivery itself goes through services/mailer.ts, which throws on failure.
  */
 const isMailConfigured = (): boolean => getMailProvider() !== 'none';
 
@@ -210,10 +210,8 @@ const notifyAdminsOfValidationFailure = async ({
         .join('');
 
     try {
-        // sendMail throws on failure for BOTH transports. That matters because the
-        // Resend SDK reports API-level failures in its resolved value rather than by
-        // rejecting — without normalising that, a blocked report would be logged as
-        // alerted while nobody was actually told.
+        // sendMail throws on failure. That matters here: without it, a blocked report
+        // would be recorded as alerted while nobody was actually told.
         await sendMail({
             to: adminRecipients,
             subject: `[Action required] Scheduled report blocked — ${window.label}`,
