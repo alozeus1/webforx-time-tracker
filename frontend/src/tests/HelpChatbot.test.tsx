@@ -59,6 +59,19 @@ describe('HelpChatbot', () => {
         });
     });
 
+    it('explains the user-facing security and data-protection guidance', async () => {
+        localStorage.setItem('user_role', 'Employee');
+        render(<HelpChatbot />);
+        const user = await openBot();
+
+        await ask(user, 'How is my data protected?');
+
+        await waitFor(() => {
+            expect(screen.getByText(/organization data are protected by sign-in controls and role-based access/i)).toBeInTheDocument();
+            expect(screen.getByText(/Never share your password, one-time code, or integration credentials/i)).toBeInTheDocument();
+        });
+    });
+
     it('gives the CORRECT manual-entry steps (Timeline -> Add Entry, not a Timer mode)', async () => {
         localStorage.setItem('user_role', 'Employee');
         render(<HelpChatbot />);

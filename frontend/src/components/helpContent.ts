@@ -224,6 +224,15 @@ export const knowledgeBase: Record<string, KBEntry> = {
             { label: 'Main menu', key: 'menu' },
         ],
     },
+    security_data_help: {
+        answer: 'Your account and organization data are protected by sign-in controls and role-based access, so people only see the areas their role allows.\n\nTo help keep your account safe:\n\n1. Use a unique password and enable two-factor authentication (2FA).\n2. Never share your password, one-time code, or integration credentials.\n3. Treat shared links as confidential and ask the sender to create a new one if a link is expired or does not open.\n4. Contact your Admin if you notice unexpected account activity or access.\n\nAdmins manage integration and webhook settings in the Admin area. Keep their verification details private and update them only through the approved configuration screens.',
+        keywords: ['security', 'data protection', 'protect my data', 'how is my data protected', 'account safety', 'secure account', 'shared link', 'privacy', 'webhook security', 'integration security'],
+        followUp: [
+            { label: 'Enable two-factor (2FA)', key: 'mfa_help' },
+            { label: 'Integrations', key: 'integrations_help' },
+            { label: 'Main menu', key: 'menu' },
+        ],
+    },
     notifications_help: {
         answer: 'Notifications keep you informed about approvals, rejections, alerts, and reminders.\n\nOpen the notification bell in the top bar to see recent items, mark them read, or dismiss them. Managers and admins may also receive team and operational alerts.',
         keywords: ['notifications', 'alerts', 'notification bell', 'reminders'],
@@ -456,6 +465,7 @@ export const mainMenu: HelpMenuOption[] = [
     { label: 'Projects', key: 'projects' },
     { label: 'My Profile & Avatar', key: 'profile' },
     { label: 'Two-Factor (2FA)', key: 'mfa_help' },
+    { label: 'Security & Data Protection', key: 'security_data_help' },
     { label: 'Password Help', key: 'forgot_password' },
     { label: 'Troubleshooting', key: 'troubleshooting' },
 ];
