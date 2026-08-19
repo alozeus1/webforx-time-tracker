@@ -2,6 +2,7 @@ import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import reportRoutes from '../src/routes/reportRoutes';
+import publicRoutes from '../src/routes/publicRoutes';
 
 jest.mock('../src/config/db', () => ({
     __esModule: true,
@@ -46,6 +47,7 @@ const managerToken = makeToken('user-mgr-1', 'Manager');
 const app = express();
 app.use(express.json());
 app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/public', publicRoutes);
 
 beforeEach(() => {
     jest.clearAllMocks();
@@ -139,6 +141,22 @@ describe('GET /api/v1/reports/export', () => {
         expect(incomplete.body.message).toMatch(/Both startAt and endAt/);
         expect(reversed.status).toBe(400);
         expect(reversed.body.message).toMatch(/end date must be after/i);
+        expect(prisma.timeEntry.findMany).not.toHaveBeenCalled();
+    });
+});
+
+describe('GET /api/v1/public/share/:token', () => {
+    it('fails closed for a signed legacy token without organisation scope', async () => {
+        const legacyToken = jwt.sign(
+            { type: 'operations', exp: Math.floor(Date.now() / 1000) + 60 },
+            JWT_SECRET,
+        );
+
+        const res = await request(app)
+            .get(`/api/v1/public/share/${legacyToken}`);
+
+        expect(res.status).toBe(404);
+        expect(res.body.message).toBe('Shared artifact not found or expired');
         expect(prisma.timeEntry.findMany).not.toHaveBeenCalled();
     });
 });

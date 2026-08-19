@@ -5,11 +5,15 @@ interface AuthRequest extends Request {
     user?: any;
 }
 
+const MAX_AUDIT_FIELD_NAMES = 50;
+
+const auditFieldNames = (value: unknown): string[] | undefined => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    return Object.keys(value as Record<string, unknown>).slice(0, MAX_AUDIT_FIELD_NAMES);
+};
+
 export const auditLog = (action: string, resourcePath?: string) => {
     return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-        // We capture the original send to intercept response finish if needed, 
-        // but for MVP logging request is sufficient once route is hit.
-
         if (req.user) {
             try {
                 await prisma.auditLog.create({
@@ -20,8 +24,11 @@ export const auditLog = (action: string, resourcePath?: string) => {
                         resource: resourcePath || req.originalUrl,
                         metadata: {
                             method: req.method,
-                            query: req.query,
-                            body: req.method !== 'GET' ? req.body : undefined // Be careful with passwords in real prod
+                            // Never retain request values here. A generic middleware
+                            // cannot safely distinguish passwords, tokens, PII, or
+                            // integration credentials from ordinary payload fields.
+                            query_fields: auditFieldNames(req.query),
+                            body_fields: req.method !== 'GET' ? auditFieldNames(req.body) : undefined,
                         }
                     }
                 });

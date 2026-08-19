@@ -1,0 +1,15 @@
+# Security gap register
+
+| ID | Control / evidence | Gap and severity | Fix / owner / status | Test, rollout risk and rollback |
+| --- | --- | --- | --- | --- |
+| SEC-01 | `frontend/src/services/api.ts` stores bearer and CSRF tokens in `localStorage` | XSS can exfiltrate bearer tokens; **High**, architecture-sensitive | Design cookie-only/short-lived migration with compatibility tests; security owner; Open | Session/auth E2E; rollout can invalidate sessions; feature-flag or revert client/server path |
+| SEC-02 | Provider callbacks are public by design | Mattermost uses a shared callback token but lacks timestamped, signed replay evidence; Slack now validates strict timestamp/HMAC; **Medium residual** | Constant-time Mattermost comparison and strict Slack timestamp parsing implemented; replay design still Open | `mattermostBotSecurity.test.ts`, `slackBotSecurity.test.ts`; no contract change; revert focused helpers |
+| SEC-03 | `/api-docs`, `/uploads`, token share routes are reachable without JWT | Public metadata/file exposure needs intended-access review; token shares now reject missing tenant scope; **Medium residual** | Review Swagger/static exposure and share TTL/revocation requirements; Open | `report.test.ts` legacy-token regression; revert focused route logic/test |
+| SEC-04 | Router authentication and role gates are present | Handler-level organisation/object scope is not proven across all identifiers; **High pending evidence** | Expense update cross-org scope is now tested; trace remaining sensitive controllers; Open | `workforceFeatures.test.ts` BOLA regression plus additional cross-object tests; revert focused predicate change |
+| SEC-05 | HSTS/CSP configured in source and Vercel config | Edge TLS, certificate, WAF, at-rest encryption, DB network controls not source-verifiable; **Medium operator evidence** | Operator verification checklist; Open | Read-only provider evidence; configuration rollback owned by operator |
+| SEC-06 | Global/auth rate limiting exists | Route-specific quotas, idempotency and resource limits need evidence for reports, exports, timers, uploads and webhooks; **Medium** | Assess high-cost mutations; Open | Local integration/load-safe tests; staged report-only rollout if provider control |
+| SEC-07 | Generic audit middleware is available for future route use | It previously persisted whole query/body values; **Resolved locally** | Record only bounded field names, never request values; security owner; Implemented | `auditMiddleware.test.ts`; no route contract change; revert middleware commit |
+| SEC-08 | Project logos: browser allows 2 MB PNG/JPG/SVG and API local runtime exposes `/uploads` | Server uses global 10 MB body ceiling and supports SVG/local static serving; **Medium, compatibility-sensitive** | Decide supported format/size policy, then enforce server-side with preview tests; Open | Add validation/access tests; rollback by restoring current accepted formats |
+
+Severity is provisional until handler and configuration evidence is complete. No
+production-risk acceptance has been requested or granted.

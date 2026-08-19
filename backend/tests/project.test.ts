@@ -2,6 +2,7 @@ import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import projectRoutes from '../src/routes/projectRoutes';
+import { strictProjectLogoValidationEnabled, validateStrictProjectLogo } from '../src/controllers/projectController';
 
 jest.mock('../src/config/db', () => ({
     __esModule: true,
@@ -23,8 +24,8 @@ import prisma from '../src/config/db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
 const TEST_ORG_ID = 'org-1';
-const makeToken = (userId: string, role: string) =>
-    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: TEST_ORG_ID }, JWT_SECRET);
+const makeToken = (userId: string, role: string, organizationId = TEST_ORG_ID) =>
+    jwt.sign({ userId, email: `${userId}@test.com`, role, organization_id: organizationId }, JWT_SECRET);
 
 const adminToken = makeToken('user-admin-1', 'Admin');
 const employeeToken = makeToken('user-emp-1', 'Employee');
@@ -85,6 +86,17 @@ describe('GET /api/v1/projects', () => {
     it('returns 401 when unauthenticated', async () => {
         const res = await request(app).get('/api/v1/projects');
         expect(res.status).toBe(401);
+    });
+});
+
+describe('strict project logo validation', () => {
+    it('is disabled by default and validates magic bytes when enabled by an operator', () => {
+        const original = process.env.STRICT_PROJECT_LOGO_VALIDATION;
+        delete process.env.STRICT_PROJECT_LOGO_VALIDATION;
+        expect(strictProjectLogoValidationEnabled()).toBe(false);
+        expect(validateStrictProjectLogo('data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=')).toMatch(/PNG, JPEG, or WebP/);
+        expect(validateStrictProjectLogo('not-a-data-url')).toMatch(/valid base64/);
+        process.env.STRICT_PROJECT_LOGO_VALIDATION = original;
     });
 });
 
@@ -162,6 +174,21 @@ describe('PUT /api/v1/projects/:id', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.message).toMatch(/no valid fields/i);
+    });
+
+    it('does not reveal or update a project outside the caller organisation', async () => {
+        (prisma.project.findFirst as jest.Mock).mockResolvedValue(null);
+
+        const res = await request(app)
+            .put('/api/v1/projects/project-from-another-org')
+            .set('Authorization', `Bearer ${makeToken('admin-2', 'Admin', 'org-2')}`)
+            .send({ description: 'Attempted cross-tenant edit' });
+
+        expect(res.status).toBe(404);
+        expect(prisma.project.findFirst).toHaveBeenCalledWith({
+            where: { id: 'project-from-another-org', organization_id: 'org-2' },
+        });
+        expect(prisma.project.update).not.toHaveBeenCalled();
     });
 });
 

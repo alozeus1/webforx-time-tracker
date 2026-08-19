@@ -39,6 +39,20 @@ interface MattermostConfig {
 
 const LINK_CODE_TTL_MS = 15 * 60 * 1000;
 
+/**
+ * Compare a callback credential without exposing prefix-dependent timing.
+ * Mattermost sends this value as form/JSON input, so reject non-string values
+ * before constructing buffers.
+ */
+export const timingSafeTokenEqual = (candidate: unknown, expected: string): boolean => {
+    if (typeof candidate !== 'string' || typeof expected !== 'string') return false;
+
+    const candidateBuffer = Buffer.from(candidate, 'utf8');
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    return candidateBuffer.length === expectedBuffer.length
+        && crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
+};
+
 const HELP_TEXT = [
     '**Timer bot commands**',
     '`/timer start [description]` — start a timer (no description opens an interactive picker when the bot token is configured)',
@@ -201,8 +215,8 @@ export const handleMattermostCommand = async (req: Request, res: Response): Prom
 
     // Verify token — reply ephemerally (Mattermost only displays 200 responses),
     // but never execute the command.
-    const incomingToken: string = req.body?.token ?? '';
-    if (incomingToken !== config.token) {
+    const incomingToken = req.body?.token;
+    if (!timingSafeTokenEqual(incomingToken, config.token)) {
         console.warn(`[mattermostBot] token mismatch for org ${orgSlug}`);
         res.json(mmResponse('⚠️ Token verification failed: the token sent by Mattermost does not match the one configured in the Timer app. Ask your admin to update it in Admin → Bot Integrations.'));
         return;
@@ -408,7 +422,7 @@ export const handleMattermostDialogSubmit = async (req: Request, res: Response):
         const config = integration.config;
 
         // Verify the state we placed in the dialog when opening it.
-        if (!body.state || body.state !== config.token) {
+        if (!timingSafeTokenEqual(body.state, config.token)) {
             console.warn(`[mattermostBot] dialog state mismatch for org ${orgSlug}`);
             res.json({ error: 'Verification failed. Please re-run /timer start.' });
             return;

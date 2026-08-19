@@ -6,6 +6,23 @@ import { AuthRequest } from '../types/auth';
 
 const isServerlessRuntime = process.env.VERCEL === '1';
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads/projects');
+const MAX_PROJECT_LOGO_BYTES = 2 * 1024 * 1024;
+
+export const strictProjectLogoValidationEnabled = () =>
+    process.env.STRICT_PROJECT_LOGO_VALIDATION?.trim().toLowerCase() === 'true';
+
+export const validateStrictProjectLogo = (value: string): string | null => {
+    const match = value.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (!match) return 'Project logo must be a valid base64 image.';
+    const bytes = Buffer.from(match[2], 'base64');
+    if (bytes.length === 0 || bytes.length > MAX_PROJECT_LOGO_BYTES) return 'Project logo must be 2 MB or smaller.';
+    const detected = bytes.subarray(0, 12);
+    const png = detected.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const jpeg = detected[0] === 0xff && detected[1] === 0xd8 && detected[2] === 0xff;
+    const webp = detected.subarray(0, 4).toString() === 'RIFF' && detected.subarray(8, 12).toString() === 'WEBP';
+    const expected = png ? 'image/png' : jpeg ? 'image/jpeg' : webp ? 'image/webp' : '';
+    return expected && match[1] === expected ? null : 'Project logo must be a PNG, JPEG, or WebP image.';
+};
 
 const parseLogoData = (logoData: string): { extension: string; data: string } | null => {
     const matches = logoData.match(/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,(.+)$/);
@@ -137,6 +154,11 @@ export const createProject = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const { name, description, budget_hours, budget_amount, logo_data } = req.body;
 
+        if (strictProjectLogoValidationEnabled() && typeof logo_data === 'string') {
+            const logoError = validateStrictProjectLogo(logo_data);
+            if (logoError) { res.status(400).json({ message: logoError }); return; }
+        }
+
         const existingProject = await prisma.project.findFirst({
             where: { name, organization_id: req.user!.organization_id },
         });
@@ -190,6 +212,11 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
     try {
         const projectId = req.params.id as string;
         const { name, description, budget_hours, budget_amount, logo_data, is_active } = req.body;
+
+        if (strictProjectLogoValidationEnabled() && typeof logo_data === 'string') {
+            const logoError = validateStrictProjectLogo(logo_data);
+            if (logoError) { res.status(400).json({ message: logoError }); return; }
+        }
 
         const project = await prisma.project.findFirst({
             where: { id: projectId, organization_id: req.user!.organization_id },
