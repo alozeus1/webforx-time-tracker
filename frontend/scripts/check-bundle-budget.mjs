@@ -4,7 +4,9 @@ import { resolve } from 'node:path';
 const limits = {
   initialJavaScriptBytes: 625_000,
   individualJavaScriptBytes: 450_000,
-  individualCssBytes: 100_000,
+  // Landing styles are intentionally loaded by the app entry so a missing lazy
+  // CSS chunk cannot prevent the public homepage from rendering.
+  individualCssBytes: 110_000,
 };
 
 const distDir = resolve('dist');
