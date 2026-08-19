@@ -7,7 +7,6 @@ import {
   Brain, AlertTriangle, Zap, TrendingUp,
 } from 'lucide-react';
 import { usePageMetadata } from '../hooks/usePageMetadata';
-import './Landing.css';
 
 /* ───────────────────── static data ───────────────────── */
 

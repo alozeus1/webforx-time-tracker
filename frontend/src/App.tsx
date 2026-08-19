@@ -3,6 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getStoredRole, getStoredToken } from './utils/session';
+// Keep the public landing styles in the entry stylesheet. Loading them with the
+// lazy Landing chunk makes a missing or stale CDN asset reject the route import
+// and takes the whole public page down.
+import './pages/Landing.css';
 
 const Login = React.lazy(() => import('./pages/Login'));
 const Landing = React.lazy(() => import('./pages/Landing'));
