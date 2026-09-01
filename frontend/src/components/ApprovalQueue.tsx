@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle, CheckSquare, Square, XCircle } from 'lucide-react';
-import AccessibleDialog from './AccessibleDialog';
+import RejectionReasonDialog from './RejectionReasonDialog';
 import { formatEntryDuration, formatStopReason, riskChipClass, type ReviewAction } from '../utils/timeEntryLabels';
-import type { TimeEntrySummary } from '../types/api';
+import type { RejectionReasonInput, TimeEntrySummary } from '../types/api';
 
 /**
  * The manager approval queue, shared by /timesheet and /reports.
@@ -11,15 +11,20 @@ import type { TimeEntrySummary } from '../types/api';
  * down to a byte-identical `formatStopReason` — which is why they had drifted: only
  * one of them surfaced risk scores, and neither could act on more than one row at a
  * time. Selection and the bulk bar follow the pattern already proven on /timeline.
+ *
+ * Rejecting — single or bulk — goes through RejectionReasonDialog, which replaced the
+ * plain "are you sure?" confirm. A rejection with no recorded reason is what left an
+ * intern unable to find out why 7.58h of a 10.22h week had been thrown away, so the
+ * dialog is the confirmation now: it cannot be submitted without a reason.
  */
 
 interface ApprovalQueueProps {
     entries: TimeEntrySummary[];
     loading: boolean;
-    /** Review a single entry. */
-    onReviewOne: (entryId: string, action: ReviewAction) => Promise<void> | void;
-    /** Review every selected entry at once. */
-    onReviewBulk: (entryIds: string[], action: ReviewAction) => Promise<void> | void;
+    /** Review a single entry. `reason` is present exactly when the action is 'reject'. */
+    onReviewOne: (entryId: string, action: ReviewAction, reason?: RejectionReasonInput) => Promise<void> | void;
+    /** Review every selected entry at once. One reason applies to the whole selection. */
+    onReviewBulk: (entryIds: string[], action: ReviewAction, reason?: RejectionReasonInput) => Promise<void> | void;
     title?: string;
     emptyLabel?: string;
 }
@@ -34,7 +39,8 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 }) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [working, setWorking] = useState(false);
-    const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
+    // null = closed. { scope: 'bulk' } = the current selection, { scope: 'one', … } = one row.
+    const [rejecting, setRejecting] = useState<{ scope: 'bulk' } | { scope: 'one'; id: string; label: string } | null>(null);
 
     const entryIds = useMemo(() => entries.map((entry) => entry.id), [entries]);
 
@@ -63,18 +69,36 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
 
     const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
-    const runBulk = useCallback(async (action: ReviewAction) => {
+    const runBulk = useCallback(async (action: ReviewAction, reason?: RejectionReasonInput) => {
         const ids = [...selectedIds];
         if (ids.length === 0) return;
         setWorking(true);
         try {
-            await onReviewBulk(ids, action);
+            // Arity preserved on approve: no reason exists for an approval, and passing
+            // an explicit `undefined` third argument is noise every caller has to ignore.
+            await (reason ? onReviewBulk(ids, action, reason) : onReviewBulk(ids, action));
             setSelectedIds(new Set());
         } finally {
             setWorking(false);
-            setConfirmRejectOpen(false);
+            setRejecting(null);
         }
     }, [onReviewBulk, selectedIds]);
+
+    /** Submits whichever rejection the dialog was opened for. */
+    const submitRejection = useCallback(async (reason: RejectionReasonInput) => {
+        if (!rejecting) return;
+        if (rejecting.scope === 'bulk') {
+            await runBulk('reject', reason);
+            return;
+        }
+        setWorking(true);
+        try {
+            await onReviewOne(rejecting.id, 'reject', reason);
+        } finally {
+            setWorking(false);
+            setRejecting(null);
+        }
+    }, [onReviewOne, rejecting, runBulk]);
 
     if (loading) {
         return <p className="py-6 text-sm text-slate-500">Loading approval queue…</p>;
@@ -187,7 +211,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                                                 type="button"
                                                 className="btn btn-outline !px-2.5 !py-2 text-rose-600"
                                                 aria-label={`Reject ${employeeName} — ${entry.task_description}`}
-                                                onClick={() => void onReviewOne(entry.id, 'reject')}
+                                                onClick={() => setRejecting({ scope: 'one', id: entry.id, label: entry.task_description })}
                                             >
                                                 <XCircle size={14} />
                                             </button>
@@ -223,7 +247,7 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                         <button
                             type="button"
                             disabled={working}
-                            onClick={() => setConfirmRejectOpen(true)}
+                            onClick={() => setRejecting({ scope: 'bulk' })}
                             className="rounded-full bg-rose-500 px-4 py-1.5 font-semibold text-white disabled:opacity-60"
                         >
                             Reject all
@@ -239,41 +263,16 @@ const ApprovalQueue: React.FC<ApprovalQueueProps> = ({
                 </div>
             )}
 
-            {/* Rejecting in bulk is the destructive direction and sends a notification to
-                every affected person, so it asks first. Approving does not. */}
-            <AccessibleDialog
-                isOpen={confirmRejectOpen}
-                onClose={() => setConfirmRejectOpen(false)}
-                ariaLabel="Confirm bulk rejection"
-                panelClassName="w-full max-w-md rounded-lg bg-white p-6 shadow-xl dark:bg-slate-900"
-            >
-                <div className="space-y-4">
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                        Reject {selectedIds.size} {selectedIds.size === 1 ? 'entry' : 'entries'}?
-                    </h2>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                        Everyone affected is notified that their time was rejected. They will need to
-                        resubmit or raise a correction request.
-                    </p>
-                    <div className="flex justify-end gap-2">
-                        <button
-                            type="button"
-                            className="btn btn-outline"
-                            onClick={() => setConfirmRejectOpen(false)}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            disabled={working}
-                            className="btn btn-primary !bg-rose-600"
-                            onClick={() => void runBulk('reject')}
-                        >
-                            Reject all
-                        </button>
-                    </div>
-                </div>
-            </AccessibleDialog>
+            {/* The reason picker IS the confirmation: it cannot be submitted without one.
+                Rejecting notifies everyone affected, and now tells them why. */}
+            <RejectionReasonDialog
+                isOpen={rejecting !== null}
+                onClose={() => setRejecting(null)}
+                entryCount={rejecting?.scope === 'one' ? 1 : selectedIds.size}
+                targetLabel={rejecting?.scope === 'one' ? rejecting.label : undefined}
+                submitting={working}
+                onSubmit={submitRejection}
+            />
         </>
     );
 };

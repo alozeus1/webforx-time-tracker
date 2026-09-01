@@ -561,18 +561,21 @@ describe('POST /api/v1/timers/approvals/:entryId', () => {
         expect(res.body.status).toBe('approved');
     });
 
-    it('returns 200 when rejecting a timesheet', async () => {
-        const rejectedEntry = { ...mockTimeEntry, status: 'rejected' };
+    // A reason is mandatory since 2026-09; see tests/timesheetRejectionReasons.test.ts
+    // for the full rule. Rejecting with no reason is now a 400, not a 200.
+    it('returns 200 when rejecting a timesheet with a reason', async () => {
+        const rejectedEntry = { ...mockTimeEntry, status: 'rejected', rejection_reason_code: 'WRONG_PROJECT', rejection_reason_note: null };
         (prisma.timeEntry.findFirst as jest.Mock).mockResolvedValue(mockTimeEntry);
         (prisma.timeEntry.update as jest.Mock).mockResolvedValue(rejectedEntry);
 
         const res = await request(app)
             .post('/api/v1/timers/approvals/entry-1')
             .set('Authorization', `Bearer ${managerToken}`)
-            .send({ action: 'reject' });
+            .send({ action: 'reject', rejection_reason_code: 'WRONG_PROJECT' });
 
         expect(res.status).toBe(200);
         expect(res.body.status).toBe('rejected');
+        expect(res.body.rejection_reason_label).toBe('Wrong or missing project assignment');
     });
 
     it('returns 400 for invalid action', async () => {

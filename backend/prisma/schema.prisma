@@ -204,6 +204,17 @@ model TimeEntry {
   // Set when the user acknowledged an auto-stop review card for this entry.
   auto_stop_reviewed_at DateTime?
 
+  // Why this entry was rejected, and by whom. All nullable and all additive: entries
+  // rejected before 2026-09 have no reason and must never be given a fabricated one —
+  // every surface renders null as "No reason recorded".
+  // `rejection_reason_code` is a code from backend/src/constants/rejectionReasons.ts,
+  // never a label, so the wording can change without rewriting stored rows.
+  // Mirrors the shape TimerCorrectionRequest already uses for reviewed_by/reviewed_at.
+  rejection_reason_code String?
+  rejection_reason_note String?
+  reviewed_by           String?
+  reviewed_at           DateTime?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 

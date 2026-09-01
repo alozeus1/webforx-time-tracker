@@ -5,6 +5,7 @@ import api, { getApiErrorMessage } from '../services/api';
 import { getTimerLocationPayload } from '../utils/timerLocation';
 import type { ActiveTimerSummary, ProjectSummary, TimeEntrySummary, TimerEntriesResponse } from '../types/api';
 import { emitTimeEntryChanged } from '../utils/timeEntryEvents';
+import { rejectionReasonText } from '../utils/timeEntryLabels';
 import { getStoredUserProfile } from '../utils/session';
 import { useFeedback } from '../hooks/useFeedback';
 
@@ -655,6 +656,16 @@ const Timeline: React.FC = () => {
                                                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" title="Manual entries require manager approval">
                                                         <span className="material-symbols-outlined text-[12px]">pending_actions</span>
                                                         Pending Approval
+                                                    </span>
+                                                )}
+                                                {/* A rejected entry used to be indistinguishable from an approved
+                                                    one here, which is how hours could be thrown away unnoticed. */}
+                                                {entry.status === 'rejected' && (
+                                                    <span
+                                                        className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-bold text-rose-800 dark:bg-rose-900/50 dark:text-rose-300"
+                                                        title={`${rejectionReasonText(entry)}${entry.rejection_reason_note ? ` — ${entry.rejection_reason_note}` : ''}`}
+                                                    >
+                                                        Rejected · {rejectionReasonText(entry)}
                                                     </span>
                                                 )}
                                                 {(entry as unknown as Record<string, unknown>).is_billable === false && (

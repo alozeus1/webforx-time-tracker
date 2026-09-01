@@ -110,9 +110,54 @@ export interface TimeEntrySummary {
     over_daily_cap?: boolean;
     overtime_reason?: string | null;
     auto_stop_reviewed_at?: string | null;
+    /**
+     * Why this entry was rejected. Always absent or null on anything that was never
+     * rejected, and null on entries rejected before the reason taxonomy shipped —
+     * those are historical and must render as "No reason recorded", never blank.
+     */
+    rejection_reason_code?: string | null;
+    /** Resolved server-side so the frontend keeps no second copy of the taxonomy. */
+    rejection_reason_label?: string | null;
+    rejection_reason_note?: string | null;
+    reviewed_at?: string | null;
+    reviewed_by?: string | null;
     intelligence?: ApprovalIntelligence;
     user: UserSummary;
     project?: ProjectReference | null;
+}
+
+/** One row of the reason taxonomy, served by GET /timers/rejection-reasons. */
+export interface RejectionReasonOption {
+    code: string;
+    label: string;
+    requires_note: boolean;
+}
+
+export interface RejectionReasonsResponse {
+    reasons: RejectionReasonOption[];
+    note_max_length: number;
+}
+
+/** What a manager submits when rejecting one entry or a selection. */
+export interface RejectionReasonInput {
+    rejection_reason_code: string;
+    rejection_reason_note?: string | null;
+}
+
+/**
+ * Approved / rejected / pending split for a requested window, computed by the API.
+ *
+ * `total_seconds` is every logged second regardless of status, so it is not
+ * necessarily the sum of the three parts — that is deliberate, so an unexpected
+ * status can never make hours vanish from the screen.
+ */
+export interface TimesheetStatusTotals {
+    from: string;
+    to: string;
+    approved_seconds: number;
+    rejected_seconds: number;
+    pending_seconds: number;
+    total_seconds: number;
 }
 
 export interface DailyEntry {
@@ -149,6 +194,8 @@ export interface ActiveTimerSummary {
 export interface TimerEntriesResponse {
     entries: TimeEntrySummary[];
     activeTimer?: ActiveTimerSummary | null;
+    /** Present only when the request supplied a ?from/?to window. */
+    totals?: TimesheetStatusTotals;
 }
 
 /** Response of GET /timers/active — the lean endpoint used by the heartbeat poller. */

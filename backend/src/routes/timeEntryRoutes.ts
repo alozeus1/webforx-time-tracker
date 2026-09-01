@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, getActiveTimer, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries, purgeResolvedCorrectionsController, reviewTimesheetsBulk, getRecoveryQuota, acknowledgeAutoStop, getDailyUsageSummary } from '../controllers/timeEntryController';
+import { startTimer, stopTimer, pauseTimer, resumeTimer, manualEntry, getMyEntries, getActiveTimer, pingTimer, pauseBeacon, getPendingTimesheets, reviewTimesheet, updateEntry, deleteEntry, duplicateEntry, createCorrectionRequest, getCorrectionRequestsForReview, getMyCorrectionRequests, reviewCorrectionRequest, bulkUpdateEntries, purgeResolvedCorrectionsController, reviewTimesheetsBulk, getRecoveryQuota, acknowledgeAutoStop, getDailyUsageSummary, listRejectionReasons } from '../controllers/timeEntryController';
 import { authenticateToken, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -29,6 +29,11 @@ router.post('/corrections', createCorrectionRequest);
 router.get('/corrections/review', requireRole(['Manager', 'Admin']), getCorrectionRequestsForReview);
 router.post('/corrections/:correctionId/review', requireRole(['Manager', 'Admin']), reviewCorrectionRequest);
 router.post('/corrections/purge-resolved', requireRole(['Manager', 'Admin']), purgeResolvedCorrectionsController);
+
+// The rejection reason taxonomy. Authenticated but not role-gated: the manager's
+// picker reads it, and it is the single source of truth (backend/src/constants/
+// rejectionReasons.ts) rather than a second copy living in the frontend.
+router.get('/rejection-reasons', listRejectionReasons);
 
 // Manager/Admin endpoints
 router.get('/approvals', requireRole(['Manager', 'Admin']), getPendingTimesheets);

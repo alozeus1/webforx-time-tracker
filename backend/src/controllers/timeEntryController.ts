@@ -25,6 +25,14 @@ import {
 } from '../services/dailyCapService';
 import { findOverlaps, overlapConflictBody, TimeOverlapError } from '../services/timeOverlapService';
 import {
+    REJECTION_REASONS,
+    REJECTION_NOTE_MAX_LENGTH,
+    rejectionReasonLabel,
+    reasonRequiresNote,
+    validateRejectionReason,
+} from '../constants/rejectionReasons';
+import { dispatchRejectionNotices } from '../services/rejectionNoticeService';
+import {
     assertRecoveryAllowed,
     getWeeklyRecoveryUsage,
     recoveryQuotaBody,
@@ -1142,6 +1150,56 @@ export const getActiveTimer = async (req: AuthRequest, res: Response): Promise<v
     }
 };
 
+/**
+ * Parses the optional ?from / ?to window on GET /timers/me.
+ *
+ * Returns null when neither is supplied (the historical behaviour), 'invalid' when the
+ * pair is unusable. Both are required together: a half-open window would silently
+ * return a different set than the caller asked for.
+ */
+const parseEntryWindow = (
+    rawFrom: unknown,
+    rawTo: unknown,
+): { from: Date; to: Date } | null | 'invalid' => {
+    if (rawFrom === undefined && rawTo === undefined) return null;
+    if (typeof rawFrom !== 'string' || typeof rawTo !== 'string') return 'invalid';
+
+    const from = new Date(rawFrom);
+    const to = new Date(rawTo);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to) return 'invalid';
+
+    return { from, to };
+};
+
+/**
+ * approved / rejected / pending seconds plus the total logged.
+ *
+ * `total_seconds` is deliberately the sum of every row, not approved + rejected +
+ * pending, so an unexpected status value can never make hours disappear from the
+ * screen — it shows up as the gap between the parts and the total instead.
+ */
+const summariseByStatus = (rows: { status: string; duration: number }[]) => {
+    let approved = 0;
+    let rejected = 0;
+    let pending = 0;
+    let totalLogged = 0;
+
+    for (const row of rows) {
+        const seconds = row.duration ?? 0;
+        totalLogged += seconds;
+        if (row.status === 'approved') approved += seconds;
+        else if (row.status === 'rejected') rejected += seconds;
+        else if (row.status === 'pending') pending += seconds;
+    }
+
+    return {
+        approved_seconds: approved,
+        rejected_seconds: rejected,
+        pending_seconds: pending,
+        total_seconds: totalLogged,
+    };
+};
+
 export const getMyEntries = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const user_id = requireUserId(req);
@@ -1169,9 +1227,25 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
             }
         }
 
+        // Optional window, purely additive: every existing caller (Dashboard, Timeline,
+        // Timer, Layout, Workday) omits it and gets exactly the response it got before,
+        // including no `totals` block — so none of them pays for an aggregate they do
+        // not read. /timesheet passes the week it is displaying.
+        const window = parseEntryWindow(req.query.from, req.query.to);
+        if (window === 'invalid') {
+            res.status(400).json({ message: 'from and to must be ISO-8601 timestamps, with from before to.' });
+            return;
+        }
+
+        const where: Prisma.TimeEntryWhereInput = {
+            organization_id: req.user!.organization_id,
+            user_id,
+            ...(window ? { start_time: { gte: window.from, lt: window.to } } : {}),
+        };
+
         const [entries, total] = await Promise.all([
             prisma.timeEntry.findMany({
-                where: { organization_id: req.user!.organization_id, user_id },
+                where,
                 orderBy: { start_time: 'desc' },
                 include: {
                     project: { select: { id: true, name: true } },
@@ -1180,12 +1254,22 @@ export const getMyEntries = async (req: AuthRequest, res: Response): Promise<voi
                 skip,
                 take: limit,
             }),
-            prisma.timeEntry.count({ where: { organization_id: req.user!.organization_id, user_id } }),
+            prisma.timeEntry.count({ where }),
         ]);
 
+        // The approved/rejected/pending split, computed here so the UI cannot re-derive
+        // it differently — the whole incident behind this feature was a screen doing its
+        // own arithmetic over a set it had not filtered by status. Computed over the
+        // WHOLE window rather than the current page, so the header stays truthful even
+        // if the row list is truncated by `limit`.
+        const totals = window
+            ? summariseByStatus(await prisma.timeEntry.findMany({ where, select: { status: true, duration: true } }))
+            : undefined;
+
         res.status(200).json({
-            entries,
+            entries: entries.map(withRejectionLabel),
             activeTimer,
+            ...(totals ? { totals: { from: window!.from.toISOString(), to: window!.to.toISOString(), ...totals } } : {}),
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         });
     } catch (error) {
@@ -1437,6 +1521,36 @@ export const getPendingTimesheets = async (req: AuthRequest, res: Response): Pro
     }
 };
 
+/**
+ * Attaches the human label for a stored rejection code.
+ *
+ * The label is resolved server-side so the frontend never needs its own copy of the
+ * taxonomy — see the header of constants/rejectionReasons.ts for why there is exactly
+ * one list. A historical rejection with no code resolves to null, which every UI
+ * renders as "No reason recorded" rather than blank.
+ */
+const withRejectionLabel = <T extends { rejection_reason_code: string | null }>(entry: T) => ({
+    ...entry,
+    rejection_reason_label: rejectionReasonLabel(entry.rejection_reason_code),
+});
+
+/**
+ * The reason taxonomy, for the manager's reject picker.
+ *
+ * Authenticated but not role-gated: the codes are not sensitive, and an employee
+ * screen may want to explain what a code on their own entry means.
+ */
+export const listRejectionReasons = async (_req: AuthRequest, res: Response): Promise<void> => {
+    res.status(200).json({
+        reasons: REJECTION_REASONS.map((reason) => ({
+            code: reason.code,
+            label: reason.label,
+            requires_note: reasonRequiresNote(reason.code),
+        })),
+        note_max_length: REJECTION_NOTE_MAX_LENGTH,
+    });
+};
+
 export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const reviewerId = requireUserId(req);
@@ -1446,6 +1560,19 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
         if (!['approve', 'reject'].includes(action)) {
             res.status(400).json({ message: 'Invalid action. Must be approve or reject.' });
             return;
+        }
+
+        // A rejection with no recorded reason is the defect this endpoint exists to fix,
+        // so the check runs before anything is read or written. Same rule, same helper,
+        // on all three write paths that can set status = 'rejected'.
+        let rejection: { rejection_reason_code: string; rejection_reason_note: string | null } | null = null;
+        if (action === 'reject') {
+            const validated = validateRejectionReason(req.body?.rejection_reason_code, req.body?.rejection_reason_note);
+            if (!validated.ok) {
+                res.status(validated.error.status).json({ message: validated.error.message });
+                return;
+            }
+            rejection = validated.value;
         }
 
         const statusMap = { approve: 'approved', reject: 'rejected' };
@@ -1464,14 +1591,25 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
         const updatedEntry = await prisma.$transaction(async (tx) => {
             const updated = await tx.timeEntry.update({
                 where: { id: entryId, organization_id: req.user!.organization_id },
-                data: { status: statusMap[action as keyof typeof statusMap] },
+                data: {
+                    status: statusMap[action as keyof typeof statusMap],
+                    // On approve these are null, which clears any earlier rejection: an
+                    // approved entry still carrying "description too vague" would be
+                    // telling its owner something that is no longer true.
+                    rejection_reason_code: rejection?.rejection_reason_code ?? null,
+                    rejection_reason_note: rejection?.rejection_reason_note ?? null,
+                    reviewed_by: reviewerId,
+                    reviewed_at: new Date(),
+                },
             });
 
             await tx.notification.create({
                 data: {
                     user_id: updated.user_id,
                     organization_id: req.user!.organization_id,
-                    message: `Your timesheet for ${updated.task_description} was ${statusMap[action as keyof typeof statusMap]} by your manager.`,
+                    message: rejection
+                        ? `Your timesheet for ${updated.task_description} was rejected: ${rejectionReasonLabel(rejection.rejection_reason_code)}. Rejected hours do not count toward your weekly minimum.`
+                        : `Your timesheet for ${updated.task_description} was ${statusMap[action as keyof typeof statusMap]} by your manager.`,
                     type: 'approval_status',
                 },
             });
@@ -1489,6 +1627,7 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
                     metadata: {
                         entry_id: updatedEntry.id,
                         target_user_id: updatedEntry.user_id,
+                        rejection_reason_code: rejection?.rejection_reason_code ?? null,
                     },
                 },
             });
@@ -1496,7 +1635,24 @@ export const reviewTimesheet = async (req: AuthRequest, res: Response): Promise<
             console.error('Failed to write timesheet review audit log:', error);
         }
 
-        res.status(200).json(updatedEntry);
+        // After the commit, and it swallows its own failures: SES being unreachable must
+        // not undo a rejection the manager has already made.
+        if (rejection) {
+            await dispatchRejectionNotices({
+                organizationId: req.user!.organization_id,
+                entries: [{
+                    id: updatedEntry.id,
+                    user_id: updatedEntry.user_id,
+                    task_description: updatedEntry.task_description,
+                    start_time: updatedEntry.start_time,
+                    duration: updatedEntry.duration,
+                    rejection_reason_code: updatedEntry.rejection_reason_code,
+                    rejection_reason_note: updatedEntry.rejection_reason_note,
+                }],
+            });
+        }
+
+        res.status(200).json(withRejectionLabel(updatedEntry));
     } catch (error) {
         console.error('Failed to review timesheet:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -1528,6 +1684,21 @@ export const reviewTimesheetsBulk = async (req: AuthRequest, res: Response): Pro
             return;
         }
 
+        // Bulk rejection is not exempt from needing a reason — it is the path most
+        // likely to produce a wall of unexplained rejections. One reason is applied to
+        // the whole selection rather than blocking bulk review, which is the trade the
+        // brief asked for: a manager clearing "all of these are missing a project"
+        // should not have to click through twenty identical pickers.
+        let rejection: { rejection_reason_code: string; rejection_reason_note: string | null } | null = null;
+        if (action === 'reject') {
+            const validated = validateRejectionReason(req.body?.rejection_reason_code, req.body?.rejection_reason_note);
+            if (!validated.ok) {
+                res.status(validated.error.status).json({ message: validated.error.message });
+                return;
+            }
+            rejection = validated.value;
+        }
+
         // Same ceiling as bulkUpdateEntries, so one request cannot lock a large table
         // range or blow the serverless function's time budget.
         const entryIds = Array.from(new Set(rawIds.filter((id: unknown): id is string => typeof id === 'string')));
@@ -1540,7 +1711,7 @@ export const reviewTimesheetsBulk = async (req: AuthRequest, res: Response): Pro
 
         const entries = await prisma.timeEntry.findMany({
             where: { id: { in: entryIds }, organization_id: req.user!.organization_id },
-            select: { id: true, user_id: true, task_description: true, start_time: true, status: true },
+            select: { id: true, user_id: true, task_description: true, start_time: true, duration: true, status: true },
         });
 
         const foundIds = new Set(entries.map((entry) => entry.id));
@@ -1584,7 +1755,14 @@ export const reviewTimesheetsBulk = async (req: AuthRequest, res: Response): Pro
             const result = await tx.timeEntry.updateMany({
                 // org_id repeated here to close the TOCTOU window with the read above.
                 where: { id: { in: editableIds }, organization_id: req.user!.organization_id, status: 'pending' },
-                data: { status: nextStatus },
+                data: {
+                    status: nextStatus,
+                    // Null on approve, which clears any reason a previous rejection left behind.
+                    rejection_reason_code: rejection?.rejection_reason_code ?? null,
+                    rejection_reason_note: rejection?.rejection_reason_note ?? null,
+                    reviewed_by: reviewerId,
+                    reviewed_at: new Date(),
+                },
             });
 
             // One notification per affected user per entry, matching what single-entry
@@ -1594,7 +1772,9 @@ export const reviewTimesheetsBulk = async (req: AuthRequest, res: Response): Pro
                 data: editable.map((entry) => ({
                     user_id: entry.user_id,
                     organization_id: req.user!.organization_id,
-                    message: `Your timesheet for ${entry.task_description} was ${nextStatus} by your manager.`,
+                    message: rejection
+                        ? `Your timesheet for ${entry.task_description} was rejected: ${rejectionReasonLabel(rejection.rejection_reason_code)}. Rejected hours do not count toward your weekly minimum.`
+                        : `Your timesheet for ${entry.task_description} was ${nextStatus} by your manager.`,
                     type: 'approval_status',
                 })),
             });
@@ -1614,11 +1794,30 @@ export const reviewTimesheetsBulk = async (req: AuthRequest, res: Response): Pro
                         updated_count: updated,
                         skipped_locked: skippedLocked,
                         skipped_not_pending: skippedNotPending,
+                        rejection_reason_code: rejection?.rejection_reason_code ?? null,
                     },
                 },
             });
         } catch (error) {
             console.error('Failed to write bulk timesheet review audit log:', error);
+        }
+
+        // One email per affected person covering everything this action rejected —
+        // never one per entry. Twenty emails is a mailbox flood, and a filtered
+        // rejection notice is the same as no rejection notice.
+        if (rejection) {
+            await dispatchRejectionNotices({
+                organizationId: req.user!.organization_id,
+                entries: editable.map((entry) => ({
+                    id: entry.id,
+                    user_id: entry.user_id,
+                    task_description: entry.task_description,
+                    start_time: entry.start_time,
+                    duration: entry.duration,
+                    rejection_reason_code: rejection!.rejection_reason_code,
+                    rejection_reason_note: rejection!.rejection_reason_note,
+                })),
+            });
         }
 
         res.status(200).json({
@@ -2022,6 +2221,19 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
             return;
         }
 
+        // The third write path that can set status = 'rejected'. It is a generic bulk
+        // editor rather than the approval queue, but leaving it exempt would leave an
+        // open door to unexplained rejections, so the same rule applies here.
+        let rejection: { rejection_reason_code: string; rejection_reason_note: string | null } | null = null;
+        if (action === 'reject') {
+            const validated = validateRejectionReason(req.body?.rejection_reason_code, req.body?.rejection_reason_note);
+            if (!validated.ok) {
+                res.status(validated.error.status).json({ message: validated.error.message });
+                return;
+            }
+            rejection = validated.value;
+        }
+
         // Fetch all entries scoped to org
         const entries = await prisma.timeEntry.findMany({
             where: { id: { in: entry_ids }, organization_id: orgId },
@@ -2081,7 +2293,14 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
             if (action === 'approve' || action === 'reject') {
                 const result = await tx.timeEntry.updateMany({
                     where: { id: { in: editableIds }, organization_id: orgId },
-                    data: { status: action === 'approve' ? 'approved' : 'rejected' },
+                    data: {
+                        status: action === 'approve' ? 'approved' : 'rejected',
+                        // Null on approve, clearing any earlier rejection reason.
+                        rejection_reason_code: rejection?.rejection_reason_code ?? null,
+                        rejection_reason_note: rejection?.rejection_reason_note ?? null,
+                        reviewed_by: user_id,
+                        reviewed_at: new Date(),
+                    },
                 });
                 updatedCount = result.count;
             } else if (action === 'set_project') {
@@ -2126,11 +2345,31 @@ export const bulkUpdateEntries = async (req: AuthRequest, res: Response): Promis
                         entry_ids: editableIds,
                         skipped_locked: [...lockedIds],
                         updated_count: updatedCount,
+                        rejection_reason_code: rejection?.rejection_reason_code ?? null,
                     },
                 },
             });
         } catch (e) {
             console.error('[bulkUpdateEntries] audit log failed:', e);
+        }
+
+        // Batched per reviewer action, after the commit, failures swallowed — same
+        // contract as the approval-queue paths.
+        if (rejection) {
+            await dispatchRejectionNotices({
+                organizationId: orgId,
+                entries: filtered
+                    .filter((entry) => editableIds.includes(entry.id))
+                    .map((entry) => ({
+                        id: entry.id,
+                        user_id: entry.user_id,
+                        task_description: entry.task_description,
+                        start_time: entry.start_time,
+                        duration: entry.duration,
+                        rejection_reason_code: rejection!.rejection_reason_code,
+                        rejection_reason_note: rejection!.rejection_reason_note,
+                    })),
+            });
         }
 
         res.status(200).json({

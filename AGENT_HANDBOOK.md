@@ -295,6 +295,62 @@ compare *counted* time — elapsed minus paused — and a client-initiated cap s
 `{ reason: 'active_duration_limit' }` so it produces the identical record whichever
 enforcer wins the race.
 
+### Timesheet rejection reasons (added 2026-09-01)
+
+Rejecting a time entry requires a reason. Approving one clears any reason a previous
+rejection left behind.
+
+**Where the taxonomy lives:** `backend/src/constants/rejectionReasons.ts`, and only
+there. `backend/` and `frontend/` are separate npm packages and `backend/tsconfig.json`
+pins `rootDir: ./src`, so a module imported by both would break `npm run build`. Rather
+than keep two lists that drift, the backend resolves the label:
+
+- Entry payloads carry `rejection_reason_label` alongside the code, so no client-side
+  lookup table is needed to render a rejection.
+- The manager's reason picker reads `GET /api/v1/timers/rejection-reasons`.
+
+Codes are stored, labels are not, so wording changes need no migration. Adding or
+renaming a reason means editing that one file — never a second copy.
+
+| Code | Label |
+|---|---|
+| `EXCEEDS_DAILY_CAP` | Exceeds the 8-hour daily cap |
+| `IDLE_TIMER_OVERRUN` | Timer left running / idle — duration overstated |
+| `OVERLAPPING_ENTRY` | Overlaps hours already submitted |
+| `WRONG_PROJECT` | Wrong or missing project assignment |
+| `INSUFFICIENT_DESCRIPTION` | Task description too vague or incomplete |
+| `NOT_COMPANY_WORK` | Not company work |
+| `DUPLICATE_ENTRY` | Duplicate of another entry |
+| `OTHER` | Other — reason required (a non-empty note is mandatory) |
+
+**Three write paths set `status = 'rejected'`**, and all three run the same
+`validateRejectionReason` helper — a reason is never optional on one of them:
+
+- `POST /timers/approvals/:entryId` (`reviewTimesheet`)
+- `POST /timers/approvals/bulk` (`reviewTimesheetsBulk`) — one reason applies to the
+  whole selection rather than blocking bulk review
+- `PATCH /timers/bulk` with `action: 'reject'` (`bulkUpdateEntries`)
+
+Free text is capped at `REJECTION_NOTE_MAX_LENGTH` (500) and HTML-escaped before it
+reaches an email body.
+
+**Historical rows have no reason and must keep it that way.** The migration
+(`20260901000000_timesheet_rejection_reasons`) does not backfill: entries rejected
+before this shipped record a null code, and every surface renders that as
+"No reason recorded". Never invent one.
+
+**Notification.** `services/rejectionNoticeService.ts` sends one email per affected
+person per reviewer action — never one per entry — through the SES SMTP mailer. It runs
+after the transaction commits and swallows its own failures, logging
+`[rejectionNotice] FAILED`: SES being down must never undo a rejection a manager has
+already made. Grep that prefix when someone says they were not told.
+
+**The screen.** `/timesheet` leads with **Approved**, labelled as the figure counted
+toward a weekly minimum, with Rejected and Pending beside it and total logged still
+shown below. `GET /timers/me` accepts an optional `?from=&to=` window and returns a
+`totals` block for it; callers that omit the window get exactly the old response and
+pay for no extra aggregate. Compliance calculation itself is unchanged.
+
 ### Audit log visibility
 
 `GET /api/v1/admin/audit-logs` is `requireRole(['Admin'])`. `/admin` itself is open to
