@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
   security-events: write
+  # github/codeql-action/analyze calls GET /repos/{owner}/{repo}/actions/runs/{run_id}
+  # after exporting its SARIF. Declaring a `permissions:` block sets every scope not
+  # listed here to `none`, so that call returned "Resource not accessible by
+  # integration" and the job ended as "CodeQL job status was configuration error" —
+  # after having scanned all 303 TypeScript files cleanly. It is a token scope, not a
+  # security finding, and it takes down the required Verification Complete gate with it.
+  actions: read
 
 env:
   NODE_VERSION: 22.12.0
