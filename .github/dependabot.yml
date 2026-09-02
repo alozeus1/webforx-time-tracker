@@ -15,6 +15,10 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: '@prisma/client'
         update-types: [version-update:semver-major]
+      # A TypeScript major rewrites how the whole backend compiles; treat it as a planned
+      # migration rather than a weekly PR. Minor and patch releases still flow.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     groups:
       # MUST stay above the dependency-type groups: Dependabot assigns a dependency to the
       # first group whose rules match it.
@@ -41,6 +45,17 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # typescript-eslint pins a peer of typescript ">=4.8.4 <6.1.0", and 8.66.0 is the
+      # latest STABLE release (only 8.66.1-alpha.* exists beyond it). So there is no
+      # combination where TypeScript 6 or 7 and a stable typescript-eslint can coexist:
+      # dependabot proposing typescript ~5.9.3 -> ~7.0.2 made `npm install` unresolvable
+      # with ERESOLVE and broke the frontend deployment on the dev-dependencies PR.
+      # Dependabot does not evaluate that peer bound before opening the PR, so the block
+      # has to live here. Remove this entry once a stable typescript-eslint widens its
+      # typescript peer range, then upgrade TypeScript deliberately.
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
     groups:
       frontend-production-dependencies:
         dependency-type: production
