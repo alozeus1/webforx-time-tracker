@@ -116,7 +116,12 @@ describe('POST /api/v1/timers/approvals/bulk', () => {
                 organization_id: TEST_ORG_ID,
                 status: 'pending',
             }),
-            data: { status: 'approved' },
+            // Reason fields are nulled on approve, which clears any earlier rejection.
+            data: expect.objectContaining({
+                status: 'approved',
+                rejection_reason_code: null,
+                rejection_reason_note: null,
+            }),
         }));
     });
 
@@ -165,14 +170,19 @@ describe('POST /api/v1/timers/approvals/bulk', () => {
         expect(res.body.updated).toBe(0);
     });
 
-    it('rejects as well as approves', async () => {
+    // Bulk rejection now carries a reason for the whole selection — see
+    // tests/timesheetRejectionReasons.test.ts for the validation rules.
+    it('rejects as well as approves, recording one reason across the selection', async () => {
         (prisma.timeEntry.findMany as jest.Mock).mockResolvedValue([pendingEntry('e1')]);
         (prisma.timeEntry.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
 
-        await post(managerToken, { entry_ids: ['e1'], action: 'reject' });
+        await post(managerToken, { entry_ids: ['e1'], action: 'reject', rejection_reason_code: 'WRONG_PROJECT' });
 
         expect(prisma.timeEntry.updateMany).toHaveBeenCalledWith(expect.objectContaining({
-            data: { status: 'rejected' },
+            data: expect.objectContaining({
+                status: 'rejected',
+                rejection_reason_code: 'WRONG_PROJECT',
+            }),
         }));
     });
 

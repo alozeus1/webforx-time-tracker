@@ -4,6 +4,26 @@ import userEvent from '@testing-library/user-event';
 import ApprovalQueue from '../components/ApprovalQueue';
 import type { TimeEntrySummary } from '../types/api';
 
+// The reason picker reads the taxonomy from the API rather than keeping a second copy
+// of it, so the dialog needs the endpoint stubbed. Codes and labels here mirror
+// backend/src/constants/rejectionReasons.ts, which is the single source of truth.
+vi.mock('../services/api', () => ({
+    __esModule: true,
+    default: {
+        get: vi.fn().mockResolvedValue({
+            data: {
+                reasons: [
+                    { code: 'WRONG_PROJECT', label: 'Wrong or missing project assignment', requires_note: false },
+                    { code: 'INSUFFICIENT_DESCRIPTION', label: 'Task description too vague or incomplete', requires_note: false },
+                    { code: 'OTHER', label: 'Other — reason required', requires_note: true },
+                ],
+                note_max_length: 500,
+            },
+        }),
+    },
+    getApiErrorMessage: (_error: unknown, fallback: string) => fallback,
+}));
+
 const entry = (id: string, overrides: Partial<TimeEntrySummary> = {}): TimeEntrySummary => ({
     id,
     task_description: `Task ${id}`,
@@ -84,23 +104,51 @@ describe('ApprovalQueue', () => {
         expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
     });
 
-    // Rejecting notifies everyone affected, so it asks first. Approving does not.
-    it('confirms before rejecting in bulk', async () => {
+    // Rejecting notifies everyone affected, so it asks first — and since 2026-09 what it
+    // asks for is a reason, not just confirmation. The reason picker IS the confirm step.
+    it('will not reject in bulk without a reason, then applies one reason to the selection', async () => {
         const user = userEvent.setup();
-        const { onReviewBulk } = renderQueue([entry('e1')]);
+        const { onReviewBulk } = renderQueue([entry('e1'), entry('e2')]);
 
-        await user.click(screen.getByLabelText(/^Select Ada E1/));
+        await user.click(screen.getByLabelText('Select all pending entries'));
         await user.click(screen.getByRole('button', { name: 'Reject all' }));
 
         expect(onReviewBulk).not.toHaveBeenCalled();
-        expect(screen.getByText('Reject 1 entry?')).toBeInTheDocument();
+        expect(await screen.findByRole('dialog', { name: /Reject 2 entries/ })).toBeInTheDocument();
 
-        // Two buttons now carry that name: the bulk bar and the dialog's confirm.
-        const rejectButtons = screen.getAllByRole('button', { name: 'Reject all' });
-        expect(rejectButtons).toHaveLength(2);
+        const submit = screen.getByRole('button', { name: 'Reject 2 entries' });
+        expect(submit).toBeDisabled();
 
-        await user.click(rejectButtons[1]);
-        await waitFor(() => expect(onReviewBulk).toHaveBeenCalledWith(['e1'], 'reject'));
+        await waitFor(() => expect(screen.getByRole('option', { name: 'Wrong or missing project assignment' })).toBeInTheDocument());
+        await user.selectOptions(screen.getByLabelText(/^Reason/), 'WRONG_PROJECT');
+
+        await user.click(screen.getByRole('button', { name: 'Reject 2 entries' }));
+        await waitFor(() => expect(onReviewBulk).toHaveBeenCalledWith(
+            ['e1', 'e2'],
+            'reject',
+            { rejection_reason_code: 'WRONG_PROJECT', rejection_reason_note: null },
+        ));
+    });
+
+    it('requires a note when the reason is OTHER', async () => {
+        const user = userEvent.setup();
+        const { onReviewOne } = renderQueue([entry('e1')]);
+
+        await user.click(screen.getByLabelText(/^Reject Ada E1/));
+        await waitFor(() => expect(screen.getByRole('option', { name: 'Other — reason required' })).toBeInTheDocument());
+        await user.selectOptions(screen.getByLabelText(/^Reason/), 'OTHER');
+
+        // Selecting OTHER alone is not enough.
+        expect(screen.getByRole('button', { name: 'Reject this entry' })).toBeDisabled();
+
+        await user.type(screen.getByLabelText(/^Note/), 'Logged against the wrong client.');
+        await user.click(screen.getByRole('button', { name: 'Reject this entry' }));
+
+        await waitFor(() => expect(onReviewOne).toHaveBeenCalledWith(
+            'e1',
+            'reject',
+            { rejection_reason_code: 'OTHER', rejection_reason_note: 'Logged against the wrong client.' },
+        ));
     });
 
     it('surfaces an attested over-cap entry and its justification', () => {

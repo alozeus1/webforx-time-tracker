@@ -33,3 +33,27 @@ export const riskChipClass = (level: string): string => {
 };
 
 export type ReviewAction = 'approve' | 'reject';
+
+/**
+ * Chip colours for a time entry's review status.
+ *
+ * Reports previously hardcoded emerald for every status, so a rejected entry rendered
+ * as a green "rejected" chip — reassuring and wrong. An unknown status falls back to
+ * slate rather than borrowing a colour that implies a verdict.
+ */
+export const entryStatusChipClass = (status: string): string => {
+    if (status === 'approved') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400';
+    if (status === 'rejected') return 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400';
+    if (status === 'pending') return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400';
+    return 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+};
+
+/**
+ * The reason label to show for a rejected entry.
+ *
+ * Entries rejected before the reason taxonomy shipped carry no code. They are
+ * historical and must never be given a fabricated reason — but they must not render
+ * blank either, so they read as "No reason recorded".
+ */
+export const rejectionReasonText = (entry: { rejection_reason_label?: string | null }): string =>
+    entry.rejection_reason_label || 'No reason recorded';

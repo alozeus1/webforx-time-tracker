@@ -10,6 +10,13 @@ on:
 permissions:
   contents: read
   security-events: write
+  # github/codeql-action/analyze calls GET /repos/{owner}/{repo}/actions/runs/{run_id}
+  # after exporting its SARIF. Declaring a `permissions:` block sets every scope not
+  # listed here to `none`, so that call returned "Resource not accessible by
+  # integration" and the job ended as "CodeQL job status was configuration error" —
+  # after having scanned all 303 TypeScript files cleanly. It is a token scope, not a
+  # security finding, and it takes down the required Verification Complete gate with it.
+  actions: read
 
 env:
   NODE_VERSION: 22.12.0
@@ -50,6 +57,19 @@ jobs:
         run: npm run build
 
       - name: Backend tests
+        # --runInBand keeps all 47 suites in one Node process, so their module
+        # registries (Prisma client, express app, per-suite mocks) accumulate rather
+        # than being reclaimed by a recycled worker. Measured peak RSS for a full run
+        # is ~2.5GB, while the runner's default old-space cap resolves to ~2GB — so
+        # the suite sat just under a ceiling it could cross at any time, and did:
+        # adding two test files OOMed it with "Reached heap limit" and exit 134,
+        # with no assertion having failed.
+        #
+        # Pinning the ceiling explicitly also stops it varying with runner sizing.
+        # If this needs raising again, the real fix is to stop running every suite in
+        # one process rather than to keep buying headroom.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm test -- --runInBand
 
       - name: Production dependency audit

@@ -4,8 +4,8 @@ import type { PieLabelRenderProps } from 'recharts';
 import { useSearchParams } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../services/api';
 import ApprovalQueue from '../components/ApprovalQueue';
-import type { ReviewAction } from '../utils/timeEntryLabels';
-import type { BulkReviewResult, TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
+import { entryStatusChipClass, type ReviewAction } from '../utils/timeEntryLabels';
+import type { BulkReviewResult, RejectionReasonInput, TimeEntrySummary, AnalyticsDashboardResponse, DailyBreakdownResponse, ProjectSummary, TeamSummary, UserSummary } from '../types/api';
 import { hasAnyRole } from '../utils/session';
 import AccessibleDialog from '../components/AccessibleDialog';
 import { useReducedMotionPreference } from '../hooks/useReducedMotionPreference';
@@ -244,9 +244,9 @@ const Reports: React.FC = () => {
         });
     }, [focusDate]);
 
-    const handleReview = async (entryId: string, action: ReviewAction) => {
+    const handleReview = async (entryId: string, action: ReviewAction, reason?: RejectionReasonInput) => {
         try {
-            await api.post(`/timers/approvals/${entryId}`, { action });
+            await api.post(`/timers/approvals/${entryId}`, { action, ...(reason ?? {}) });
             setApprovalFeedback({ message: `Entry ${action}d successfully`, tone: 'success' });
             void fetchApprovals();
         } catch (error) {
@@ -256,11 +256,12 @@ const Reports: React.FC = () => {
         }
     };
 
-    const handleBulkReview = async (entryIds: string[], action: ReviewAction) => {
+    const handleBulkReview = async (entryIds: string[], action: ReviewAction, reason?: RejectionReasonInput) => {
         try {
             const response = await api.post<BulkReviewResult>('/timers/approvals/bulk', {
                 entry_ids: entryIds,
                 action,
+                ...(reason ?? {}),
             });
             const { updated, skipped_locked: skippedLocked = [], skipped_not_pending: skippedNotPending = [] } = response.data;
 
@@ -530,7 +531,9 @@ const Reports: React.FC = () => {
                                                 <td className="px-6 py-4 text-sm text-slate-500">{entry.project?.name || 'Unassigned'}</td>
                                                 <td className="px-6 py-4 text-sm font-bold text-slate-900 dark:text-white">{formatSecondsText(entry.duration)}</td>
                                                 <td className="px-6 py-4">
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 capitalize">
+                                                    {/* Was hardcoded emerald for every status, so a rejected
+                                                        entry rendered as a green "rejected" chip. */}
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize ${entryStatusChipClass(entry.status)}`}>
                                                         {entry.status}
                                                     </span>
                                                 </td>
